@@ -1,0 +1,18 @@
+set(OCCT_INSTALL_PATH "${CMAKE_CURRENT_SOURCE_DIR}/depends/occt")
+
+include_directories(${OCCT_INSTALL_PATH}/include)
+
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+	link_directories(${OCCT_INSTALL_PATH}/lib/Debug)
+	file(GLOB OCCT_LIBS ${OCCT_INSTALL_PATH}/lib/Debug/libd/*.lib)
+	file(GLOB OCCT_DLLS ${OCCT_INSTALL_PATH}/lib/Debug/bind/*.dll)
+	file(GLOB OCCT_PDBS ${OCCT_INSTALL_PATH}/lib/Debug/bind/*.pdb)
+ elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
+	link_directories(${OCCT_INSTALL_PATH}/lib/Release)
+	file(GLOB OCCT_LIBS ${OCCT_INSTALL_PATH}/lib/Release/lib/*.lib)
+	file(GLOB OCCT_DLLS ${OCCT_INSTALL_PATH}/lib/Debug/bin/*.dll)
+elseif(CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+	link_directories(${OCCT_INSTALL_PATH}/lib/RelWithDebInfo)
+	file(GLOB OCCT_LIBS ${OCCT_INSTALL_PATH}/lib/RelWithDebInfo/*.lib)
+	file(GLOB OCCT_DLLS ${OCCT_INSTALL_PATH}/lib/Debug/*.lib)
+endif()
