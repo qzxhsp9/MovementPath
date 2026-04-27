@@ -64,8 +64,10 @@ enum class VoxelState
     // 与障碍物表面三角片相交，不可通行
     Occupied,
 
-    // 安全距离层 / 候选运动层。
-    // 在 ClearanceBand A* 模式下，该状态是可通行区域。
+    // 安全距离候选运动区。
+    // 该区域表示距离障碍物表面在 [surfaceTolerance, clearance] 范围内的体素。
+    // 路径不要求严格位于固定 offset 面上，只要求在该候选区域内搜索。
+    // 后续可以通过 A* 代价函数偏好某个距离范围。
     ClearanceBand,
 
     Start,

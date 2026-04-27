@@ -262,6 +262,117 @@ void VoxelAStar::MarkPath(
     }
 }
 
+bool VoxelAStar::FindNearestWalkableIndexWithDirection(
+    const VoxelSpace& space,
+    const VoxelIndex& seed,
+    const gp_Pnt& seedPoint,
+    const gp_Vec& preferredDirection,
+    VoxelAStarSearchMode mode,
+    int maxRadius,
+    VoxelIndex& outIndex)
+{
+    if (maxRadius < 0)
+    {
+        return false;
+    }
+
+    gp_Vec dir = preferredDirection;
+
+    if (dir.SquareMagnitude() <= 1.0e-20)
+    {
+        return FindNearestWalkableIndex(
+            space,
+            seed,
+            mode,
+            maxRadius,
+            outIndex
+        );
+    }
+
+    dir.Normalize();
+
+    double bestScore = std::numeric_limits<double>::max();
+    bool found = false;
+
+    for (int r = 0; r <= maxRadius; ++r)
+    {
+        for (int dx = -r; dx <= r; ++dx)
+        {
+            for (int dy = -r; dy <= r; ++dy)
+            {
+                for (int dz = -r; dz <= r; ++dz)
+                {
+                    if (r > 0)
+                    {
+                        // 只检查当前外壳层
+                        if (std::abs(dx) != r &&
+                            std::abs(dy) != r &&
+                            std::abs(dz) != r)
+                        {
+                            continue;
+                        }
+                    }
+
+                    VoxelIndex index(
+                        seed.x + dx,
+                        seed.y + dy,
+                        seed.z + dz
+                    );
+
+                    if (!space.IsInsideSearchBounds(index))
+                    {
+                        continue;
+                    }
+
+                    VoxelState state = space.GetCellState(index);
+
+                    if (!IsStateWalkableForMode(state, mode))
+                    {
+                        continue;
+                    }
+
+                    gp_Pnt candidateCenter = space.IndexToCenter(index);
+                    gp_Vec offset(seedPoint, candidateCenter);
+
+                    if (offset.SquareMagnitude() <= 1.0e-20)
+                    {
+                        continue;
+                    }
+
+                    // 要求候选体素大致位于指定方向的半空间内
+                    const double dirDot = offset.Dot(dir);
+
+                    if (dirDot <= 0.0)
+                    {
+                        continue;
+                    }
+
+                    const double dist2 =
+                        offset.SquareMagnitude();
+
+                    // 分数：距离越近越好，方向越一致越好
+                    // dirDot 越大表示越沿 preferredDirection
+                    const double score = dist2 - 0.25 * dirDot * dirDot;
+
+                    if (score < bestScore)
+                    {
+                        bestScore = score;
+                        outIndex = index;
+                        found = true;
+                    }
+                }
+            }
+        }
+
+        if (found)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 // ============================================================
 // A* 主入口
 // ============================================================
@@ -276,6 +387,7 @@ VoxelAStarResult VoxelAStar::Search(
 
     if (!space.IsValid())
     {
+        result.failReason = VoxelAStarFailReason::InvalidVoxelSpace;
         return result;
     }
 
@@ -285,9 +397,14 @@ VoxelAStarResult VoxelAStar::Search(
     result.inputStartIndex = startIndex;
     result.inputGoalIndex = goalIndex;
 
+    // 先赋值，避免失败时显示 0,0,0
+    result.startIndex = startIndex;
+    result.goalIndex = goalIndex;
+
     if (!space.IsInsideSearchBounds(startIndex) ||
         !space.IsInsideSearchBounds(goalIndex))
     {
+        result.failReason = VoxelAStarFailReason::StartOrGoalOutsideBounds;
         return result;
     }
 
@@ -296,23 +413,70 @@ VoxelAStarResult VoxelAStar::Search(
         VoxelIndex snappedStart;
         VoxelIndex snappedGoal;
 
-        if (!FindNearestWalkableIndex(
-            space,
-            startIndex,
-            options.searchMode,
-            options.snapMaxRadius,
-            snappedStart))
+        bool startOk = false;
+        bool goalOk = false;
+
+        if (options.useStartSnapDirection)
         {
+            startOk = FindNearestWalkableIndexWithDirection(
+                space,
+                startIndex,
+                startPoint,
+                options.startSnapDirection,
+                options.searchMode,
+                options.snapMaxRadius,
+                snappedStart
+            );
+        }
+        else
+        {
+            startOk = FindNearestWalkableIndex(
+                space,
+                startIndex,
+                options.searchMode,
+                options.snapMaxRadius,
+                snappedStart
+            );
+        }
+
+        result.startIndex = snappedStart;
+        result.startSnapped = startOk && snappedStart != startIndex;
+
+        if (!startOk)
+        {
+            result.failReason = VoxelAStarFailReason::SnapStartFailed;
             return result;
         }
 
-        if (!FindNearestWalkableIndex(
-            space,
-            goalIndex,
-            options.searchMode,
-            options.snapMaxRadius,
-            snappedGoal))
+        if (options.useGoalSnapDirection)
         {
+            goalOk = FindNearestWalkableIndexWithDirection(
+                space,
+                goalIndex,
+                goalPoint,
+                options.goalSnapDirection,
+                options.searchMode,
+                options.snapMaxRadius,
+                snappedGoal
+            );
+        }
+        else
+        {
+            goalOk = FindNearestWalkableIndex(
+                space,
+                goalIndex,
+                options.searchMode,
+                options.snapMaxRadius,
+                snappedGoal
+            );
+        }
+
+        result.goalIndex = snappedGoal;
+        result.goalSnapped = goalOk && snappedGoal != goalIndex;
+
+        if (!goalOk)
+        {
+            result.failReason = VoxelAStarFailReason::SnapGoalFailed;
             return result;
         }
 
@@ -325,6 +489,7 @@ VoxelAStarResult VoxelAStar::Search(
             space.GetCellState(startIndex),
             options.searchMode))
         {
+            result.failReason = VoxelAStarFailReason::StartNotWalkable;
             return result;
         }
 
@@ -332,6 +497,7 @@ VoxelAStarResult VoxelAStar::Search(
             space.GetCellState(goalIndex),
             options.searchMode))
         {
+            result.failReason = VoxelAStarFailReason::GoalNotWalkable;
             return result;
         }
     }
@@ -400,6 +566,7 @@ VoxelAStarResult VoxelAStar::Search(
             visitedCount > options.maxVisitedCount)
         {
             result.visitedCount = visitedCount;
+            result.failReason = VoxelAStarFailReason::MaxVisitedExceeded;
             return result;
         }
 
@@ -509,6 +676,7 @@ VoxelAStarResult VoxelAStar::Search(
 
     result.success = false;
     result.visitedCount = visitedCount;
+    result.failReason = VoxelAStarFailReason::OpenSetEmpty;
 
     return result;
 }

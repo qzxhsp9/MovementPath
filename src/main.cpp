@@ -10,16 +10,93 @@
 
 #include <iostream>
 
+static void DebugVoxelStateAround(
+    const VoxelSpace& space,
+    const VoxelIndex& seed,
+    int radius)
+{
+    int freeCount = 0;
+    int occupiedCount = 0;
+    int clearanceBandCount = 0;
+    int startCount = 0;
+    int goalCount = 0;
+    int pathCount = 0;
+    int outOfBoundsCount = 0;
+
+    for (int dx = -radius; dx <= radius; ++dx)
+    {
+        for (int dy = -radius; dy <= radius; ++dy)
+        {
+            for (int dz = -radius; dz <= radius; ++dz)
+            {
+                VoxelIndex index(
+                    seed.x + dx,
+                    seed.y + dy,
+                    seed.z + dz
+                );
+
+                if (!space.IsInsideSearchBounds(index))
+                {
+                    ++outOfBoundsCount;
+                    continue;
+                }
+
+                VoxelState state = space.GetCellState(index);
+
+                switch (state)
+                {
+                case VoxelState::Free:
+                    ++freeCount;
+                    break;
+                case VoxelState::Occupied:
+                    ++occupiedCount;
+                    break;
+                case VoxelState::ClearanceBand:
+                    ++clearanceBandCount;
+                    break;
+                case VoxelState::Start:
+                    ++startCount;
+                    break;
+                case VoxelState::Goal:
+                    ++goalCount;
+                    break;
+                case VoxelState::Path:
+                    ++pathCount;
+                    break;
+                default:
+                    break;
+                }
+            }
+        }
+    }
+
+    std::cout << "Debug around index: "
+        << seed.x << ", "
+        << seed.y << ", "
+        << seed.z << std::endl;
+
+    std::cout << "radius: " << radius << std::endl;
+    std::cout << "Free: " << freeCount << std::endl;
+    std::cout << "Occupied: " << occupiedCount << std::endl;
+    std::cout << "ClearanceBand: " << clearanceBandCount << std::endl;
+    std::cout << "Start: " << startCount << std::endl;
+    std::cout << "Goal: " << goalCount << std::endl;
+    std::cout << "Path: " << pathCount << std::endl;
+    std::cout << "OutOfBounds: " << outOfBoundsCount << std::endl;
+}
+
 void TestVoxelAStar(
     const TopoDS_Shape& shape,
     const gp_Pnt& startPoint,
-    const gp_Pnt& goalPoint)
+    const gp_Vec& startDir,
+    const gp_Pnt& goalPoint,
+    const gp_Vec& goalDir)
 {
     VoxelMeshBuildOptions buildOptions;
 
     buildOptions.voxelSize = 1.0;
     buildOptions.meshDeflection = 0.25;
-    buildOptions.angularDeflection = 0.5;
+    buildOptions.angularDeflection = 0.3;
 
     // 路径要在该安全距离层中搜索
     buildOptions.clearance = 3.0;
@@ -47,6 +124,9 @@ void TestVoxelAStar(
     VoxelIndex startIndex = voxelSpace.WorldToIndex(startPoint);
     VoxelIndex goalIndex = voxelSpace.WorldToIndex(goalPoint);
 
+    DebugVoxelStateAround(voxelSpace, startIndex, 10);
+    DebugVoxelStateAround(voxelSpace, goalIndex, 10);
+
     VoxelBounds bounds = voxelSpace.GetSearchBounds();
 
     ExpandBoundsToInclude(bounds, startIndex);
@@ -58,13 +138,19 @@ void TestVoxelAStar(
     VoxelAStarOptions astarOptions;
 
     astarOptions.searchMode = VoxelAStarSearchMode::ClearanceBand;
-    astarOptions.neighborType = VoxelNeighborType::Face6;
+    astarOptions.neighborType = VoxelNeighborType::FaceEdgeVertex26;
     astarOptions.heuristicWeight = 1.0;
-    astarOptions.turnPenalty = voxelSpace.GetVoxelSize() * 0.3;
+    astarOptions.turnPenalty = voxelSpace.GetVoxelSize() * 0.1;
 
     // 起点终点如果不在 ClearanceBand 中，自动吸附到最近 ClearanceBand 体素
     astarOptions.snapStartGoalToWalkable = true;
-    astarOptions.snapMaxRadius = 30;
+    astarOptions.snapMaxRadius = 20;
+
+    astarOptions.useStartSnapDirection = true;
+    astarOptions.useGoalSnapDirection = true;
+
+    astarOptions.startSnapDirection = startDir;
+    astarOptions.goalSnapDirection = goalDir;
 
     astarOptions.maxVisitedCount = 0;
     astarOptions.markPathToVoxelSpace = true;
@@ -83,9 +169,29 @@ void TestVoxelAStar(
         std::cout << "Visited count: "
             << astarResult.visitedCount << std::endl;
 
+        std::cout << "input start: "
+            << astarResult.inputStartIndex.x << ", "
+            << astarResult.inputStartIndex.y << ", "
+            << astarResult.inputStartIndex.z << std::endl;
+
+        std::cout << "snapped start: "
+            << astarResult.startIndex.x << ", "
+            << astarResult.startIndex.y << ", "
+            << astarResult.startIndex.z << std::endl;
+
+        std::cout << "input goal: "
+            << astarResult.inputGoalIndex.x << ", "
+            << astarResult.inputGoalIndex.y << ", "
+            << astarResult.inputGoalIndex.z << std::endl;
+
+        std::cout << "snapped goal: "
+            << astarResult.goalIndex.x << ", "
+            << astarResult.goalIndex.y << ", "
+            << astarResult.goalIndex.z << std::endl;
+
         VoxelVtkExporter::ExportVoxelSpaceToVtk(
             voxelSpace,
-            "D:/data/workspace/astar_failed.vtk",
+            "D:/astar_failed.vtk",
             {
                 VoxelState::Occupied,
                 VoxelState::ClearanceBand,
@@ -107,10 +213,8 @@ void TestVoxelAStar(
 
     VoxelVtkExporter::ExportVoxelSpaceToVtk(
         voxelSpace,
-        "D:/data/workspace/astar_path.vtk",
+        "D:/astar_path.vtk",
         {
-            VoxelState::Occupied,
-            VoxelState::ClearanceBand,
             VoxelState::Start,
             VoxelState::Goal,
             VoxelState::Path
@@ -130,6 +234,6 @@ int main()
 
     // TestBuildVoxelSpace(sphere);
 
-    TestVoxelAStar(sphere, gp_Pnt(0, 0, -50), gp_Pnt(R, 0, 50));
+    TestVoxelAStar(sphere, gp_Pnt(0, 0, -50), gp_Vec(0, 0, -1), gp_Pnt(0, 0, 50), gp_Vec(0, 0, 1));
     return 0;
 }

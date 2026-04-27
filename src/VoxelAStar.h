@@ -5,6 +5,7 @@
 #include <vector>
 
 #include <gp_Pnt.hxx>
+#include <gp_Vec.hxx>
 
 // ============================================================
 // A* 搜索模式
@@ -44,9 +45,30 @@ struct VoxelAStarOptions
     // 吸附最大搜索半径，单位是体素层数
     int snapMaxRadius = 20;
 
+    // 是否使用吸附方向。
+    // 用于避免封闭曲面内外侧吸附错误。
+    bool useStartSnapDirection = false;
+    bool useGoalSnapDirection = false;
+
+    gp_Vec startSnapDirection;
+    gp_Vec goalSnapDirection;
+
     int maxVisitedCount = 0;
 
     bool markPathToVoxelSpace = true;
+};
+
+enum class VoxelAStarFailReason
+{
+    None = 0,
+    InvalidVoxelSpace,
+    StartOrGoalOutsideBounds,
+    SnapStartFailed,
+    SnapGoalFailed,
+    StartNotWalkable,
+    GoalNotWalkable,
+    MaxVisitedExceeded,
+    OpenSetEmpty
 };
 
 // ============================================================
@@ -57,11 +79,16 @@ struct VoxelAStarResult
 {
     bool success = false;
 
+    VoxelAStarFailReason failReason = VoxelAStarFailReason::None;
+
     VoxelIndex inputStartIndex;
     VoxelIndex inputGoalIndex;
 
     VoxelIndex startIndex;
     VoxelIndex goalIndex;
+
+    bool startSnapped = false;
+    bool goalSnapped = false;
 
     std::vector<VoxelIndex> voxelPath;
     std::vector<gp_Pnt> pointPath;
@@ -120,4 +147,13 @@ private:
         const std::vector<VoxelIndex>& voxelPath,
         const VoxelIndex& startIndex,
         const VoxelIndex& goalIndex);
+
+    static bool FindNearestWalkableIndexWithDirection(
+        const VoxelSpace& space,
+        const VoxelIndex& seed,
+        const gp_Pnt& seedPoint,
+        const gp_Vec& preferredDirection,
+        VoxelAStarSearchMode mode,
+        int maxRadius,
+        VoxelIndex& outIndex);
 };
