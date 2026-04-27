@@ -186,3 +186,137 @@ bool VoxelVtkExporter::ExportVoxelSpaceToVtk(
 
     return true;
 }
+
+void VoxelVtkExporter::MarkPathToVoxelSpace(
+    VoxelSpace& space,
+    const std::vector<VoxelIndex>& path)
+{
+    if (path.empty())
+    {
+        return;
+    }
+
+    for (std::size_t i = 0; i < path.size(); ++i)
+    {
+        const VoxelIndex& index = path[i];
+
+        if (i == 0)
+        {
+            space.SetCellState(index, VoxelState::Start);
+        }
+        else if (i + 1 == path.size())
+        {
+            space.SetCellState(index, VoxelState::Goal);
+        }
+        else
+        {
+            VoxelState oldState = space.GetCellState(index);
+
+            // 不覆盖障碍表面
+            if (oldState != VoxelState::Occupied)
+            {
+                space.SetCellState(index, VoxelState::Path);
+            }
+        }
+    }
+}
+
+bool VoxelVtkExporter::ExportPathPolylineToVtk(
+    const VoxelSpace& space,
+    const std::vector<VoxelIndex>& path,
+    const std::string& filePath)
+{
+    if (!space.IsValid())
+    {
+        return false;
+    }
+
+    std::vector<Vec> points;
+    points.reserve(path.size());
+
+    for (const VoxelIndex& index : path)
+    {
+        points.push_back(space.IndexToCenter(index));
+    }
+
+    return ExportPathPolylineToVtk(points, filePath);
+}
+
+bool VoxelVtkExporter::ExportPathPolylineToVtk(
+    const std::vector<Vec>& points,
+    const std::string& filePath)
+{
+    if (points.empty())
+    {
+        return false;
+    }
+
+    std::ofstream ofs(filePath.c_str(), std::ios::out);
+    if (!ofs.is_open())
+    {
+        return false;
+    }
+
+    ofs << "# vtk DataFile Version 3.0\n";
+    ofs << "Voxel path polyline\n";
+    ofs << "ASCII\n";
+    ofs << "DATASET POLYDATA\n";
+
+    ofs << std::setprecision(15);
+
+    // ============================================================
+    // POINTS
+    // ============================================================
+
+    ofs << "POINTS " << points.size() << " double\n";
+
+    for (const Vec& p : points)
+    {
+        ofs << p.x << " "
+            << p.y << " "
+            << p.z << "\n";
+    }
+
+    // ============================================================
+    // LINES
+    //
+    // VTK PolyLine 格式：
+    // LINES numberOfLines totalSize
+    //
+    // 单条折线：
+    // numberOfLines = 1
+    // totalSize = points.size() + 1
+    //
+    // 下一行：
+    // N 0 1 2 3 ... N-1
+    // ============================================================
+
+    ofs << "LINES 1 " << points.size() + 1 << "\n";
+
+    ofs << points.size();
+
+    for (std::size_t i = 0; i < points.size(); ++i)
+    {
+        ofs << " " << i;
+    }
+
+    ofs << "\n";
+
+    // ============================================================
+    // POINT_DATA
+    // ============================================================
+
+    ofs << "POINT_DATA " << points.size() << "\n";
+
+    ofs << "SCALARS path_index int 1\n";
+    ofs << "LOOKUP_TABLE default\n";
+
+    for (std::size_t i = 0; i < points.size(); ++i)
+    {
+        ofs << i << "\n";
+    }
+
+    ofs.close();
+
+    return true;
+}

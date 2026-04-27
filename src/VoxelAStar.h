@@ -1,24 +1,9 @@
 #pragma once
 
 #include "VoxelSpace.h"
+#include "VoxelWalkability.h"
 
 #include <vector>
-
-// ============================================================
-// A* 搜索模式
-// ============================================================
-
-enum class VoxelAStarSearchMode
-{
-    // 普通避障模式：
-    // Free 可走，Occupied / ClearanceBand 不走。
-    FreeSpace,
-
-    // 安全距离层模式：
-    // 只在 ClearanceBand 中搜索。
-    // Occupied 不可走，Free 默认不走。
-    ClearanceBand
-};
 
 // ============================================================
 // A* 配置
@@ -54,6 +39,10 @@ struct VoxelAStarOptions
 
     bool markPathToVoxelSpace = true;
 };
+
+// ============================================================
+// A* 失败原因
+// ============================================================
 
 enum class VoxelAStarFailReason
 {
@@ -109,10 +98,6 @@ public:
         const VoxelAStarOptions& options = VoxelAStarOptions());
 
 private:
-    static bool IsStateWalkableForMode(
-        VoxelState state,
-        VoxelAStarSearchMode mode);
-
     static bool FindNearestWalkableIndex(
         const VoxelSpace& space,
         const VoxelIndex& seed,

@@ -2,6 +2,7 @@
 #include "VoxelMeshBuilder.h"
 #include "VoxelAStar.h"
 #include "VoxelVtkExporter.h"
+#include "VoxelPathOptimizer.h"
 
 #include <TopoDS_Shape.hxx>
 #include <gp_Pnt.hxx>
@@ -221,6 +222,56 @@ void TestVoxelAStar(
             VoxelState::Goal,
             VoxelState::Path
         }
+    );
+
+    VoxelPathOptimizeOptions optOptions;
+
+    optOptions.searchMode = astarOptions.searchMode;
+    optOptions.removeCollinear = true;
+    optOptions.enableLineOfSightShortcut = true;
+
+    // 路径点不多时可以设大一点。
+    // 工程中建议 100~300，避免 O(n^2) 太重。
+    optOptions.maxShortcutLookAhead = 200;
+
+    VoxelPathOptimizeResult optResult =
+        VoxelPathOptimizer::Optimize(
+            voxelSpace,
+            astarResult.voxelPath,
+            optOptions
+        );
+
+    std::cout << "Path optimize result:" << std::endl;
+    std::cout << "Input count: "
+        << optResult.inputCount << std::endl;
+    std::cout << "After collinear: "
+        << optResult.afterCollinearCount << std::endl;
+    std::cout << "Output count: "
+        << optResult.outputCount << std::endl;
+    std::cout << "Line check count: "
+        << optResult.lineCheckCount << std::endl;
+
+    VoxelVtkExporter::MarkPathToVoxelSpace(
+        voxelSpace,
+        optResult.voxelPath
+    );
+
+    VoxelVtkExporter::ExportVoxelSpaceToVtk(
+        voxelSpace,
+        "D:/optimized_path_voxels.vtk",
+        {
+            VoxelState::Occupied,
+            VoxelState::ClearanceBand,
+            VoxelState::Start,
+            VoxelState::Goal,
+            VoxelState::Path
+        }
+    );
+
+    VoxelVtkExporter::ExportPathPolylineToVtk(
+        voxelSpace,
+        optResult.voxelPath,
+        "D:/optimized_path_polyline.vtk"
     );
 }
 

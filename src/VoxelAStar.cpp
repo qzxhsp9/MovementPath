@@ -32,34 +32,6 @@ struct VoxelAStarOpenNodeGreater
 };
 
 // ============================================================
-// 状态是否可通行
-// ============================================================
-
-bool VoxelAStar::IsStateWalkableForMode(
-    VoxelState state,
-    VoxelAStarSearchMode mode)
-{
-    if (state == VoxelState::Start ||
-        state == VoxelState::Goal ||
-        state == VoxelState::Path)
-    {
-        return true;
-    }
-
-    if (mode == VoxelAStarSearchMode::FreeSpace)
-    {
-        return state == VoxelState::Free;
-    }
-
-    if (mode == VoxelAStarSearchMode::ClearanceBand)
-    {
-        return state == VoxelState::ClearanceBand;
-    }
-
-    return false;
-}
-
-// ============================================================
 // 找最近可通行体素
 // ============================================================
 
@@ -76,7 +48,7 @@ bool VoxelAStar::FindNearestWalkableIndex(
     }
 
     if (space.IsInsideSearchBounds(seed) &&
-        IsStateWalkableForMode(space.GetCellState(seed), mode))
+        VoxelWalkability::IsStateWalkable(space.GetCellState(seed), mode))
     {
         outIndex = seed;
         return true;
@@ -114,7 +86,7 @@ bool VoxelAStar::FindNearestWalkableIndex(
 
                     VoxelState state = space.GetCellState(index);
 
-                    if (!IsStateWalkableForMode(state, mode))
+                    if (!VoxelWalkability::IsStateWalkable(state, mode))
                     {
                         continue;
                     }
@@ -326,7 +298,7 @@ bool VoxelAStar::FindNearestWalkableIndexWithDirection(
 
                     VoxelState state = space.GetCellState(index);
 
-                    if (!IsStateWalkableForMode(state, mode))
+                    if (!VoxelWalkability::IsStateWalkable(state, mode))
                     {
                         continue;
                     }
@@ -485,7 +457,7 @@ VoxelAStarResult VoxelAStar::Search(
     }
     else
     {
-        if (!IsStateWalkableForMode(
+        if (!VoxelWalkability::IsStateWalkable(
             space.GetCellState(startIndex),
             options.searchMode))
         {
@@ -493,7 +465,7 @@ VoxelAStarResult VoxelAStar::Search(
             return result;
         }
 
-        if (!IsStateWalkableForMode(
+        if (!VoxelWalkability::IsStateWalkable(
             space.GetCellState(goalIndex),
             options.searchMode))
         {
@@ -616,7 +588,7 @@ VoxelAStarResult VoxelAStar::Search(
 
             if (!isGoal && !isStart)
             {
-                if (!IsStateWalkableForMode(
+                if (!VoxelWalkability::IsStateWalkable(
                     neighborState,
                     options.searchMode))
                 {
