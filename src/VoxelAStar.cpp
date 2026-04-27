@@ -212,14 +212,14 @@ std::vector<VoxelIndex> VoxelAStar::ReconstructPath(
 }
 
 // ============================================================
-// VoxelIndex path -> gp_Pnt path
+// VoxelIndex path -> vec path
 // ============================================================
 
-std::vector<gp_Pnt> VoxelAStar::ConvertPathToPoints(
+std::vector<Vec> VoxelAStar::ConvertPathToPoints(
     const VoxelSpace& space,
     const std::vector<VoxelIndex>& voxelPath)
 {
-    std::vector<gp_Pnt> points;
+    std::vector<Vec> points;
     points.reserve(voxelPath.size());
 
     for (const VoxelIndex& index : voxelPath)
@@ -265,8 +265,8 @@ void VoxelAStar::MarkPath(
 bool VoxelAStar::FindNearestWalkableIndexWithDirection(
     const VoxelSpace& space,
     const VoxelIndex& seed,
-    const gp_Pnt& seedPoint,
-    const gp_Vec& preferredDirection,
+    const Vec& seedPoint,
+    const Vec& preferredDirection,
     VoxelAStarSearchMode mode,
     int maxRadius,
     VoxelIndex& outIndex)
@@ -276,7 +276,7 @@ bool VoxelAStar::FindNearestWalkableIndexWithDirection(
         return false;
     }
 
-    gp_Vec dir = preferredDirection;
+    Vec dir = preferredDirection;
 
     if (dir.SquareMagnitude() <= 1.0e-20)
     {
@@ -331,8 +331,8 @@ bool VoxelAStar::FindNearestWalkableIndexWithDirection(
                         continue;
                     }
 
-                    gp_Pnt candidateCenter = space.IndexToCenter(index);
-                    gp_Vec offset(seedPoint, candidateCenter);
+                    Vec candidateCenter = space.IndexToCenter(index);
+                    Vec offset(seedPoint, candidateCenter);
 
                     if (offset.SquareMagnitude() <= 1.0e-20)
                     {
@@ -379,8 +379,8 @@ bool VoxelAStar::FindNearestWalkableIndexWithDirection(
 
 VoxelAStarResult VoxelAStar::Search(
     VoxelSpace& space,
-    const gp_Pnt& startPoint,
-    const gp_Pnt& goalPoint,
+    const Vec& startPoint,
+    const Vec& goalPoint,
     const VoxelAStarOptions& options)
 {
     VoxelAStarResult result;

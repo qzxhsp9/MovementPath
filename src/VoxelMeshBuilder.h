@@ -105,7 +105,7 @@ private:
         double offset);
 
     static double DistancePointToTriangle(
-        const gp_Pnt& p,
+        const Vec& p,
         const MeshTriangle& tri);
 
     static void NormalizeIndexRange(

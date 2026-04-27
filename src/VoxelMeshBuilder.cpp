@@ -224,28 +224,29 @@ void VoxelMeshBuilder::NormalizeIndexRange(
 // ============================================================
 
 double VoxelMeshBuilder::DistancePointToTriangle(
-    const gp_Pnt& p,
+    const Vec& p,
     const MeshTriangle& tri)
 {
+    gp_Pnt gpP(p.x, p.y, p.z);
     const gp_Vec ab(tri.p0, tri.p1);
     const gp_Vec ac(tri.p0, tri.p2);
-    const gp_Vec ap(tri.p0, p);
+    const gp_Vec ap(tri.p0, gpP);
 
     const double d1 = Dot(ab, ap);
     const double d2 = Dot(ac, ap);
 
     if (d1 <= 0.0 && d2 <= 0.0)
     {
-        return p.Distance(tri.p0);
+        return gpP.Distance(tri.p0);
     }
 
-    const gp_Vec bp(tri.p1, p);
+    const gp_Vec bp(tri.p1, gpP);
     const double d3 = Dot(ab, bp);
     const double d4 = Dot(ac, bp);
 
     if (d3 >= 0.0 && d4 <= d3)
     {
-        return p.Distance(tri.p1);
+        return gpP.Distance(tri.p1);
     }
 
     const double vc = d1 * d4 - d3 * d2;
@@ -254,16 +255,16 @@ double VoxelMeshBuilder::DistancePointToTriangle(
     {
         const double v = d1 / (d1 - d3);
         gp_Pnt closest = PointAddVec(tri.p0, ab * v);
-        return p.Distance(closest);
+        return gpP.Distance(closest);
     }
 
-    const gp_Vec cp(tri.p2, p);
+    const gp_Vec cp(tri.p2, gpP);
     const double d5 = Dot(ab, cp);
     const double d6 = Dot(ac, cp);
 
     if (d6 >= 0.0 && d5 <= d6)
     {
-        return p.Distance(tri.p2);
+        return gpP.Distance(tri.p2);
     }
 
     const double vb = d5 * d2 - d1 * d6;
@@ -272,7 +273,7 @@ double VoxelMeshBuilder::DistancePointToTriangle(
     {
         const double w = d2 / (d2 - d6);
         gp_Pnt closest = PointAddVec(tri.p0, ac * w);
-        return p.Distance(closest);
+        return gpP.Distance(closest);
     }
 
     const double va = d3 * d6 - d5 * d4;
@@ -286,7 +287,7 @@ double VoxelMeshBuilder::DistancePointToTriangle(
             (d4 - d3) / ((d4 - d3) + (d5 - d6));
 
         gp_Pnt closest = PointAddVec(tri.p1, bc * w);
-        return p.Distance(closest);
+        return gpP.Distance(closest);
     }
 
     const double denom = 1.0 / (va + vb + vc);
@@ -296,7 +297,7 @@ double VoxelMeshBuilder::DistancePointToTriangle(
     gp_Vec offset = ab * v + ac * w;
     gp_Pnt closest = PointAddVec(tri.p0, offset);
 
-    return p.Distance(closest);
+    return gpP.Distance(closest);
 }
 
 // ============================================================
@@ -350,8 +351,10 @@ void VoxelMeshBuilder::MarkTriangleToVoxelSpace(
     // 为了找出所有可能受该三角形影响的体素，需要按有效安全距离扩展三角形 AABB。
     ExpandAABB(expandedBox, effectiveClearance);
 
-    VoxelIndex minIndex = space.WorldToIndex(expandedBox.minP);
-    VoxelIndex maxIndex = space.WorldToIndex(expandedBox.maxP);
+    Vec minP = { expandedBox.minP.X(), expandedBox.minP.Y(), expandedBox.minP.Z() };
+    Vec maxP = { expandedBox.maxP.X(), expandedBox.maxP.Y(), expandedBox.maxP.Z() };
+    VoxelIndex minIndex = space.WorldToIndex(minP);
+    VoxelIndex maxIndex = space.WorldToIndex(maxP);
 
     NormalizeIndexRange(minIndex, maxIndex);
 
@@ -363,7 +366,7 @@ void VoxelMeshBuilder::MarkTriangleToVoxelSpace(
             {
                 VoxelIndex index(ix, iy, iz);
 
-                gp_Pnt center = space.IndexToCenter(index);
+                Vec center = space.IndexToCenter(index);
 
                 const double d = DistancePointToTriangle(center, tri);
 
@@ -444,11 +447,13 @@ VoxelMeshBuildResult VoxelMeshBuilder::BuildVoxelSpaceFromShapeMesh(
 
     ExpandAABB(globalBox, globalExpand);
 
-    outSpace = VoxelSpace(globalBox.minP, options.voxelSize);
+    Vec minP = { globalBox.minP.X(), globalBox.minP.Y(), globalBox.minP.Z() };
+    Vec maxP = { globalBox.maxP.X(), globalBox.maxP.Y(), globalBox.maxP.Z() };
+    outSpace = VoxelSpace(minP, options.voxelSize);
 
     VoxelBounds bounds;
-    bounds.minIndex = outSpace.WorldToIndex(globalBox.minP);
-    bounds.maxIndex = outSpace.WorldToIndex(globalBox.maxP);
+    bounds.minIndex = outSpace.WorldToIndex(minP);
+    bounds.maxIndex = outSpace.WorldToIndex(maxP);
 
     NormalizeIndexRange(bounds.minIndex, bounds.maxIndex);
 

@@ -121,8 +121,10 @@ void TestVoxelAStar(
     }
 
     // 确保搜索范围包含起点和终点
-    VoxelIndex startIndex = voxelSpace.WorldToIndex(startPoint);
-    VoxelIndex goalIndex = voxelSpace.WorldToIndex(goalPoint);
+    Vec startPoint3D = {startPoint.X(), startPoint.Y(), startPoint.Z()};
+    Vec goalPoint3D = {goalPoint.X(), goalPoint.Y(), goalPoint.Z()};
+    VoxelIndex startIndex = voxelSpace.WorldToIndex(startPoint3D);
+    VoxelIndex goalIndex = voxelSpace.WorldToIndex(goalPoint3D);
 
     DebugVoxelStateAround(voxelSpace, startIndex, 10);
     DebugVoxelStateAround(voxelSpace, goalIndex, 10);
@@ -149,8 +151,8 @@ void TestVoxelAStar(
     astarOptions.useStartSnapDirection = true;
     astarOptions.useGoalSnapDirection = true;
 
-    astarOptions.startSnapDirection = startDir;
-    astarOptions.goalSnapDirection = goalDir;
+    astarOptions.startSnapDirection = { startDir.X(), startDir.Y(), startDir.Z() };
+    astarOptions.goalSnapDirection = { goalDir.X(), goalDir.Y(), goalDir.Z() };
 
     astarOptions.maxVisitedCount = 0;
     astarOptions.markPathToVoxelSpace = true;
@@ -158,8 +160,8 @@ void TestVoxelAStar(
     VoxelAStarResult astarResult =
         VoxelAStar::Search(
             voxelSpace,
-            startPoint,
-            goalPoint,
+            startPoint3D,
+            goalPoint3D,
             astarOptions
         );
 

@@ -4,8 +4,6 @@
 #include <iomanip>
 #include <vector>
 
-#include <gp_Pnt.hxx>
-
 bool VoxelVtkExporter::ShouldExportState(
     VoxelState state,
     const std::set<VoxelState>& statesToExport)
@@ -91,16 +89,16 @@ bool VoxelVtkExporter::ExportVoxelSpaceToVtk(
 
     for (const ExportCell& cell : exportCells)
     {
-        const gp_Pnt minP = space.IndexToMinCorner(cell.index);
-        const gp_Pnt maxP = space.IndexToMaxCorner(cell.index);
+        const Vec minP = space.IndexToMinCorner(cell.index);
+        const Vec maxP = space.IndexToMaxCorner(cell.index);
 
-        const double x0 = minP.X();
-        const double y0 = minP.Y();
-        const double z0 = minP.Z();
+        const double x0 = minP.x;
+        const double y0 = minP.y;
+        const double z0 = minP.z;
 
-        const double x1 = maxP.X();
-        const double y1 = maxP.Y();
-        const double z1 = maxP.Z();
+        const double x1 = maxP.x;
+        const double y1 = maxP.y;
+        const double z1 = maxP.z;
 
         // VTK_HEXAHEDRON 点序：
         // bottom: 0,1,2,3

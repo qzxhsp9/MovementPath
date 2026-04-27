@@ -4,9 +4,6 @@
 
 #include <vector>
 
-#include <gp_Pnt.hxx>
-#include <gp_Vec.hxx>
-
 // ============================================================
 // A* 搜索模式
 // ============================================================
@@ -50,8 +47,8 @@ struct VoxelAStarOptions
     bool useStartSnapDirection = false;
     bool useGoalSnapDirection = false;
 
-    gp_Vec startSnapDirection;
-    gp_Vec goalSnapDirection;
+    Vec startSnapDirection;
+    Vec goalSnapDirection;
 
     int maxVisitedCount = 0;
 
@@ -91,7 +88,7 @@ struct VoxelAStarResult
     bool goalSnapped = false;
 
     std::vector<VoxelIndex> voxelPath;
-    std::vector<gp_Pnt> pointPath;
+    std::vector<Vec> pointPath;
 
     int visitedCount = 0;
 
@@ -107,8 +104,8 @@ class VoxelAStar
 public:
     static VoxelAStarResult Search(
         VoxelSpace& space,
-        const gp_Pnt& startPoint,
-        const gp_Pnt& goalPoint,
+        const Vec& startPoint,
+        const Vec& goalPoint,
         const VoxelAStarOptions& options = VoxelAStarOptions());
 
 private:
@@ -138,7 +135,7 @@ private:
         const VoxelIndex& startIndex,
         const VoxelIndex& goalIndex);
 
-    static std::vector<gp_Pnt> ConvertPathToPoints(
+    static std::vector<Vec> ConvertPathToPoints(
         const VoxelSpace& space,
         const std::vector<VoxelIndex>& voxelPath);
 
@@ -151,8 +148,8 @@ private:
     static bool FindNearestWalkableIndexWithDirection(
         const VoxelSpace& space,
         const VoxelIndex& seed,
-        const gp_Pnt& seedPoint,
-        const gp_Vec& preferredDirection,
+        const Vec& seedPoint,
+        const Vec& preferredDirection,
         VoxelAStarSearchMode mode,
         int maxRadius,
         VoxelIndex& outIndex);

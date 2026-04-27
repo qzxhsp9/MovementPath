@@ -8,7 +8,48 @@
 #include <stdexcept>
 #include <algorithm>
 
-#include <gp_Pnt.hxx>
+struct Vec
+{
+    double x = 0.0;
+    double y = 0.0;
+    double z = 0.0;
+
+    Vec() = default;
+
+    Vec(double ix, double iy, double iz)
+        : x(ix), y(iy), z(iz)
+    {
+    }
+
+    Vec(const Vec& vec1, const Vec& vec2)
+    {
+        x = vec2.x - vec1.x;
+        y = vec2.y - vec1.y;
+        z = vec2.z - vec1.z;
+    }
+
+    double Dot(const Vec& other) const
+    {
+        return x * other.x + y * other.y + z * other.z;
+    }
+
+    double SquareMagnitude() const
+    {
+        return x * x + y * y + z * z;
+    }
+
+    void Normalize()
+    {
+        const double mag = SquareMagnitude();
+        if (mag > 0.0)
+        {
+            const double invMag = 1.0 / std::sqrt(mag);
+            x *= invMag;
+            y *= invMag;
+            z *= invMag;
+        }
+    }
+};
 
 // ============================================================
 // 体素索引
@@ -211,7 +252,7 @@ public:
 public:
     VoxelSpace() = default;
 
-    VoxelSpace(const gp_Pnt& origin, double voxelSize)
+    VoxelSpace(const Vec& origin, double voxelSize)
         : m_origin(origin),
         m_voxelSize(voxelSize)
     {
@@ -232,12 +273,12 @@ public:
         return m_voxelSize > 0.0;
     }
 
-    void SetOrigin(const gp_Pnt& origin)
+    void SetOrigin(const Vec& origin)
     {
         m_origin = origin;
     }
 
-    const gp_Pnt& GetOrigin() const
+    const Vec& GetOrigin() const
     {
         return m_origin;
     }
@@ -290,41 +331,41 @@ public:
     }
 
 public:
-    VoxelIndex WorldToIndex(const gp_Pnt& p) const
+    VoxelIndex WorldToIndex(const Vec& p) const
     {
         return VoxelIndex(
-            static_cast<int>(std::floor((p.X() - m_origin.X()) / m_voxelSize)),
-            static_cast<int>(std::floor((p.Y() - m_origin.Y()) / m_voxelSize)),
-            static_cast<int>(std::floor((p.Z() - m_origin.Z()) / m_voxelSize))
+            static_cast<int>(std::floor((p.x - m_origin.x) / m_voxelSize)),
+            static_cast<int>(std::floor((p.y - m_origin.y) / m_voxelSize)),
+            static_cast<int>(std::floor((p.z - m_origin.z) / m_voxelSize))
         );
     }
 
-    gp_Pnt IndexToMinCorner(const VoxelIndex& index) const
+    Vec IndexToMinCorner(const VoxelIndex& index) const
     {
-        return gp_Pnt(
-            m_origin.X() + static_cast<double>(index.x) * m_voxelSize,
-            m_origin.Y() + static_cast<double>(index.y) * m_voxelSize,
-            m_origin.Z() + static_cast<double>(index.z) * m_voxelSize
+        return Vec(
+            m_origin.x + static_cast<double>(index.x) * m_voxelSize,
+            m_origin.y + static_cast<double>(index.y) * m_voxelSize,
+            m_origin.z + static_cast<double>(index.z) * m_voxelSize
         );
     }
 
-    gp_Pnt IndexToMaxCorner(const VoxelIndex& index) const
+    Vec IndexToMaxCorner(const VoxelIndex& index) const
     {
-        gp_Pnt minP = IndexToMinCorner(index);
+        Vec minP = IndexToMinCorner(index);
 
-        return gp_Pnt(
-            minP.X() + m_voxelSize,
-            minP.Y() + m_voxelSize,
-            minP.Z() + m_voxelSize
+        return Vec(
+            minP.x + m_voxelSize,
+            minP.y + m_voxelSize,
+            minP.z + m_voxelSize
         );
     }
 
-    gp_Pnt IndexToCenter(const VoxelIndex& index) const
+    Vec IndexToCenter(const VoxelIndex& index) const
     {
-        return gp_Pnt(
-            m_origin.X() + (static_cast<double>(index.x) + 0.5) * m_voxelSize,
-            m_origin.Y() + (static_cast<double>(index.y) + 0.5) * m_voxelSize,
-            m_origin.Z() + (static_cast<double>(index.z) + 0.5) * m_voxelSize
+        return Vec(
+            m_origin.x + (static_cast<double>(index.x) + 0.5) * m_voxelSize,
+            m_origin.y + (static_cast<double>(index.y) + 0.5) * m_voxelSize,
+            m_origin.z + (static_cast<double>(index.z) + 0.5) * m_voxelSize
         );
     }
 
@@ -495,7 +536,7 @@ public:
     }
 
 private:
-    gp_Pnt m_origin;
+    Vec m_origin;
     double m_voxelSize = 1.0;
 
     bool m_hasBounds = false;
