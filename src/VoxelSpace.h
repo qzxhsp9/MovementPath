@@ -49,6 +49,29 @@ struct Vec
             z *= invMag;
         }
     }
+
+    double Distance(const Vec& other) const
+    {
+        const double dx = x - other.x;
+        const double dy = y - other.y;
+        const double dz = z - other.z;
+        return std::sqrt(dx * dx + dy * dy + dz * dz);
+    }
+
+    Vec operator+(const Vec& other) const
+    {
+        return Vec(x + other.x, y + other.y, z + other.z);
+    }
+
+    Vec operator-(const Vec& other) const
+    {
+        return Vec(x - other.x, y - other.y, z - other.z);
+    }
+
+    Vec operator*(double scalar) const
+    {
+        return Vec(x * scalar, y * scalar, z * scalar);
+    }
 };
 
 // ============================================================

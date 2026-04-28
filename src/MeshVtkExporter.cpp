@@ -39,17 +39,17 @@ bool MeshVtkExporter::ExportTrianglesToVtk(
 
     for (const MeshTriangle& tri : triangles)
     {
-        ofs << tri.p0.X() << " "
-            << tri.p0.Y() << " "
-            << tri.p0.Z() << "\n";
+        ofs << tri.p0.x << " "
+            << tri.p0.y << " "
+            << tri.p0.z << "\n";
 
-        ofs << tri.p1.X() << " "
-            << tri.p1.Y() << " "
-            << tri.p1.Z() << "\n";
+        ofs << tri.p1.x << " "
+            << tri.p1.y << " "
+            << tri.p1.z << "\n";
 
-        ofs << tri.p2.X() << " "
-            << tri.p2.Y() << " "
-            << tri.p2.Z() << "\n";
+        ofs << tri.p2.x << " "
+            << tri.p2.y << " "
+            << tri.p2.z << "\n";
     }
 
     // ============================================================

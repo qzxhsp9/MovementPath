@@ -35,20 +35,6 @@ static double Max3(double a, double b, double c)
     return std::max(a, std::max(b, c));
 }
 
-static double Dot(const gp_Vec& a, const gp_Vec& b)
-{
-    return a.Dot(b);
-}
-
-static gp_Pnt PointAddVec(const gp_Pnt& p, const gp_Vec& v)
-{
-    return gp_Pnt(
-        p.X() + v.X(),
-        p.Y() + v.Y(),
-        p.Z() + v.Z()
-    );
-}
-
 // ============================================================
 // Shape 三角化
 // ============================================================
@@ -109,11 +95,14 @@ bool VoxelMeshBuilder::BuildShapeTriangulation(
         Standard_Integer nbTriangles = triangulation->NbTriangles();
         for (int i = 1; i <= nbTriangles; ++i)
         {
-            const Poly_Triangle& triangle = triangulation->Triangle(i);
+            const Poly_Triangle& triangle = triangulation->Triangle(i);            
+            gp_Pnt p0 = triangulation->Node(triangle.Value(1)).Transformed(trsf);
+            gp_Pnt p1 = triangulation->Node(triangle.Value(2)).Transformed(trsf);
+            gp_Pnt p2 = triangulation->Node(triangle.Value(3)).Transformed(trsf);
             MeshTriangle tri;
-            tri.p0 = triangulation->Node(triangle.Value(1)).Transformed(trsf);
-            tri.p1 = triangulation->Node(triangle.Value(2)).Transformed(trsf);
-            tri.p2 = triangulation->Node(triangle.Value(3)).Transformed(trsf);
+            tri.p0 = Vec(p0.X(), p0.Y(), p0.Z());
+            tri.p1 = Vec(p1.X(), p1.Y(), p1.Z());
+            tri.p2 = Vec(p2.X(), p2.Y(), p2.Z());
             outTriangles.push_back(tri);
         }
     }
@@ -130,18 +119,17 @@ MeshAABB VoxelMeshBuilder::ComputeTriangleAABB(
 {
     MeshAABB box;
 
-    box.minP = gp_Pnt(
-        Min3(tri.p0.X(), tri.p1.X(), tri.p2.X()),
-        Min3(tri.p0.Y(), tri.p1.Y(), tri.p2.Y()),
-        Min3(tri.p0.Z(), tri.p1.Z(), tri.p2.Z())
+    box.minP = Vec(
+        Min3(tri.p0.x, tri.p1.x, tri.p2.x),
+        Min3(tri.p0.y, tri.p1.y, tri.p2.y),
+        Min3(tri.p0.z, tri.p1.z, tri.p2.z)
     );
 
-    box.maxP = gp_Pnt(
-        Max3(tri.p0.X(), tri.p1.X(), tri.p2.X()),
-        Max3(tri.p0.Y(), tri.p1.Y(), tri.p2.Y()),
-        Max3(tri.p0.Z(), tri.p1.Z(), tri.p2.Z())
+    box.maxP = Vec(
+        Max3(tri.p0.x, tri.p1.x, tri.p2.x),
+        Max3(tri.p0.y, tri.p1.y, tri.p2.y),
+        Max3(tri.p0.z, tri.p1.z, tri.p2.z)
     );
-
     return box;
 }
 
@@ -166,17 +154,17 @@ bool VoxelMeshBuilder::ComputeTrianglesAABB(
     {
         MeshAABB box = ComputeTriangleAABB(tri);
 
-        xmin = std::min(xmin, box.minP.X());
-        ymin = std::min(ymin, box.minP.Y());
-        zmin = std::min(zmin, box.minP.Z());
+        xmin = std::min(xmin, box.minP.x);
+        ymin = std::min(ymin, box.minP.y);
+        zmin = std::min(zmin, box.minP.z);
 
-        xmax = std::max(xmax, box.maxP.X());
-        ymax = std::max(ymax, box.maxP.Y());
-        zmax = std::max(zmax, box.maxP.Z());
+        xmax = std::max(xmax, box.maxP.x);
+        ymax = std::max(ymax, box.maxP.y);
+        zmax = std::max(zmax, box.maxP.z);
     }
 
-    outBox.minP = gp_Pnt(xmin, ymin, zmin);
-    outBox.maxP = gp_Pnt(xmax, ymax, zmax);
+    outBox.minP = Vec(xmin, ymin, zmin);
+    outBox.maxP = Vec(xmax, ymax, zmax);
 
     return true;
 }
@@ -190,13 +178,13 @@ void VoxelMeshBuilder::ExpandAABB(
         return;
     }
 
-    box.minP.SetX(box.minP.X() - offset);
-    box.minP.SetY(box.minP.Y() - offset);
-    box.minP.SetZ(box.minP.Z() - offset);
+    box.minP.x = (box.minP.x - offset);
+    box.minP.y = (box.minP.y - offset);
+    box.minP.z = (box.minP.z - offset);
 
-    box.maxP.SetX(box.maxP.X() + offset);
-    box.maxP.SetY(box.maxP.Y() + offset);
-    box.maxP.SetZ(box.maxP.Z() + offset);
+    box.maxP.x = (box.maxP.x + offset);
+    box.maxP.y = (box.maxP.y + offset);
+    box.maxP.z = (box.maxP.z + offset);
 }
 
 void VoxelMeshBuilder::NormalizeIndexRange(
@@ -227,26 +215,25 @@ double VoxelMeshBuilder::DistancePointToTriangle(
     const Vec& p,
     const MeshTriangle& tri)
 {
-    gp_Pnt gpP(p.x, p.y, p.z);
-    const gp_Vec ab(tri.p0, tri.p1);
-    const gp_Vec ac(tri.p0, tri.p2);
-    const gp_Vec ap(tri.p0, gpP);
-
-    const double d1 = Dot(ab, ap);
-    const double d2 = Dot(ac, ap);
+    const Vec ab(tri.p0, tri.p1);
+    const Vec ac(tri.p0, tri.p2);
+    const Vec ap(tri.p0, p);
+    
+    const double d1 = ab.Dot(ap);
+    const double d2 = ac.Dot(ap);
 
     if (d1 <= 0.0 && d2 <= 0.0)
     {
-        return gpP.Distance(tri.p0);
+        return p.Distance(tri.p0);
     }
 
-    const gp_Vec bp(tri.p1, gpP);
-    const double d3 = Dot(ab, bp);
-    const double d4 = Dot(ac, bp);
+    const Vec bp(tri.p1, p);
+    const double d3 = ab.Dot(bp);
+    const double d4 = ac.Dot(bp);
 
     if (d3 >= 0.0 && d4 <= d3)
     {
-        return gpP.Distance(tri.p1);
+        return p.Distance(tri.p1);
     }
 
     const double vc = d1 * d4 - d3 * d2;
@@ -254,17 +241,17 @@ double VoxelMeshBuilder::DistancePointToTriangle(
     if (vc <= 0.0 && d1 >= 0.0 && d3 <= 0.0)
     {
         const double v = d1 / (d1 - d3);
-        gp_Pnt closest = PointAddVec(tri.p0, ab * v);
-        return gpP.Distance(closest);
+        Vec closest = tri.p0 + ab * v;
+        return p.Distance(closest);
     }
 
-    const gp_Vec cp(tri.p2, gpP);
-    const double d5 = Dot(ab, cp);
-    const double d6 = Dot(ac, cp);
+    const Vec cp(tri.p2, p);
+    const double d5 = ab.Dot(cp);
+    const double d6 = ac.Dot(cp);
 
     if (d6 >= 0.0 && d5 <= d6)
     {
-        return gpP.Distance(tri.p2);
+        return p.Distance(tri.p2);
     }
 
     const double vb = d5 * d2 - d1 * d6;
@@ -272,8 +259,8 @@ double VoxelMeshBuilder::DistancePointToTriangle(
     if (vb <= 0.0 && d2 >= 0.0 && d6 <= 0.0)
     {
         const double w = d2 / (d2 - d6);
-        gp_Pnt closest = PointAddVec(tri.p0, ac * w);
-        return gpP.Distance(closest);
+        Vec closest = tri.p0 + ac * w;
+        return p.Distance(closest);
     }
 
     const double va = d3 * d6 - d5 * d4;
@@ -282,22 +269,22 @@ double VoxelMeshBuilder::DistancePointToTriangle(
         (d4 - d3) >= 0.0 &&
         (d5 - d6) >= 0.0)
     {
-        const gp_Vec bc(tri.p1, tri.p2);
+        const Vec bc(tri.p1, tri.p2);
         const double w =
             (d4 - d3) / ((d4 - d3) + (d5 - d6));
 
-        gp_Pnt closest = PointAddVec(tri.p1, bc * w);
-        return gpP.Distance(closest);
+        Vec closest = tri.p1 + bc * w;
+        return p.Distance(closest);
     }
 
     const double denom = 1.0 / (va + vb + vc);
     const double v = vb * denom;
     const double w = vc * denom;
 
-    gp_Vec offset = ab * v + ac * w;
-    gp_Pnt closest = PointAddVec(tri.p0, offset);
+    Vec offset = ab * v + ac * w;
+    Vec closest = tri.p0 + offset;
 
-    return gpP.Distance(closest);
+    return p.Distance(closest);
 }
 
 // ============================================================
@@ -351,10 +338,8 @@ void VoxelMeshBuilder::MarkTriangleToVoxelSpace(
     // 为了找出所有可能受该三角形影响的体素，需要按有效安全距离扩展三角形 AABB。
     ExpandAABB(expandedBox, effectiveClearance);
 
-    Vec minP = { expandedBox.minP.X(), expandedBox.minP.Y(), expandedBox.minP.Z() };
-    Vec maxP = { expandedBox.maxP.X(), expandedBox.maxP.Y(), expandedBox.maxP.Z() };
-    VoxelIndex minIndex = space.WorldToIndex(minP);
-    VoxelIndex maxIndex = space.WorldToIndex(maxP);
+    VoxelIndex minIndex = space.WorldToIndex(expandedBox.minP);
+    VoxelIndex maxIndex = space.WorldToIndex(expandedBox.maxP);
 
     NormalizeIndexRange(minIndex, maxIndex);
 
@@ -447,13 +432,11 @@ VoxelMeshBuildResult VoxelMeshBuilder::BuildVoxelSpaceFromShapeMesh(
 
     ExpandAABB(globalBox, globalExpand);
 
-    Vec minP = { globalBox.minP.X(), globalBox.minP.Y(), globalBox.minP.Z() };
-    Vec maxP = { globalBox.maxP.X(), globalBox.maxP.Y(), globalBox.maxP.Z() };
-    outSpace = VoxelSpace(minP, options.voxelSize);
+    outSpace = VoxelSpace(globalBox.minP, options.voxelSize);
 
     VoxelBounds bounds;
-    bounds.minIndex = outSpace.WorldToIndex(minP);
-    bounds.maxIndex = outSpace.WorldToIndex(maxP);
+    bounds.minIndex = outSpace.WorldToIndex(globalBox.minP);
+    bounds.maxIndex = outSpace.WorldToIndex(globalBox.maxP);
 
     NormalizeIndexRange(bounds.minIndex, bounds.maxIndex);
 

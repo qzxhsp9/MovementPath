@@ -6,7 +6,6 @@
 #include <cstddef>
 
 #include <TopoDS_Shape.hxx>
-#include <gp_Pnt.hxx>
 
 // ============================================================
 // 三角形
@@ -14,9 +13,9 @@
 
 struct MeshTriangle
 {
-    gp_Pnt p0;
-    gp_Pnt p1;
-    gp_Pnt p2;
+    Vec p0;
+    Vec p1;
+    Vec p2;
 };
 
 // ============================================================
@@ -25,8 +24,8 @@ struct MeshTriangle
 
 struct MeshAABB
 {
-    gp_Pnt minP;
-    gp_Pnt maxP;
+    Vec minP;
+    Vec maxP;
 };
 
 // ============================================================
