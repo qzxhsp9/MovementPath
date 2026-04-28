@@ -1,43 +1,53 @@
-# 基于三角网格与体素空间的激光头路径规划方案
+# 基于源码的 VoxelPathPlanning 说明
 
-## 1. 目标
+本文档根据 `MovementPath` 当前源码整理，描述已经实现的体素路径规划流程、关键数据结构、当前测试入口以及仍待完善的部分。文中不再把“已实现”和“设想方案”混写。
 
-给定：
+## 1. 模块概览
 
-- 起点 `startPoint`
-- 终点 `goalPoint`
-- 障碍物 `TopoDS_Shape`
-- 最小安全距离 `clearance`
-- 体素尺寸 `voxelSize`
+当前体素路径规划相关源码位于 `src/`：
 
-计算一条从起点到终点的路径，使激光头在运动过程中尽量沿障碍物表面附近的安全距离层移动，并避免与障碍物表面相交。
+- `VoxelSpace.h`：体素索引、状态、搜索边界、稀疏体素存储
+- `VoxelMeshBuilder.h/.cpp`：`TopoDS_Shape -> 三角网格 -> VoxelSpace`
+- `VoxelWalkability.h`：不同搜索模式下的可通行判定
+- `VoxelAStar.h/.cpp`：A* 搜索、起终点吸附、路径回溯
+- `VoxelPathOptimizer.h/.cpp`：共线点删除、3D DDA 直连压缩
+- `VoxelVtkExporter.h/.cpp`：体素和折线路径导出为 VTK
+- `MeshVtkExporter.h/.cpp`：三角网格导出为 VTK
+- `main.cpp`：当前示例与调试入口
 
-当前阶段不考虑机械臂运动学，将激光头抽象为一个点。
-
----
-
-## 2. 当前算法总体流程
+当前主流程是：
 
 ```text
 TopoDS_Shape
-    -> BRepMesh_IncrementalMesh 三角化
-    -> MeshTriangle 集合
-    -> VoxelSpace 初始化
-    -> 标记 Occupied / ClearanceBand
-    -> A* 在 ClearanceBand 中搜索
-    -> 输出体素路径 voxelPath
-    -> 转换为三维点路径 pointPath
-    -> 路径简化
-    -> VTK 可视化调试
+  -> BRepMesh_IncrementalMesh 三角化
+  -> MeshTriangle 集合
+  -> 计算整体包围盒并创建 VoxelSpace
+  -> 逐三角形标记 Occupied / ClearanceBand
+  -> A* 搜索 voxelPath
+  -> VoxelPathOptimizer 优化
+  -> 导出 VTK 结果
 ```
 
----
+## 2. 关键数据结构
 
-## 3. 核心数据结构
+### 2.1 Vec
 
-### 3.1 VoxelIndex
+项目没有直接在核心逻辑中依赖 `gp_Pnt`/`gp_Vec`，而是定义了一个轻量三维向量：
 
-表示体素在体素空间中的整数索引。
+```cpp
+struct Vec
+{
+    double x = 0.0;
+    double y = 0.0;
+    double z = 0.0;
+};
+```
+
+它提供了点积、归一化、距离和基础加减乘，供体素化、A* 启发式和方向吸附使用。
+
+### 2.2 VoxelIndex
+
+体素整数索引：
 
 ```cpp
 struct VoxelIndex
@@ -48,53 +58,44 @@ struct VoxelIndex
 };
 ```
 
----
+同时定义了 `VoxelIndexHash`，可作为 `unordered_map` 的 key。
 
-### 3.2 VoxelState
+### 2.3 VoxelState
 
-当前体素状态定义如下：
+当前源码中的状态如下：
 
 ```cpp
 enum class VoxelState
 {
     Free = 0,
-
-    // 与障碍物表面三角片相交，不可通行
     Occupied,
-
-    // 安全距离候选运动区
-    // 在 ClearanceBand 模式下，A* 只允许在该区域中搜索
     ClearanceBand,
-
     Start,
     Goal,
     Path
 };
 ```
 
-语义说明：
+状态含义：
 
-| 状态 | 含义 | ClearanceBand 模式下是否可走 |
-|---|---|---|
-| `Free` | 远离障碍物表面的自由区域 | 否 |
-| `Occupied` | 与障碍物表面相交的体素 | 否 |
-| `ClearanceBand` | 表面附近的安全距离层 | 是 |
-| `Start` | 搜索起点 | 是 |
-| `Goal` | 搜索终点 | 是 |
-| `Path` | 搜索得到的路径体素 | 是 |
+| 状态 | 含义 |
+|---|---|
+| `Free` | 默认自由空间；对稀疏体素场来说，未显式存储的索引也视为 `Free` |
+| `Occupied` | 体素中心到三角形距离小于等于半体素对角线，认为可能与表面相交 |
+| `ClearanceBand` | 位于安全层候选区域中的体素 |
+| `Start` | A* 搜索起点或最终导出时的起点 |
+| `Goal` | A* 搜索终点或最终导出时的终点 |
+| `Path` | 路径中间体素 |
 
----
+### 2.4 VoxelCell
 
-### 3.3 VoxelCell
-
-单个体素信息。
+单个体素单元结构：
 
 ```cpp
 struct VoxelCell
 {
     VoxelIndex index;
     VoxelState state = VoxelState::Free;
-
     double distanceToSurface = std::numeric_limits<double>::max();
 
     double gCost = std::numeric_limits<double>::max();
@@ -109,147 +110,147 @@ struct VoxelCell
 };
 ```
 
-字段说明：
+其中：
 
-| 字段 | 用途 |
-|---|---|
-| `index` | 体素索引 |
-| `state` | 体素状态 |
-| `distanceToSurface` | 体素中心到最近三角面的距离 |
-| `gCost/hCost/fCost` | A* 搜索代价 |
-| `opened/closed` | A* 搜索状态 |
-| `parent` | A* 回溯路径使用 |
+- `distanceToSurface` 记录该体素中心到最近三角面的最小距离
+- `g/h/f`、`opened/closed`、`parent` 只在 A* 搜索期间使用
 
----
+### 2.5 VoxelBounds
 
-### 3.4 VoxelSpace
+搜索边界：
 
-`VoxelSpace` 使用稀疏存储：
+```cpp
+struct VoxelBounds
+{
+    VoxelIndex minIndex;
+    VoxelIndex maxIndex;
+};
+```
+
+`VoxelSpace` 可以设置一个可选搜索边界。A* 和路径优化的 walkability 检查都会先判断索引是否在该边界内。
+
+### 2.6 VoxelSpace
+
+`VoxelSpace` 是稀疏体素场，核心存储为：
 
 ```cpp
 std::unordered_map<VoxelIndex, VoxelCell, VoxelIndexHash> m_cells;
 ```
 
-未存储体素默认视为：
+特点：
 
-```cpp
-VoxelState::Free
-```
+- 未存储体素默认视为 `Free`
+- 支持 `WorldToIndex`、`IndexToCenter`、`IndexToMinCorner`、`IndexToMaxCorner`
+- 支持 6/18/26 邻接索引生成
+- 支持记录并重置 A* 搜索数据
+- 支持设置搜索边界 `VoxelBounds`
 
-这样可以避免显式存储大量自由空间体素。
+## 3. 网格体素化实现
 
----
+### 3.1 三角化
 
-## 4. 三角网格构建
-
-使用 OCCT：
+`VoxelMeshBuilder::BuildShapeTriangulation()` 使用：
 
 ```cpp
 BRepMesh_IncrementalMesh
 ```
 
-将 `TopoDS_Shape` 离散成三角形集合。
-
-每个三角形结构为：
+把 `TopoDS_Shape` 离散为：
 
 ```cpp
 struct MeshTriangle
 {
-    gp_Pnt p0;
-    gp_Pnt p1;
-    gp_Pnt p2;
+    Vec p0;
+    Vec p1;
+    Vec p2;
 };
 ```
 
-当前三角化参数：
+每个 `TopoDS_Face` 的 `Poly_Triangulation` 会被读取出来，并应用 `TopLoc_Location` 的变换。
+
+### 3.2 构建参数
+
+当前参数结构：
 
 ```cpp
-meshDeflection = 0.25;
-angularDeflection = 0.5;
+struct VoxelMeshBuildOptions
+{
+    double voxelSize = 1.0;
+    double meshDeflection = 0.1;
+    double angularDeflection = 0.5;
+    double clearance = 0.0;
+    double bboxPadding = 0.0;
+    bool conservativeClearance = true;
+    bool storeFreeCells = false;
+};
 ```
 
-建议：
+语义：
+
+- `voxelSize`：体素边长
+- `meshDeflection` / `angularDeflection`：OCCT 三角化参数
+- `clearance`：期望安全层厚度
+- `bboxPadding`：整体包围盒额外扩展
+- `conservativeClearance`：若为 `true`，会把半体素对角线加到安全距离中
+- `storeFreeCells`：是否把边界内的 `Free` 体素全部显式写入稀疏场
+
+### 3.3 体素化流程
+
+`BuildVoxelSpaceFromShapeMesh()` 的实际流程如下：
 
 ```text
-meshDeflection <= voxelSize * 0.25 ~ voxelSize * 0.5
+1. 三角化 shape
+2. 计算所有三角形的整体 AABB
+3. 用 bboxPadding + clearance + voxelSize 扩大整体 AABB
+4. 用 globalBox.minP 作为 VoxelSpace.origin
+5. 计算整体搜索边界并写入 VoxelSpace
+6. 如有需要，先显式填充边界内全部 Free 体素
+7. 对每个三角形执行 MarkTriangleToVoxelSpace()
+8. 统计 Occupied / ClearanceBand 数量
 ```
 
-否则三角网格过粗，会影响体素化精度。
-
----
-
-## 5. 体素空间初始化
-
-### 5.1 基本流程
+### 3.4 单三角形写入规则
 
 对每个三角形：
 
 ```text
 1. 计算三角形 AABB
-2. 按 clearance + halfVoxelDiagonal 扩展 AABB
-3. 将扩展 AABB 映射到体素索引范围
-4. 遍历候选体素
-5. 计算体素中心到三角形距离
-6. 根据距离标记 Occupied / ClearanceBand
+2. 计算 effectiveClearance
+3. 按 effectiveClearance 扩展该 AABB
+4. 遍历扩展 AABB 覆盖到的候选体素
+5. 计算体素中心到三角形的距离
+6. 更新 distanceToSurface
+7. 按阈值写入 Occupied 或 ClearanceBand
 ```
 
----
-
-### 5.2 距离判断规则
-
-设：
+其中：
 
 ```cpp
 halfDiag = 0.5 * sqrt(3.0) * voxelSize;
-effectiveClearance = clearance + halfDiag;
+effectiveClearance = clearance + halfDiag; // conservativeClearance = true 时
 ```
 
-当前规则：
+判定规则：
 
 ```text
-distanceToSurface <= halfDiag
+distance <= halfDiag
     -> Occupied
 
-halfDiag < distanceToSurface <= clearance + halfDiag
+distance > halfDiag && distance <= effectiveClearance
     -> ClearanceBand
-
-distanceToSurface > clearance + halfDiag
-    -> Free
 ```
 
 注意：
 
-`ClearanceBand` 不是严格的固定 offset 面，而是一个有厚度的候选安全通道。
+- 当前 `ClearanceBand` 是一个“有厚度的可搜索带”，不是严格意义上的 offset 曲面
+- 当前距离是“体素中心到三角形距离”，不是 box-triangle 精确距离
+- 当前没有做 solid 内外判定，也没有填充实体内部
 
----
+## 4. 搜索模式与可通行规则
 
-## 6. 为什么不填充 Solid 内部
+### 4.1 当前搜索模式
 
-当前算法只关心障碍物表面附近体素，不关心 Solid 内部是否全部标记为障碍。
-
-原因：
-
-```text
-1. 激光头被抽象为点
-2. 运动约束主要来自与表面的安全距离
-3. Solid 内部可能存在内腔
-4. 当前只需构造表面附近不可通行/候选通行区域
-5. 避免复杂的 inside/outside 判断
-```
-
-因此当前不使用：
-
-```cpp
-BRepClass3d_SolidClassifier
-```
-
-也不做内部 flood fill。
-
----
-
-## 7. A* 搜索模式
-
-当前定义：
+源码中只有两种模式：
 
 ```cpp
 enum class VoxelAStarSearchMode
@@ -259,99 +260,50 @@ enum class VoxelAStarSearchMode
 };
 ```
 
-### 7.1 ClearanceBand 模式
+### 4.2 当前 walkability 实现
 
-当前主要使用该模式。
-
-```text
-可走：
-    ClearanceBand
-    Start
-    Goal
-    Path
-
-不可走：
-    Occupied
-    Free
-```
-
-适用于：
+`VoxelWalkability::IsStateWalkable()` 的当前规则：
 
 ```text
-路径应沿障碍物表面附近安全层移动
+Start / Goal / Path
+    -> 始终可走
+
+FreeSpace
+    -> 只有 Free 可走
+
+ClearanceBand
+    -> 只有 ClearanceBand 可走
 ```
 
----
+这意味着：
 
-### 7.2 FreeSpace 模式
+- `FreeSpace` 还不是“避开表面但可经过安全层”的模式
+- `ClearanceBand` 模式下，普通 `Free` 体素不可走
+- 路径优化的直连检测与 A* 共用同一套 walkability 规则
 
-当前仅初步定义，后续需要完善。
+## 5. A* 搜索实现
 
-当前语义：
-
-```text
-可走：
-    Free
-
-不可走：
-    Occupied
-    ClearanceBand
-```
-
-后续可能扩展为：
+### 5.1 选项结构
 
 ```cpp
-enum class VoxelAStarSearchMode
+struct VoxelAStarOptions
 {
-    FreeSpaceStrict,        // 只走 Free
-    FreeSpaceAvoidSurface,  // Free + ClearanceBand 可走，Occupied 不走
-    ClearanceBand           // 只走 ClearanceBand
+    VoxelNeighborType neighborType = VoxelNeighborType::Face6;
+    VoxelAStarSearchMode searchMode = VoxelAStarSearchMode::ClearanceBand;
+    double heuristicWeight = 1.0;
+    double turnPenalty = 0.0;
+    bool snapStartGoalToWalkable = true;
+    int snapMaxRadius = 20;
+    bool useStartSnapDirection = false;
+    bool useGoalSnapDirection = false;
+    Vec startSnapDirection;
+    Vec goalSnapDirection;
+    int maxVisitedCount = 0;
+    bool markPathToVoxelSpace = true;
 };
 ```
 
----
-
-## 8. 起点终点吸附
-
-当起点或终点位于 `Occupied` 或 `Free` 上时，在 `ClearanceBand` 模式下需要吸附到最近的 `ClearanceBand` 体素。
-
-当前支持：
-
-```cpp
-snapStartGoalToWalkable = true;
-snapMaxRadius = 20;
-```
-
-对于封闭曲面，例如球体，可能存在内外两层 `ClearanceBand`。
-
-因此支持方向吸附：
-
-```cpp
-useStartSnapDirection = true;
-useGoalSnapDirection = true;
-
-startSnapDirection = center -> startPoint;
-goalSnapDirection  = center -> goalPoint;
-```
-
-用于控制起点终点吸附到外侧还是内侧。
-
----
-
-## 9. A* 搜索
-
-### 9.1 当前设置
-
-球体单测中使用：
-
-```cpp
-searchMode = VoxelAStarSearchMode::ClearanceBand;
-neighborType = VoxelNeighborType::FaceEdgeVertex26;
-heuristicWeight = 1.0;
-turnPenalty = voxelSize * 0.1 ~ voxelSize * 0.3;
-```
-
-### 9.2 邻接类型
+### 5.2 邻接方式
 
 ```cpp
 enum class VoxelNeighborType
@@ -362,686 +314,284 @@ enum class VoxelNeighborType
 };
 ```
 
-说明：
+当前 `VoxelSpace::GetNeighborIndices()` 已完整支持 6/18/26 邻接。
 
-| 邻接 | 含义 | 特点 |
-|---|---|---|
-| `Face6` | 共享面 | 最保守，但曲面壳层可能断连 |
-| `FaceEdge18` | 共享面或边 | 折中 |
-| `FaceEdgeVertex26` | 共享面、边或点 | 连通性最好，但需防穿角 |
+### 5.3 起终点吸附
 
-当前球体单测建议使用 `FaceEdgeVertex26`。
+当起点或终点不在可行走体素上时，A* 可以先吸附到最近可行走体素。
 
----
+支持两种吸附方式：
 
-## 10. 球体单测结果
+- `FindNearestWalkableIndex()`：按半径层扩张，选择距离最近候选体素
+- `FindNearestWalkableIndexWithDirection()`：在候选体素位于首选方向半空间内时优先吸附
 
-测试模型：
+方向吸附的用途是：对于封闭曲面，尽量控制起终点被吸到外侧还是内侧的 `ClearanceBand`。
 
-```text
-球心: (0, 0, 0)
-半径: 50
-起点: (0, 0, 50)
-终点: (0, 0, -50)
-```
+### 5.4 搜索流程
 
-最新日志：
+`VoxelAStar::Search()` 的当前行为：
 
 ```text
-Debug around index: 63, 63, 14
-radius: 10
-Free: 5815
-Occupied: 758
-ClearanceBand: 2688
-Start: 0
-Goal: 0
-Path: 0
-OutOfBounds: 0
-
-Debug around index: 63, 63, 114
-radius: 10
-Free: 5818
-Occupied: 757
-ClearanceBand: 2686
-Start: 0
-Goal: 0
-Path: 0
-OutOfBounds: 0
-
-A* success.
-Visited count: 87378
-Path voxel count: 144
-Total cost: 169.881
+1. 检查 VoxelSpace 是否有效
+2. 将起终点世界坐标映射到体素索引
+3. 检查索引是否落在搜索边界内
+4. 根据设置执行起终点吸附，或直接验证起终点可走性
+5. 重置所有已存储体素的 A* 字段
+6. 初始化起点 g/h/f
+7. 使用 priority_queue 执行 A*
+8. 对每个邻居按 moveCost + turnPenalty 更新代价
+9. 到达终点后回溯 voxelPath，并转换为 pointPath
+10. 可选地把路径写回 VoxelSpace 为 Start / Goal / Path
 ```
 
-结论：
+### 5.5 代价函数
+
+当前移动代价：
 
 ```text
-1. ClearanceBand 生成正常
-2. 起点终点附近存在候选安全体素
-3. A* 能够在 ClearanceBand 中找到路径
-4. 球体北极到南极单测通过
+moveCost = voxelSize * 欧氏步长
+总代价 = moveCost + 可选 turnPenalty
 ```
 
----
-
-## 11. 路径优化
-
-当前计划增加两层优化。
-
----
-
-### 11.1 去除共线点
-
-将连续同方向的体素点删除。
-
-优点：
+启发式：
 
 ```text
-1. 安全
-2. 快速
-3. 不改变路径可通行性
+h = heuristicWeight * 当前体素到目标体素的欧氏距离
 ```
 
-示意：
+转向惩罚通过比较 `(prev -> curr)` 与 `(curr -> next)` 的离散方向是否一致来决定是否加罚。
+
+### 5.6 失败原因
+
+当前失败原因枚举已经实现：
+
+```cpp
+enum class VoxelAStarFailReason
+{
+    None = 0,
+    InvalidVoxelSpace,
+    StartOrGoalOutsideBounds,
+    SnapStartFailed,
+    SnapGoalFailed,
+    StartNotWalkable,
+    GoalNotWalkable,
+    MaxVisitedExceeded,
+    OpenSetEmpty
+};
+```
+
+但当前还没有“失败原因转字符串”的统一接口。
+
+## 6. 路径优化实现
+
+`VoxelPathOptimizer` 已经接入，当前做两层优化。
+
+### 6.1 共线点删除
+
+`RemoveCollinearVoxels()` 会删除离散方向完全相同的中间点。
+
+例如：
 
 ```text
 A -> B -> C
 ```
 
-如果 `A-B` 与 `B-C` 方向一致，则删除 `B`。
+若 `A-B` 和 `B-C` 的索引增量完全一致，则删除 `B`。
 
----
+### 6.2 直连压缩
 
-### 11.2 直线可通行检测
+`IsLineWalkable()` 使用 3D DDA 检查两体素中心连线经过的所有体素是否都可走。
 
-对路径做跳点压缩：
+特点：
+
+- 先检查 `from` 和 `to` 本身是否可走
+- 沿 x/y/z 同步推进，处理直线恰好穿过边/角时的并列最小 `t`
+- 使用 `VoxelWalkability::IsIndexWalkable()`，因此与 A* 搜索模式保持一致
+
+`Optimize()` 会：
 
 ```text
-如果 path[i] 到 path[j] 的直线穿过体素都可通行，
-则删除中间点。
+1. 可选删除共线点
+2. 从当前点开始，尽量寻找最远可直连点
+3. 用该点替代中间整段折线
+4. 输出优化后的 voxelPath 和 pointPath
 ```
 
-当前使用 3D DDA 算法遍历线段穿过的体素。
-
-判断逻辑复用：
+优化参数：
 
 ```cpp
-VoxelWalkability::IsIndexWalkable(...)
-```
-
-这样 `A*` 和路径优化的可通行规则保持一致。
-
----
-
-### 11.3 VoxelPathOptimizeResult
-
-```cpp
-struct VoxelPathOptimizeResult
+struct VoxelPathOptimizeOptions
 {
-    std::vector<VoxelIndex> voxelPath;
-    std::vector<gp_Pnt> pointPath;
-
-    std::size_t inputCount = 0;
-    std::size_t afterCollinearCount = 0;
-    std::size_t outputCount = 0;
-
-    int lineCheckCount = 0;
+    VoxelAStarSearchMode searchMode = VoxelAStarSearchMode::ClearanceBand;
+    bool allowSpecialStates = true;
+    int maxShortcutLookAhead = 200;
+    bool removeCollinear = true;
+    bool enableLineOfSightShortcut = true;
 };
 ```
 
-其中：
+需要注意的一点：
 
-```cpp
-pointPath[i] = voxelSpace.IndexToCenter(voxelPath[i]);
-```
+- `allowSpecialStates` 当前定义了，但在实现中没有单独使用；实际可通行性仍完全由 `VoxelWalkability` 决定
 
-`pointPath` 是最终用于运动控制或折线导出的三维点路径。
+## 7. VTK 导出能力
 
----
+### 7.1 三角网格导出
 
-## 12. VTK 可视化
+`MeshVtkExporter` 支持：
 
-当前支持三类 VTK 输出。
+- 直接导出 `std::vector<MeshTriangle>`
+- 直接从 `TopoDS_Shape` 三角化后导出
 
----
-
-### 12.1 三角网格输出
-
-用于检查：
-
-```text
-TopoDS_Shape -> MeshTriangle
-```
-
-是否正常。
-
-输出：
-
-```text
-shape_mesh.vtk
-```
-
-类型：
+输出格式：
 
 ```text
 DATASET POLYDATA
 POLYGONS
 ```
 
----
+每个三角形单独写 3 个点，不复用顶点。
 
-### 12.2 体素六面体输出
+### 7.2 体素导出
 
-用于检查：
-
-```text
-Occupied / ClearanceBand / Start / Goal / Path
-```
-
-输出：
-
-```text
-voxel_background.vtk
-astar_path_voxels.vtk
-optimized_path_key_voxels.vtk
-```
-
-类型：
+`VoxelVtkExporter::ExportVoxelSpaceToVtk()` 导出指定状态的体素为六面体：
 
 ```text
 DATASET UNSTRUCTURED_GRID
 VTK_HEXAHEDRON
 ```
 
----
+默认导出状态：
 
-### 12.3 路径折线输出
+- `Occupied`
+- `ClearanceBand`
 
-用于检查原始路径和优化后路径。
+同时会写出以下 `CELL_DATA`：
 
-输出：
+- `voxel_state`
+- `distance_to_surface`
+- `voxel_x`
+- `voxel_y`
+- `voxel_z`
 
-```text
-raw_path_polyline.vtk
-optimized_path_polyline.vtk
-```
+### 7.3 路径折线导出
 
-类型：
+`ExportPathPolylineToVtk()` 支持两种输入：
+
+- `std::vector<VoxelIndex>`
+- `std::vector<Vec>`
+
+输出格式：
 
 ```text
 DATASET POLYDATA
 LINES
 ```
 
-ParaView 中可使用 `Tube` 过滤器让路径更明显。
+并附带 `POINT_DATA path_index`。
 
----
+## 8. 当前 main.cpp 的测试入口
 
-## 13. 当前代码模块
+`main.cpp` 目前的主要测试函数是 `TestVoxelAStar()`。
 
-当前已整理或计划整理的模块：
+### 8.1 当前测试模型
 
-```text
-VoxelSpace.h
-VoxelMeshBuilder.h
-VoxelMeshBuilder.cpp
-VoxelAStar.h
-VoxelAStar.cpp
-VoxelWalkability.h
-VoxelPathOptimizer.h
-VoxelPathOptimizer.cpp
-VoxelVtkExporter.h
-VoxelVtkExporter.cpp
-MeshVtkExporter.h
-MeshVtkExporter.cpp
-```
-
----
-
-# 14. 距离最终目标剩余的开发任务
-
-## 14.1 短期任务
-
-### 任务 1：路径优化跑通
-
-目标：
-
-```text
-A* 原始路径 -> 去共线 -> 直线可通行压缩 -> 输出优化路径折线
-```
-
-需要完成：
-
-```text
-1. 接入 VoxelPathOptimizer
-2. 输出 raw_path_polyline.vtk
-3. 输出 optimized_path_polyline.vtk
-4. 对比优化前后点数
-5. 检查优化后路径是否仍在 ClearanceBand 中
-```
-
-验收标准：
-
-```text
-1. 优化后路径点数明显减少
-2. 路径不穿过 Occupied
-3. 路径视觉上仍处于 ClearanceBand 中
-```
-
----
-
-### 任务 2：完善 VoxelAStarSearchMode::FreeSpace
-
-当前 `FreeSpace` 只做了基本定义。
-
-需要补充：
-
-```text
-1. FreeSpaceStrict
-    只允许 Free
-
-2. FreeSpaceAvoidSurface
-    允许 Free + ClearanceBand
-    禁止 Occupied
-
-3. ClearanceBand
-    只允许 ClearanceBand
-```
-
-建议修改为：
+`main()` 中当前实际执行的是球体示例：
 
 ```cpp
-enum class VoxelAStarSearchMode
-{
-    FreeSpaceStrict,
-    FreeSpaceAvoidSurface,
-    ClearanceBand
-};
+const double R = 50.0;
+TopoDS_Shape sphere = BRepPrimAPI_MakeSphere(gp_Pnt(0, 0, 0), R).Shape();
+
+TestVoxelAStar(
+    sphere,
+    gp_Pnt(0, 0, -50),
+    gp_Vec(0, 0, -1),
+    gp_Pnt(0, 0, 50),
+    gp_Vec(0, 0, 1));
 ```
 
-验收标准：
+即：
 
-```text
-1. 三种模式均可跑通单测
-2. VoxelWalkability 统一管理所有模式判断
-3. A* 和路径优化共用同一套可通行规则
-```
+- 障碍物：半径 50 的球
+- 起点：球面南极附近 `(0, 0, -50)`
+- 终点：球面北极附近 `(0, 0, 50)`
+- 起终点都启用了方向吸附
 
----
+### 8.2 当前构建参数
 
-### 任务 3：路径线段体素采样输出
-
-当前优化后路径只输出关键点折线。
-
-需要补充：
-
-```text
-1. CollectLineVoxels
-2. 将优化路径中每段线经过的体素收集出来
-3. 标记为 Path
-4. 输出优化路径完整体素覆盖
-```
-
-用途：
-
-```text
-检查优化后直线段是否真的全部位于可通行区域
-```
-
----
-
-### 任务 4：失败原因与调试日志标准化
-
-当前已有部分失败原因设计。
-
-需要补充：
-
-```text
-1. VoxelAStarFailReason 转字符串
-2. 打印 inputIndex / snappedIndex / failReason
-3. 打印起点终点附近状态统计
-4. A* 失败自动导出 debug VTK
-```
-
-验收标准：
-
-```text
-A* 失败时可以快速知道失败发生在：
-    搜索范围外
-    吸附失败
-    起点不可走
-    终点不可走
-    open set 为空
-    maxVisited 超限
-```
-
----
-
-## 14.2 中期任务
-
-### 任务 5：防穿角逻辑
-
-使用 `FaceEdgeVertex26` 时，路径可能从障碍体素边角之间穿过。
-
-需要补充：
-
-```text
-1. 26 邻接下的 corner cutting 检查
-2. 对角移动时检查相关中间体素是否可通行
-3. 支持开关配置
-```
-
-验收标准：
-
-```text
-1. 路径不从两个 Occupied 体素之间的斜角穿过
-2. 26 邻接仍能保持较好连通性
-```
-
----
-
-### 任务 6：路径代价模型优化
-
-当前代价：
-
-```text
-moveCost + turnPenalty
-```
-
-后续建议加入：
-
-```text
-1. 距离表面的偏好代价
-2. 转弯角度惩罚
-3. 路径靠近 Occupied 的惩罚
-4. 路径过度远离 ClearanceBand 中心的惩罚
-```
-
-示例：
+测试中实际使用：
 
 ```cpp
-cost =
-    moveCost
-  + turnPenalty
-  + surfaceDistancePenalty
-  + nearOccupiedPenalty;
+buildOptions.voxelSize = 1.0;
+buildOptions.meshDeflection = 0.25;
+buildOptions.angularDeflection = 0.3;
+buildOptions.clearance = 3.0;
+buildOptions.bboxPadding = 10.0;
+buildOptions.conservativeClearance = true;
+buildOptions.storeFreeCells = false;
 ```
 
-目标：
+### 8.3 当前 A* 参数
 
-```text
-1. 路径更平滑
-2. 转折更少
-3. 距离障碍表面更合理
-4. 减少贴面或过远路径
-```
-
----
-
-### 任务 7：路径平滑
-
-当前路径是体素中心折线。
-
-后续需要：
-
-```text
-1. 折线平滑
-2. B 样条 / 圆角过渡
-3. 平滑后路径安全性验证
-4. 平滑后重新采样
-```
-
-验收标准：
-
-```text
-1. 平滑路径不穿过 Occupied
-2. 平滑路径尽量保持在 ClearanceBand 或允许区域中
-3. 输出适合运动控制的点序列
-```
-
----
-
-### 任务 8：更准确的 ClearanceBand 构建
-
-当前使用：
-
-```text
-体素中心到三角形距离
-```
-
-后续可优化为：
-
-```text
-1. Triangle-Box SAT 判断 Occupied
-2. 体素盒到三角形距离判断 ClearanceBand
-3. 避免大体素中心距离导致的误差
-```
-
-目标：
-
-```text
-1. Occupied 更准确
-2. ClearanceBand 更稳定
-3. 减少漏标和过度膨胀
-```
-
----
-
-## 14.3 长期任务
-
-### 任务 9：自适应体素
-
-当前是统一体素尺寸。
-
-目标：
-
-```text
-非关键区域用粗体素
-障碍附近、起点终点附近、窄通道附近用细体素
-```
-
-建议数据结构：
+测试中实际使用：
 
 ```cpp
-struct AdaptiveVoxelKey
-{
-    int level = 0;
-    int x = 0;
-    int y = 0;
-    int z = 0;
-};
+astarOptions.searchMode = VoxelAStarSearchMode::ClearanceBand;
+astarOptions.neighborType = VoxelNeighborType::Face6;
+astarOptions.heuristicWeight = 1.0;
+astarOptions.turnPenalty = voxelSize * 0.1;
+astarOptions.snapStartGoalToWalkable = true;
+astarOptions.snapMaxRadius = 20;
+astarOptions.useStartSnapDirection = true;
+astarOptions.useGoalSnapDirection = true;
+astarOptions.maxVisitedCount = 0;
+astarOptions.markPathToVoxelSpace = true;
 ```
 
-需要解决：
+这里需要特别注意：当前实际运行的是 `Face6`，不是 `FaceEdgeVertex26`。
 
-```text
-1. 粗细体素索引映射
-2. 父子体素关系
-3. 粗细体素邻接关系
-4. A* 跨层搜索
-5. 路径从粗层进入细层的连接
-6. VTK 输出多尺寸体素
-```
+### 8.4 当前导出文件
 
-验收标准：
+示例代码会导出到 `D:/`：
 
-```text
-1. 障碍附近精细
-2. 远离障碍区域粗略
-3. 搜索节点数量明显下降
-4. 路径仍满足安全距离约束
-```
+- `shape_mesh.vtk`
+- `astar_failed.vtk`（仅失败时）
+- `astar_path.vtk`
+- `optimized_path_voxels.vtk`
+- `optimized_path_polyline.vtk`
 
----
+当前示例没有导出 `raw_path_polyline.vtk`。
 
-### 任务 10：多障碍物支持
+## 9. 当前实现边界与未完成项
 
-当前可以传入一个 `TopoDS_Shape`，但后续需要支持多个邻近障碍。
+结合源码，当前仍存在这些明确边界：
 
-需要支持：
+### 9.1 已知未实现或未完善
 
-```cpp
-struct NearShapes
-{
-    std::vector<TopoDS_Shape> shapes;
-    double minDis = 0.001;
-};
-```
+- `VoxelAStarSearchMode::FreeSpace` 只有单一语义，没有拆分成更细模式
+- 没有 26 邻接下的防穿角检查
+- 没有 solid 内外判定，也没有实体内部填充
+- `distanceToSurface` 基于“体素中心到三角形距离”，不是 box-triangle 精确距离
+- `allowSpecialStates` 选项当前未被单独使用
+- 缺少统一的 `VoxelAStarFailReason -> string`
+- 缺少优化前原始折线单独导出
+- 缺少“优化后线段经过体素集合”的完整采样与可视化
 
-需要解决：
+### 9.2 当前实现中已具备的能力
 
-```text
-1. 多 Shape 三角网格合并
-2. 每个障碍单独 clearance
-3. 记录最近障碍来源
-4. 多障碍之间 ClearanceBand 连通性分析
-```
+- 起终点自动吸附到最近可走体素
+- 封闭曲面场景下按方向控制吸附侧
+- A* 与路径优化共用同一套 walkability 判定
+- 可导出三角网格、关键体素、优化后折线
+- 可在 `VoxelCell` 中保留 `distanceToSurface` 供后续代价函数扩展
 
----
+## 10. 建议的文档维护原则
 
-### 任务 11：路径质量评价
+后续如果继续演进该模块，建议按下面的方式维护本文档：
 
-需要增加路径评价指标：
+- “当前实现”只写源码中已经存在的行为
+- “待实现”单独成节，不和主流程混排
+- 参数示例尽量标明来自哪个入口，例如 `main.cpp`、单元测试或业务接口
+- 若运行参数变更，优先同步 `8.2`、`8.3` 两节
 
-```text
-1. 总长度
-2. 转折数量
-3. 最大转角
-4. 最小表面距离
-5. 平均表面距离
-6. 是否穿过 Occupied
-7. 是否离开允许搜索区域
-8. 路径点数量
-```
-
-用于比较：
-
-```text
-1. 不同 voxelSize
-2. 不同 clearance
-3. 不同 neighborType
-4. 不同 heuristicWeight
-5. 不同 turnPenalty
-6. 不同优化策略
-```
-
----
-
-### 任务 12：工程接口封装
-
-最终需要封装成类似接口：
-
-```cpp
-bool CalculateMovementPathByVoxel(
-    const TopoDS_Shape& obstacleShape,
-    const gp_Pnt& startPoint,
-    const gp_Pnt& goalPoint,
-    const VoxelMovementPathOptions& options,
-    VoxelMovementPathResult& result);
-```
-
-建议结果包含：
-
-```cpp
-struct VoxelMovementPathResult
-{
-    bool success = false;
-
-    std::vector<VoxelIndex> rawVoxelPath;
-    std::vector<gp_Pnt> rawPointPath;
-
-    std::vector<VoxelIndex> optimizedVoxelPath;
-    std::vector<gp_Pnt> optimizedPointPath;
-
-    double totalCost = 0.0;
-    int visitedCount = 0;
-
-    VoxelAStarFailReason failReason;
-};
-```
-
----
-
-# 15. 后续优化目标
-
-## 15.1 鲁棒性目标
-
-```text
-1. 起点终点在 Occupied / Free / ClearanceBand 中均可合理处理
-2. 封闭曲面内外侧吸附可控
-3. ClearanceBand 局部断裂时有诊断能力
-4. A* 失败时可以快速定位原因
-5. 26 邻接下不发生穿角
-6. 路径优化后仍满足可通行约束
-```
-
----
-
-## 15.2 性能目标
-
-```text
-1. 减少 A* visitedCount
-2. 降低 VoxelSpace 存储数量
-3. 避免无意义创建 Free 节点
-4. 路径优化避免 O(n^2) 过大开销
-5. 使用 maxShortcutLookAhead 控制 line-of-sight 成本
-6. 后续通过自适应体素减少搜索规模
-```
-
----
-
-## 15.3 路径质量目标
-
-```text
-1. 路径长度接近合理最短路径
-2. 转折数量尽量少
-3. 路径平滑
-4. 不贴近 Occupied 表面
-5. 不离开期望施工区域
-6. 可输出给后续运动控制模块
-```
-
----
-
-## 15.4 可视化调试目标
-
-```text
-1. 可导出原始三角网格
-2. 可导出 Occupied / ClearanceBand 体素
-3. 可导出原始 A* 路径折线
-4. 可导出优化后路径折线
-5. 可导出路径经过的体素
-6. 可在 ParaView 中直观看到失败原因
-```
-
----
-
-# 16. 推荐下一步执行顺序
-
-```text
-1. 接入 VoxelPathOptimizer
-2. 输出 raw_path_polyline.vtk
-3. 输出 optimized_path_polyline.vtk
-4. 增加 CollectLineVoxels，用于标记优化后线段覆盖体素
-5. 完善 VoxelAStarSearchMode::FreeSpace
-6. 增加 26 邻接防穿角
-7. 增加路径质量评价
-8. 再进入自适应体素设计
-```
-
-当前最优先任务：
-
-```text
-路径简化 + 直线可通行检测 + VTK 折线验证
-```
-
-这一步完成后，才能更准确判断后续是否需要：
-
-```text
-1. 更厚 ClearanceBand
-2. 更细 voxelSize
-3. 更强 turnPenalty
-4. 自适应体素
-5. 路径平滑
-```
+这样文档可以继续作为源码阅读入口，而不是方案草稿。
