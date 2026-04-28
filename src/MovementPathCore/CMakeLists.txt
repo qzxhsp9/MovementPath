@@ -1,5 +1,6 @@
 set(MOVEMENT_PATH_CORE_HEADERS
     MeshVtkExporter.h
+    VoxelChunkCache.h
     VoxelAStar.h
     VoxelMeshBuilder.h
     VoxelPathOptimizer.h
@@ -11,6 +12,7 @@ set(MOVEMENT_PATH_CORE_HEADERS
 
 set(MOVEMENT_PATH_CORE_SOURCES
     MeshVtkExporter.cpp
+    VoxelChunkCache.cpp
     VoxelAStar.cpp
     VoxelMeshBuilder.cpp
     VoxelPathOptimizer.cpp

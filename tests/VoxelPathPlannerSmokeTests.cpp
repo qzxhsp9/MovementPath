@@ -1,13 +1,17 @@
 #include "VoxelPathPlanner.h"
+#include "VoxelChunkCache.h"
 
 #include <BRepPrimAPI_MakeSphere.hxx>
 #include <TopoDS_Shape.hxx>
 #include <gp_Pnt.hxx>
 #include <gp_Vec.hxx>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <set>
+#include <vector>
 
 namespace
 {
@@ -75,6 +79,209 @@ bool Expect(
 
     return true;
 }
+
+MeshAABB ComputeTriangleAABB(
+    const MeshTriangle& tri)
+{
+    MeshAABB box;
+    box.minP = Vec(
+        std::min({ tri.p0.x, tri.p1.x, tri.p2.x }),
+        std::min({ tri.p0.y, tri.p1.y, tri.p2.y }),
+        std::min({ tri.p0.z, tri.p1.z, tri.p2.z })
+    );
+    box.maxP = Vec(
+        std::max({ tri.p0.x, tri.p1.x, tri.p2.x }),
+        std::max({ tri.p0.y, tri.p1.y, tri.p2.y }),
+        std::max({ tri.p0.z, tri.p1.z, tri.p2.z })
+    );
+    return box;
+}
+
+bool IntersectsAABB(
+    const MeshAABB& a,
+    const MeshAABB& b)
+{
+    return a.minP.x <= b.maxP.x && a.maxP.x >= b.minP.x &&
+        a.minP.y <= b.maxP.y && a.maxP.y >= b.minP.y &&
+        a.minP.z <= b.maxP.z && a.maxP.z >= b.minP.z;
+}
+
+std::vector<MeshTriangle> MakeSeparatedTriangles()
+{
+    return {
+        { Vec(0, 0, 0), Vec(4, 0, 0), Vec(0, 4, 0) },
+        { Vec(20, 0, 0), Vec(24, 0, 0), Vec(20, 4, 0) },
+        { Vec(0, 20, 0), Vec(4, 20, 0), Vec(0, 24, 0) }
+    };
+}
+
+bool TestTriangleSpatialHashCoversBruteForce()
+{
+    const std::vector<MeshTriangle> triangles = MakeSeparatedTriangles();
+
+    TriangleSpatialHashOptions options;
+    options.cellSize = 5.0;
+
+    TriangleSpatialHash hash;
+    bool ok = Expect(hash.Build(triangles, options), "hash should build");
+
+    MeshAABB queryBox;
+    queryBox.minP = Vec(18, -1, -1);
+    queryBox.maxP = Vec(25, 5, 1);
+
+    std::vector<int> hashIds;
+    TriangleSpatialHashStats stats;
+    hash.Query(queryBox, hashIds, stats);
+
+    std::set<int> hashIdSet(hashIds.begin(), hashIds.end());
+
+    for (std::size_t i = 0; i < triangles.size(); ++i)
+    {
+        if (IntersectsAABB(ComputeTriangleAABB(triangles[i]), queryBox))
+        {
+            ok &= Expect(
+                hashIdSet.find(static_cast<int>(i)) != hashIdSet.end(),
+                "hash query should contain every brute-force AABB hit");
+        }
+    }
+
+    ok &= Expect(stats.queryCellCount > 0, "hash should report query cells");
+    ok &= Expect(
+        stats.queryUniqueTriangleCount == hashIds.size(),
+        "hash stats should report unique query ids");
+
+    return ok;
+}
+
+bool TestAppendVoxelSpaceExpandsBoundsAndPreservesState()
+{
+    std::vector<MeshTriangle> triangles;
+    triangles.push_back(
+        { Vec(0, 0, 0), Vec(10, 0, 0), Vec(0, 10, 0) }
+    );
+
+    VoxelMeshBuildOptions options;
+    options.voxelSize = 1.0;
+    options.clearance = 2.0;
+    options.conservativeClearance = true;
+    options.storeFreeCells = false;
+
+    TriangleSpatialHashOptions hashOptions;
+    hashOptions.cellSize = 4.0;
+    TriangleSpatialHash hash;
+    bool ok = Expect(hash.Build(triangles, hashOptions), "hash should build");
+
+    MeshAABB baseBox;
+    baseBox.minP = Vec(-1, -1, -1);
+    baseBox.maxP = Vec(2, 2, 1);
+
+    VoxelSpace space;
+    const VoxelMeshBuildResult baseResult =
+        VoxelMeshBuilder::BuildVoxelSpaceFromTrianglesInBox(
+            triangles,
+            &hash,
+            baseBox,
+            options,
+            space
+        );
+
+    ok &= Expect(baseResult.success, "base voxel build should succeed");
+
+    const VoxelIndex preservedIndex = space.WorldToIndex(Vec(0, 0, 0));
+    const VoxelState preservedState = space.GetCellState(preservedIndex);
+
+    const VoxelIndex appendOnlyIndex = space.WorldToIndex(Vec(5, 0, 0));
+    ok &= Expect(
+        !space.IsInsideSearchBounds(appendOnlyIndex),
+        "append-only index should start outside base bounds");
+
+    MeshAABB appendBox;
+    appendBox.minP = Vec(4, -1, -1);
+    appendBox.maxP = Vec(7, 2, 1);
+
+    const VoxelMeshBuildResult appendResult =
+        VoxelMeshBuilder::AppendVoxelSpaceFromTrianglesInBox(
+            triangles,
+            &hash,
+            appendBox,
+            options,
+            space
+        );
+
+    ok &= Expect(appendResult.success, "append voxel build should succeed");
+    ok &= Expect(
+        space.IsInsideSearchBounds(appendOnlyIndex),
+        "append should expand search bounds to include appended box");
+    ok &= Expect(
+        space.GetCellState(appendOnlyIndex) != VoxelState::Free,
+        "append should populate voxels outside the original bounds");
+    ok &= Expect(
+        space.GetCellState(preservedIndex) == preservedState,
+        "append should preserve existing voxel state");
+
+    return ok;
+}
+
+bool TestVoxelChunkCacheBuildsEachChunkOnce()
+{
+    std::vector<MeshTriangle> triangles;
+    triangles.push_back(
+        { Vec(0, 0, 0), Vec(10, 0, 0), Vec(0, 10, 0) }
+    );
+
+    VoxelMeshBuildOptions buildOptions;
+    buildOptions.voxelSize = 1.0;
+    buildOptions.clearance = 2.0;
+    buildOptions.conservativeClearance = true;
+
+    TriangleSpatialHashOptions hashOptions;
+    hashOptions.cellSize = 4.0;
+    TriangleSpatialHash hash;
+
+    bool ok = Expect(hash.Build(triangles, hashOptions), "hash should build");
+
+    VoxelChunkCacheOptions cacheOptions;
+    cacheOptions.chunkVoxelSize = 4;
+    cacheOptions.buildPadding = 0.0;
+
+    VoxelChunkCache cache;
+    ok &= Expect(
+        cache.Configure(
+            &triangles,
+            &hash,
+            buildOptions,
+            cacheOptions),
+        "chunk cache should configure");
+
+    VoxelSpace space(Vec(-1, -1, -1), buildOptions.voxelSize);
+    const VoxelIndex targetIndex = space.WorldToIndex(Vec(1, 1, 0));
+
+    ok &= Expect(
+        cache.EnsureChunkForIndex(space, targetIndex),
+        "chunk cache should build target chunk");
+
+    const VoxelChunkCacheStats firstStats = cache.GetStats();
+    ok &= Expect(
+        firstStats.chunkBuildCount == 1,
+        "first ensure should build one chunk");
+    ok &= Expect(
+        space.GetCellState(targetIndex) != VoxelState::Free,
+        "built chunk should populate target voxel");
+
+    ok &= Expect(
+        cache.EnsureChunkForIndex(space, targetIndex),
+        "second ensure should hit cache");
+
+    const VoxelChunkCacheStats secondStats = cache.GetStats();
+    ok &= Expect(
+        secondStats.chunkBuildCount == 1,
+        "cache hit should not rebuild chunk");
+    ok &= Expect(
+        secondStats.cacheHitCount == 1,
+        "second ensure should increment cache hit count");
+
+    return ok;
+}
 }
 
 int main()
@@ -105,6 +312,13 @@ int main()
         localResult.profile.candidateTriangleCount <
             localResult.profile.triangleCount,
         "local build should reduce candidate triangle count");
+    ok &= Expect(
+        localResult.optimizeResult.voxelPath.size() ==
+            localResult.profile.optimizedPathCount,
+        "planner result should expose optimized voxel path");
+    ok &= Expect(
+        localResult.hasFinalSearchBounds,
+        "planner result should expose final search bounds");
 
     VoxelPathPlannerOptions noopHookOptions = MakeLocalBuildSmokeOptions();
     int ensureCallCount = 0;
@@ -155,6 +369,10 @@ int main()
     ok &= Expect(
         fullPoleResult.profile.totalCost < localPoleResult.profile.totalCost,
         "full-bounds pole-to-pole path should avoid local-box clipping");
+
+    ok &= TestTriangleSpatialHashCoversBruteForce();
+    ok &= TestAppendVoxelSpaceExpandsBoundsAndPreservesState();
+    ok &= TestVoxelChunkCacheBuildsEachChunkOnce();
 
     return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }

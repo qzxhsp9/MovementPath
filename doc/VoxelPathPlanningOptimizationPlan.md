@@ -935,3 +935,47 @@ Result: success
 - 当前阶段应继续保留全局构建作为 correctness baseline。
 - 后续 Phase 3 或局部构建优化必须增加“路径质量不退化或可回退”的测试约束，而不能只看 candidate ratio 或 voxel build time。
 - 对外接口中 `StartGoalBox` 必须被视为显式 opt-in 模式；调用方开启它时应记录原因、适用场景和回退策略。
+
+### 2026-04-28：测试基线补强、结果结构完善与 Phase 3 原型
+
+本轮按“先完成步骤 1、2，再推进 Phase 3”的顺序执行。
+
+步骤 1：补强测试基线
+
+- smoke test 继续覆盖局部短路径成功规划和候选三角形裁剪。
+- 增加 `FullMeshBounds` 与 `StartGoalBox` 的极点到极点路径质量对照，防止局部盒裁剪再次成为默认行为。
+- 增加 `TriangleSpatialHash` 查询测试：hash 查询结果必须覆盖 brute-force AABB 命中的三角形。
+- 增加 `AppendVoxelSpaceFromTrianglesInBox()` 测试：追加构建必须扩展 bounds、填充原 bounds 外的新体素，并保持已有体素状态。
+
+步骤 2：提炼可断言结果
+
+- `VoxelPathPlannerResult` 新增 `optimizeResult`，测试可直接断言优化后 voxel path，而不是只看控制台输出。
+- `VoxelPathPlannerResult` 新增 `finalSearchBounds` 和 `hasFinalSearchBounds`，用于后续测试搜索边界行为。
+
+Phase 3：chunk cache 最小原型
+
+- 新增 `VoxelChunkCache.h/.cpp`。
+- `VoxelChunkCache` 以 chunk index 缓存已构建 chunk，内部调用 `AppendVoxelSpaceFromTrianglesInBox()` 追加构建。
+- 当前只作为独立实验组件存在，没有接入 `VoxelPathPlanner` 默认主流程。
+- 新增测试验证同一 chunk 只构建一次，第二次 `EnsureChunkForIndex()` 命中缓存，并且构建后的目标体素非 `Free`。
+
+同时修复：
+
+- `AppendVoxelSpaceFromTrianglesInBox()` 原先会把 append bounds 裁剪到原始 bounds 内，导致无法向外追加 chunk。
+- 现在 append 时临时用 append bounds 限制写入，完成后将 `VoxelSpace` search bounds 扩展为原始 bounds 与 append bounds 的并集。
+
+验证结果：
+
+```text
+Build: cmake --build out\build\x64-Debug --config Debug
+CTest: ctest --test-dir out\build\x64-Debug --output-on-failure
+Run: out\build\x64-Debug\MovementPath.exe
+Result: success
+Warning: 仅存在既有 MSVC C4819 编码警告
+```
+
+下一步：
+
+- 不要立即把 `VoxelChunkCache` 接入默认规划流程。
+- 先设计 lazy 模式的启用选项、统计字段和失败回退策略。
+- lazy 模式接入前必须新增路径质量对照测试，至少保证默认 `FullMeshBounds` 结果仍作为回退 baseline。

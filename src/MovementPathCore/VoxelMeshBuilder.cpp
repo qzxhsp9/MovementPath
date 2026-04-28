@@ -906,30 +906,13 @@ VoxelMeshBuildResult VoxelMeshBuilder::AppendVoxelSpaceFromTrianglesInBox(
 
     const bool hadOriginalBounds = outSpace.HasSearchBounds();
     const VoxelBounds originalBounds = outSpace.GetSearchBounds();
+    VoxelBounds combinedBounds = appendBounds;
 
-    if (hadOriginalBounds)
+    if (hadOriginalBounds && originalBounds.IsValid())
     {
-        appendBounds.minIndex.x =
-            std::max(appendBounds.minIndex.x, originalBounds.minIndex.x);
-        appendBounds.minIndex.y =
-            std::max(appendBounds.minIndex.y, originalBounds.minIndex.y);
-        appendBounds.minIndex.z =
-            std::max(appendBounds.minIndex.z, originalBounds.minIndex.z);
-
-        appendBounds.maxIndex.x =
-            std::min(appendBounds.maxIndex.x, originalBounds.maxIndex.x);
-        appendBounds.maxIndex.y =
-            std::min(appendBounds.maxIndex.y, originalBounds.maxIndex.y);
-        appendBounds.maxIndex.z =
-            std::min(appendBounds.maxIndex.z, originalBounds.maxIndex.z);
-
-        if (!appendBounds.IsValid())
-        {
-            result.success = true;
-            result.triangleCount = triangles.size();
-            result.bounds = appendBounds;
-            return result;
-        }
+        combinedBounds = originalBounds;
+        ExpandBoundsToInclude(combinedBounds, appendBounds.minIndex);
+        ExpandBoundsToInclude(combinedBounds, appendBounds.maxIndex);
     }
 
     outSpace.SetSearchBounds(appendBounds);
@@ -992,14 +975,7 @@ VoxelMeshBuildResult VoxelMeshBuilder::AppendVoxelSpaceFromTrianglesInBox(
         MarkTriangleToVoxelSpace(tri, options, outSpace);
     }
 
-    if (hadOriginalBounds)
-    {
-        outSpace.SetSearchBounds(originalBounds);
-    }
-    else
-    {
-        outSpace.SetSearchBounds(appendBounds);
-    }
+    outSpace.SetSearchBounds(combinedBounds);
 
     std::size_t occupiedCount = 0;
     std::size_t clearanceBandCount = 0;

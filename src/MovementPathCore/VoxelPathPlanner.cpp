@@ -440,6 +440,8 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
         ExpandBoundsByVoxelRadius(bounds, options.searchBoundsExtraRadius);
 
         voxelSpace.SetSearchBounds(bounds);
+        result.finalSearchBounds = bounds;
+        result.hasFinalSearchBounds = bounds.IsValid();
 
         {
             ScopedTimer timer(profile.astarMs);
@@ -549,6 +551,7 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
 
     profile.optimizedPathCount = optResult.outputCount;
     profile.lineCheckCount = optResult.lineCheckCount;
+    result.optimizeResult = optResult;
 
     if (options.runOptions.verbose)
     {

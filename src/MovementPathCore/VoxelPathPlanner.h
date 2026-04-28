@@ -2,6 +2,7 @@
 
 #include "VoxelAStar.h"
 #include "VoxelMeshBuilder.h"
+#include "VoxelPathOptimizer.h"
 
 #include <TopoDS_Shape.hxx>
 #include <gp_Pnt.hxx>
@@ -9,6 +10,7 @@
 
 #include <cstddef>
 #include <string>
+#include <vector>
 
 struct VoxelPlanningProfile
 {
@@ -117,6 +119,9 @@ struct VoxelPathPlannerResult
     bool success = false;
     VoxelPlanningProfile profile;
     VoxelAStarResult astarResult;
+    VoxelPathOptimizeResult optimizeResult;
+    VoxelBounds finalSearchBounds;
+    bool hasFinalSearchBounds = false;
 };
 
 class VoxelPathPlanner
