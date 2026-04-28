@@ -1083,3 +1083,107 @@ Warning: 仅存在既有 MSVC C4819 编码警告
 - 为 lazy 成功路径增加专门测试，选择足够小且局部 chunk 可覆盖的场景。
 - 启用 `maxCostRegressionRatio`，实现 lazy 成功后与 fallback/baseline 的路径质量对照。
 - 增加 lazy VTK/debug 输出验证，便于观察 chunk 覆盖范围。
+
+### 2026-04-28：Chunk 相关测试覆盖补强
+
+本轮重点补充 `VoxelChunkCache` 与 chunk 构建相关测试，尽量覆盖核心边界行为。
+
+新增测试覆盖：
+
+- 配置失败：拒绝 `nullptr` triangles、空 triangles、非正 `voxelSize`、非正 `chunkVoxelSize`。
+- 未配置调用：`EnsureChunkForIndex()` 必须失败，并增加 `failedBuildCount`。
+- 无空间索引路径：`spatialHash = nullptr` 时仍可通过 brute-force 三角形候选追加构建。
+- `Clear()`：必须重置 configured 状态、统计字段和 built chunk 记录。
+- 同 chunk 缓存：同一 chunk 第二次 `EnsureChunkForIndex()` 不应重复构建，应增加 `cacheHitCount`。
+- 负坐标 chunk：验证 floor division 语义，`-1` 与 `-4` 属于同一 chunk，`-5` 属于相邻负 chunk。
+- 跨 chunk 构建：负 chunk、相邻负 chunk、正 chunk 应分别计为不同构建。
+- search bounds 扩展：追加多个 chunk 后，`VoxelSpace` bounds 应覆盖已构建负/正 chunk。
+- padding 覆盖：`buildPadding` 应扩展 chunk build box，使邻近 chunk 边界外的三角形影响可以被写入。
+- 统计累计：验证 `totalRawCandidateTriangleCount` 等候选统计会随 chunk 构建累积。
+
+验证结果：
+
+```text
+Build: cmake --build out\build\x64-Debug --config Debug
+CTest: ctest --test-dir out\build\x64-Debug --output-on-failure
+Run: out\build\x64-Debug\MovementPath.exe
+Result: success
+Warning: 仅存在既有 MSVC C4819 编码警告
+```
+
+结论：
+
+- chunk cache 的基础行为已经有单测覆盖，后续可以更安全地推进 lazy 成功路径和质量回退。
+- 仍需补充更高层的 planner 级 lazy 成功测试，而不仅是 chunk cache 单元行为。
+
+### 2026-04-28：Planner 级 Lazy 成功路径测试
+
+本轮补充高层 planner 级 lazy 成功测试，验证 `VoxelChunkCache` 不只是单元可用，也能通过 `VoxelPathPlanner::Plan()` 的 lazy 分支完成路径规划。
+
+新增测试：
+
+- 新增 `MakeLazySmokeOptions()`，显式开启 `lazyBuildOptions.enabled`。
+- 使用局部短路径球体场景作为 lazy 成功测试对象。
+- 对同一场景先运行 `FullMeshBounds` baseline，再运行 lazy planner。
+- 断言 lazy planner：
+  - `success == true`。
+  - `lazyBuildEnabled == true`。
+  - `lazyFallbackTriggered == false`。
+  - `buildRegionMode == "LazyChunks"`。
+  - `lazyChunkBuildCount > 0`。
+  - `lazyCandidateTriangleCount > 0`。
+  - `lazyFailedBuildCount == 0`。
+  - `rawPathCount > 0`。
+  - `optimizeResult.voxelPath.size()` 与 `optimizedPathCount` 一致。
+  - `totalCost` 不超过 `FullMeshBounds` baseline 的 `1.25` 倍。
+
+验证结果：
+
+```text
+Build: cmake --build out\build\x64-Debug --config Debug
+CTest: ctest --test-dir out\build\x64-Debug --output-on-failure
+Run: out\build\x64-Debug\MovementPath.exe
+Result: success
+Warning: 仅存在既有 MSVC C4819 编码警告
+```
+
+结论：
+
+- lazy 模式已具备一个 planner 级成功路径测试，不再只依赖 chunk cache 单元测试。
+- 默认示例仍保持 lazy 关闭，`sphere_pole_to_pole` 继续使用 `FullMeshBounds` correctness baseline。
+- 后续可以继续完善 `maxCostRegressionRatio` 的正式实现，把当前测试中的固定 `1.25` 倍质量约束下沉到 planner 选项。
+
+### 2026-04-28：Lazy 质量回退实现与测试拆分
+
+本轮按“下一步建议”继续执行，重点是把 lazy 质量约束下沉到 planner 选项，并拆分测试目标，避免所有行为堆在单一 smoke test 中。
+
+已完成：
+
+- `maxCostRegressionRatio` 已正式接入 `VoxelPathPlanner::Plan()`：lazy 成功后会在启用该阈值时运行 `FullMeshBounds` baseline 对照。
+- 当 lazy 路径 cost 超过 `baselineCost * maxCostRegressionRatio` 时，planner 按 `FullMeshBoundsOnFailure` 返回 full-bounds 结果，并保留 lazy 尝试统计。
+- `VoxelPathPlannerResult` 中的 `lazyAttemptCost`、`fallbackCost`、`executionMode`、`fallbackExecutionMode` 可用于断言质量回退行为。
+- 原 `VoxelPathPlannerSmokeTests.cpp` 拆分为 `TriangleSpatialHashTests`、`VoxelChunkCacheTests`、`VoxelPathPlannerTests`。
+- 新增 planner 级 `maxCostRegressionRatio` 回退测试，验证 lazy 尝试成功但质量阈值不满足时会回退到 `FullMeshBounds`。
+- `src/CMakeLists.txt` 改为通过 `add_movement_path_test()` 注册多个独立测试目标。
+- `doc/VoxelPathPlanning.md` 同步当前架构、测试入口、lazy/chunk/质量回退状态。
+
+验证结果：
+
+```text
+Build: cmake --build out\build\x64-Debug --config Debug
+CTest: ctest --test-dir out\build\x64-Debug --output-on-failure
+Result: success, 3/3 tests passed
+Warning: 仅存在既有 MSVC C4819 编码警告
+```
+
+当前结论：
+
+- lazy/chunk 已经具备“可显式开启、可统计、可 guardrail、可质量回退”的最小闭环。
+- 默认主流程没有被 lazy 替换，仍保持 `FullMeshBounds` 作为正确性基线。
+- 测试结构已从单 smoke test 过渡到按模块分层，后续新增边界行为应优先放入对应测试目标。
+
+下一步建议：
+
+- 增加 lazy debug/VTK 导出或 chunk 覆盖范围导出，便于定位 lazy 生成区域与路径质量差异。
+- 增加更贴近真实复杂模型的 benchmark 场景，记录 `lazyChunkBuildCount`、候选三角形比例、cost regression 和总耗时。
+- 评估 `maxCostRegressionRatio` 是否需要默认推荐值；在没有足够 benchmark 前，不建议默认开启 lazy。

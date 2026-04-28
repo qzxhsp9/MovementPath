@@ -16,14 +16,21 @@ target_link_libraries(${PROJECT_NAME} PRIVATE MovementPathCore)
 include(CTest)
 
 if(BUILD_TESTING)
-    add_executable(MovementPathSmokeTests
-        ${CMAKE_SOURCE_DIR}/tests/VoxelPathPlannerSmokeTests.cpp)
+    function(add_movement_path_test target source)
+        add_executable(${target} ${source})
+        target_link_libraries(${target} PRIVATE MovementPathCore)
+        add_test(NAME ${target} COMMAND ${target})
+    endfunction()
 
-    target_link_libraries(MovementPathSmokeTests PRIVATE MovementPathCore)
-
-    add_test(
-        NAME MovementPathSmokeTests
-        COMMAND MovementPathSmokeTests)
+    add_movement_path_test(
+        TriangleSpatialHashTests
+        ${CMAKE_SOURCE_DIR}/tests/TriangleSpatialHashTests.cpp)
+    add_movement_path_test(
+        VoxelChunkCacheTests
+        ${CMAKE_SOURCE_DIR}/tests/VoxelChunkCacheTests.cpp)
+    add_movement_path_test(
+        VoxelPathPlannerTests
+        ${CMAKE_SOURCE_DIR}/tests/VoxelPathPlannerTests.cpp)
 endif()
 
 file(COPY ${OCCT_DLLS} DESTINATION "${CMAKE_BINARY_DIR}/")

@@ -4,16 +4,19 @@
 
 ## 1. 模块概览
 
-当前体素路径规划相关源码位于 `src/`：
+当前体素路径规划核心源码位于 `src/MovementPathCore/`，并由 `MovementPathCore` 静态库统一管理：
 
+- `VoxelPathPlanner.h/.cpp`：规划主接口，封装三角化、空间索引、体素构建、A*、路径优化、统计和可选 VTK 导出
 - `VoxelSpace.h`：体素索引、状态、搜索边界、稀疏体素存储
-- `VoxelMeshBuilder.h/.cpp`：`TopoDS_Shape -> 三角网格 -> VoxelSpace`
+- `VoxelMeshBuilder.h/.cpp`：`TopoDS_Shape -> 三角网格 -> VoxelSpace`，支持全局、局部 box 和追加构建
+- `TriangleSpatialHash.h/.cpp`：`MeshTriangle` 空间哈希索引，服务局部体素化和 lazy chunk 构建
+- `VoxelChunkCache.h/.cpp`：按 chunk 追加生成体素并缓存已生成 chunk
 - `VoxelWalkability.h`：不同搜索模式下的可通行判定
-- `VoxelAStar.h/.cpp`：A* 搜索、起终点吸附、路径回溯
+- `VoxelAStar.h/.cpp`：A* 搜索、起终点吸附、路径回溯，支持 `ensureCellBuilt` 钩子供 lazy 构建接入
 - `VoxelPathOptimizer.h/.cpp`：共线点删除、3D DDA 直连压缩
 - `VoxelVtkExporter.h/.cpp`：体素和折线路径导出为 VTK
 - `MeshVtkExporter.h/.cpp`：三角网格导出为 VTK
-- `main.cpp`：当前示例与调试入口
+- `src/main.cpp`：示例入口，只负责构造场景、设置选项并调用 `VoxelPathPlanner::Plan()`
 
 当前主流程是：
 
@@ -21,8 +24,9 @@
 TopoDS_Shape
   -> BRepMesh_IncrementalMesh 三角化
   -> MeshTriangle 集合
-  -> 计算整体包围盒并创建 VoxelSpace
-  -> 逐三角形标记 Occupied / ClearanceBand
+  -> 构建 TriangleSpatialHash
+  -> 根据 FullMeshBounds / StartGoalBox / LazyChunks 构建或按需追加 VoxelSpace
+  -> 标记 Occupied / ClearanceBand
   -> A* 搜索 voxelPath
   -> VoxelPathOptimizer 优化
   -> 导出 VTK 结果
@@ -608,3 +612,28 @@ astarOptions.markPathToVoxelSpace = true;
 - 若运行参数变更，优先同步 `8.2`、`8.3` 两节
 
 这样文档可以继续作为源码阅读入口，而不是方案草稿。
+
+## 11. 当前测试入口
+
+当前测试不再通过 `main.cpp` 间接覆盖规划流程，而是直接链接 `MovementPathCore` 并调用核心接口：
+
+- `TriangleSpatialHashTests`：覆盖空间哈希查询必须包含 brute-force AABB 命中的三角形。
+- `VoxelChunkCacheTests`：覆盖 chunk 配置失败、重复命中、负坐标 chunk、bounds 扩展、padding 覆盖和追加体素化行为。
+- `VoxelPathPlannerTests`：覆盖默认全局构建、显式 `StartGoalBox` 局限性对照、`ensureCellBuilt` 钩子、lazy guardrail fallback、lazy 成功路径和 `maxCostRegressionRatio` 质量回退。
+
+构建与测试命令：
+
+```text
+cmake --build out\build\x64-Debug --config Debug
+ctest --test-dir out\build\x64-Debug --output-on-failure
+```
+
+## 12. 当前优化实现状态
+
+- 默认规划仍使用 `FullMeshBounds`，这是 correctness baseline。
+- `StartGoalBox` 是显式 opt-in 的局部预体素化模式，只适合短距离或调用方能接受质量回退的场景；它可能裁剪真实绕行路径。
+- `TriangleSpatialHash` 已接入局部构建和 chunk 构建，用于减少候选三角形扫描。
+- `LazyChunks` 已作为实验模式接入 planner，默认关闭；开启后 A* 通过 `VoxelChunkCache` 按需生成 chunk。
+- lazy 模式支持 `maxChunkBuildCount` guardrail，失败或触发 guardrail 时可按 `FullMeshBoundsOnFailure` 回退。
+- `maxCostRegressionRatio` 已实现为质量回退阈值；lazy 成功后可与 full-bounds baseline 对照，超过阈值时返回 full-bounds 结果并保留 lazy 尝试统计。
+- `VoxelPathPlannerResult` 已暴露 `executionMode`、`fallbackExecutionMode`、`lazyAttemptCost`、`fallbackCost`、`optimizeResult` 和最终搜索边界，便于测试直接断言行为。

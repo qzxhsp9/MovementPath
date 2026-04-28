@@ -120,6 +120,14 @@ enum class VoxelLazyFallbackPolicy
     FullMeshBoundsOnFailure
 };
 
+enum class VoxelPlannerExecutionMode
+{
+    Unknown,
+    FullMeshBounds,
+    StartGoalBox,
+    LazyChunks
+};
+
 struct VoxelLazyBuildOptions
 {
     // Experimental. Keep disabled for correctness baseline.
@@ -155,6 +163,12 @@ struct VoxelPathPlannerOptions
 struct VoxelPathPlannerResult
 {
     bool success = false;
+    VoxelPlannerExecutionMode executionMode =
+        VoxelPlannerExecutionMode::Unknown;
+    VoxelPlannerExecutionMode fallbackExecutionMode =
+        VoxelPlannerExecutionMode::Unknown;
+    double lazyAttemptCost = 0.0;
+    double fallbackCost = 0.0;
     VoxelPlanningProfile profile;
     VoxelAStarResult astarResult;
     VoxelPathOptimizeResult optimizeResult;

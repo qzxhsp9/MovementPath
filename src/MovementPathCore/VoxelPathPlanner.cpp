@@ -45,6 +45,37 @@ const char* ToString(VoxelBuildRegionMode mode)
     return "FullMeshBounds";
 }
 
+VoxelPlannerExecutionMode ToExecutionMode(
+    VoxelBuildRegionMode mode)
+{
+    if (mode == VoxelBuildRegionMode::StartGoalBox)
+    {
+        return VoxelPlannerExecutionMode::StartGoalBox;
+    }
+
+    return VoxelPlannerExecutionMode::FullMeshBounds;
+}
+
+void PreserveLazyAttemptOnFallback(
+    const VoxelPlanningProfile& lazyProfile,
+    VoxelPathPlannerResult& fallbackResult)
+{
+    fallbackResult.profile.lazyBuildEnabled = true;
+    fallbackResult.profile.lazyFallbackTriggered = true;
+    fallbackResult.profile.lazyFallbackReason =
+        lazyProfile.lazyFallbackReason;
+    fallbackResult.profile.lazyChunkBuildCount =
+        lazyProfile.lazyChunkBuildCount;
+    fallbackResult.profile.lazyCacheHitCount =
+        lazyProfile.lazyCacheHitCount;
+    fallbackResult.profile.lazyFailedBuildCount =
+        lazyProfile.lazyFailedBuildCount;
+    fallbackResult.profile.lazyCandidateTriangleCount =
+        lazyProfile.lazyCandidateTriangleCount;
+    fallbackResult.profile.lazyRawCandidateTriangleCount =
+        lazyProfile.lazyRawCandidateTriangleCount;
+}
+
 MeshAABB MakeStartGoalBuildBox(
     const Vec& startPoint,
     const Vec& goalPoint,
@@ -423,6 +454,7 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
     profile.scenarioName = scenario.name;
     profile.buildRegionMode = ToString(options.localBuildOptions.regionMode);
     profile.lazyBuildEnabled = options.lazyBuildOptions.enabled;
+    result.executionMode = ToExecutionMode(options.localBuildOptions.regionMode);
 
     std::vector<MeshTriangle> triangles;
 
@@ -515,6 +547,7 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
     if (options.lazyBuildOptions.enabled)
     {
         profile.buildRegionMode = "LazyChunks";
+        result.executionMode = VoxelPlannerExecutionMode::LazyChunks;
 
         VoxelSpace lazyVoxelSpace;
         VoxelBounds lazyBounds;
@@ -632,6 +665,47 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                     profile.lineCheckCount = optResult.lineCheckCount;
                     result.optimizeResult = optResult;
                     result.success = true;
+                    result.lazyAttemptCost = lazyAStarResult.totalCost;
+
+                    if (options.lazyBuildOptions.maxCostRegressionRatio > 0.0)
+                    {
+                        VoxelPathPlannerOptions baselineOptions = options;
+                        baselineOptions.lazyBuildOptions.enabled = false;
+                        baselineOptions.localBuildOptions.regionMode =
+                            VoxelBuildRegionMode::FullMeshBounds;
+
+                        VoxelPathPlannerResult baselineResult =
+                            VoxelPathPlanner::Plan(
+                                scenario,
+                                baselineOptions);
+
+                        result.fallbackCost =
+                            baselineResult.profile.totalCost;
+
+                        if (baselineResult.success &&
+                            lazyAStarResult.totalCost >
+                                baselineResult.profile.totalCost *
+                                options.lazyBuildOptions
+                                    .maxCostRegressionRatio)
+                        {
+                            profile.lazyFallbackTriggered = true;
+                            profile.lazyFallbackReason =
+                                "maxCostRegressionRatio exceeded";
+
+                            PreserveLazyAttemptOnFallback(
+                                profile,
+                                baselineResult);
+
+                            baselineResult.lazyAttemptCost =
+                                lazyAStarResult.totalCost;
+                            baselineResult.fallbackCost =
+                                baselineResult.profile.totalCost;
+                            baselineResult.fallbackExecutionMode =
+                                VoxelPlannerExecutionMode::FullMeshBounds;
+
+                            return baselineResult;
+                        }
+                    }
 
                     return result;
                 }
@@ -655,20 +729,11 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
             VoxelPathPlannerResult fallbackResult =
                 VoxelPathPlanner::Plan(scenario, fallbackOptions);
 
-            fallbackResult.profile.lazyBuildEnabled = true;
-            fallbackResult.profile.lazyFallbackTriggered = true;
-            fallbackResult.profile.lazyFallbackReason =
-                profile.lazyFallbackReason;
-            fallbackResult.profile.lazyChunkBuildCount =
-                profile.lazyChunkBuildCount;
-            fallbackResult.profile.lazyCacheHitCount =
-                profile.lazyCacheHitCount;
-            fallbackResult.profile.lazyFailedBuildCount =
-                profile.lazyFailedBuildCount;
-            fallbackResult.profile.lazyCandidateTriangleCount =
-                profile.lazyCandidateTriangleCount;
-            fallbackResult.profile.lazyRawCandidateTriangleCount =
-                profile.lazyRawCandidateTriangleCount;
+            PreserveLazyAttemptOnFallback(profile, fallbackResult);
+            fallbackResult.lazyAttemptCost = profile.totalCost;
+            fallbackResult.fallbackCost = fallbackResult.profile.totalCost;
+            fallbackResult.fallbackExecutionMode =
+                VoxelPlannerExecutionMode::FullMeshBounds;
 
             return fallbackResult;
         }
