@@ -71,14 +71,31 @@ struct VoxelPlanningRunOptions
 
 enum class VoxelBuildRegionMode
 {
+    // Correctness baseline. Builds voxels for the full mesh bounds and should
+    // remain the default unless a caller has its own quality fallback.
     FullMeshBounds,
+
+    // Performance-oriented local build. The build box is derived from the
+    // start-goal AABB plus padding, so it can clip valid detours outside that
+    // box. Use only for short local paths or experiments with a fallback to
+    // FullMeshBounds when path quality matters.
     StartGoalBox
 };
 
 struct VoxelLocalBuildOptions
 {
+    // VoxelPathPlanner::MakeDefaultOptions() uses FullMeshBounds. This field
+    // defaults to StartGoalBox only for direct aggregate construction; callers
+    // should prefer MakeDefaultOptions() for production-safe defaults.
     VoxelBuildRegionMode regionMode = VoxelBuildRegionMode::StartGoalBox;
+
+    // Padding around the start-goal box in world units. Larger values reduce
+    // clipping risk but move the mode closer to full-bounds cost.
     double searchPadding = 20.0;
+
+    // Retries expand the same start-goal box. They help when the local region
+    // is slightly too small, but do not guarantee preserving the global best
+    // path for long detours.
     int maxRetryCount = 3;
     double retryExpandFactor = 2.0;
 };

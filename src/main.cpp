@@ -75,6 +75,7 @@ int main()
 
     VoxelPathPlannerOptions fastOptions =
         VoxelPathPlanner::MakeDefaultOptions();
+    fastOptions.localBuildOptions.regionMode = VoxelBuildRegionMode::StartGoalBox;
     fastOptions.runOptions.exportVtk = false;
     fastOptions.runOptions.debugNeighborhood = false;
     fastOptions.runOptions.verbose = true;

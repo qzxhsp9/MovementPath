@@ -245,7 +245,7 @@ VoxelPathPlannerOptions VoxelPathPlanner::MakeDefaultOptions()
     options.meshBuildOptions.conservativeClearance = true;
     options.meshBuildOptions.storeFreeCells = false;
 
-    options.localBuildOptions.regionMode = VoxelBuildRegionMode::StartGoalBox;
+    options.localBuildOptions.regionMode = VoxelBuildRegionMode::FullMeshBounds;
     options.localBuildOptions.searchPadding = 20.0;
     options.localBuildOptions.maxRetryCount = 3;
     options.localBuildOptions.retryExpandFactor = 2.0;

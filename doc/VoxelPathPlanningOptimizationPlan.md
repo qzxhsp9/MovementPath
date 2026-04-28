@@ -290,6 +290,14 @@ struct VoxelLocalBuildOptions
 };
 ```
 
+`StartGoalBox` 的适用边界：
+
+- 它是性能优化/实验模式，不是 correctness baseline。
+- 构建范围来自起点和终点的 AABB 加 padding，因此只保证覆盖这条直连盒附近的体素。
+- 如果真实更短路径需要绕到该盒外，例如球体两极路径绕外侧走，局部盒可能裁掉有效 `ClearanceBand`，导致路径变长或失败。
+- A* 失败后的扩张重试只能缓解“范围略小”的情况，不能证明局部路径质量等价于全局构建。
+- 需要路径质量保证时必须使用 `FullMeshBounds`，或使用 `StartGoalBox` 后与全局/更大范围结果对比并具备回退策略。
+
 局部范围计算：
 
 ```text
@@ -885,3 +893,45 @@ Warning: 仅存在既有 MSVC C4819 编码警告
 - `MovementPathCore` 已从示例入口中分离，后续核心算法、规划接口和单测可以围绕该目录演进。
 - `main.cpp` 继续保持薄示例层，不应再承载新的规划流程逻辑。
 - 后续新增核心模块时，应优先放入 `src/MovementPathCore/` 并在该目录 CMake 中登记。
+
+### 2026-04-28：修复默认局部裁剪导致的路径退化
+
+问题：
+
+- `VoxelPathPlanner::MakeDefaultOptions()` 曾默认使用 `StartGoalBox`。
+- 对 `sphere_pole_to_pole` 这类起终点距离远、最优路径需要绕过几何外侧的场景，`StartGoalBox` 只按起终点连线 AABB 加 padding 生成体素。
+- 在球体两极场景中，该局部盒会裁掉部分有效 `ClearanceBand`，导致 A* 只能在被截断的候选带中找路，路径 cost 从全局构建下的约 `209.2` 退化到局部构建下的约 `244.9`。
+
+修复：
+
+- `VoxelPathPlanner::MakeDefaultOptions()` 默认构建模式改回 `FullMeshBounds`。
+- `StartGoalBox` 保留为显式实验/优化选项，由调用方针对局部短路径等场景主动开启。
+- `main.cpp` 中 `sphere_pole_to_pole` 使用默认全局构建；`sphere_local_short_path` 显式启用 `StartGoalBox`。
+- smoke test 增加极点到极点对照：默认全局构建必须成功，且 cost 应低于显式局部构建结果，防止局部裁剪再次成为默认行为。
+
+验证结果：
+
+```text
+Build: cmake --build out\build\x64-Debug --config Debug
+CTest: ctest --test-dir out\build\x64-Debug --output-on-failure
+Run: out\build\x64-Debug\MovementPath.exe
+Result: success
+```
+
+当前 `sphere_pole_to_pole` 结果：
+
+| 指标 | 修复前默认局部构建 | 修复后默认全局构建 |
+|---|---:|---:|
+| `buildRegionMode` | StartGoalBox | FullMeshBounds |
+| `buildAttemptCount` | 2 | 1 |
+| `rawPathCount` | 242 | 206 |
+| `totalCost` | 244.9 | 209.2 |
+| `storedCellCount` | 403714 | 529418 |
+| `candidateTriangleRatio` | 0.963573 | 1.0 |
+
+结论：
+
+- 局部范围预体素化不能作为默认规划语义；它是性能优化选项，必须在路径质量可接受或有回退策略时启用。
+- 当前阶段应继续保留全局构建作为 correctness baseline。
+- 后续 Phase 3 或局部构建优化必须增加“路径质量不退化或可回退”的测试约束，而不能只看 candidate ratio 或 voxel build time。
+- 对外接口中 `StartGoalBox` 必须被视为显式 opt-in 模式；调用方开启它时应记录原因、适用场景和回退策略。
