@@ -686,12 +686,15 @@ voxel_planner_benchmark.csv
 - `spatialIndexBuildMs`
 - `voxelBuildMs`
 - `astarMs`
+- `lazyChunkBuildMs`
+- `astarNonChunkMs`
 - `optimizeMs`
 - `totalMeasuredMs`
 - `triangleCount`
 - `candidateTriangleCount`
 - `rawCandidateTriangleCount`
 - `storedCellCount`
+- `lazyEnsureCallCount`
 - `lazyChunkBuildCount`
 - `lazyCacheHitCount`
 - `lazyCandidateTriangleCount`

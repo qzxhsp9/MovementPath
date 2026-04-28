@@ -14,11 +14,13 @@ struct VoxelChunkCacheOptions
 
 struct VoxelChunkCacheStats
 {
+    std::size_t ensureCallCount = 0;
     std::size_t chunkBuildCount = 0;
     std::size_t cacheHitCount = 0;
     std::size_t failedBuildCount = 0;
     std::size_t totalCandidateTriangleCount = 0;
     std::size_t totalRawCandidateTriangleCount = 0;
+    double totalBuildMs = 0.0;
 };
 
 struct VoxelChunkIndex
@@ -90,6 +92,8 @@ private:
     VoxelMeshBuildOptions m_buildOptions;
     VoxelChunkCacheOptions m_cacheOptions;
     VoxelChunkCacheStats m_stats;
+    bool m_hasLastChunk = false;
+    VoxelChunkIndex m_lastChunk;
 
     std::unordered_set<
         VoxelChunkIndex,

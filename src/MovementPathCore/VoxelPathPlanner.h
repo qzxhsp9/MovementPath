@@ -19,6 +19,7 @@ struct VoxelPlanningProfile
     double triangulationMs = 0.0;
     double spatialIndexBuildMs = 0.0;
     double voxelBuildMs = 0.0;
+    double lazyChunkBuildMs = 0.0;
     double astarMs = 0.0;
     double optimizeMs = 0.0;
     double vtkExportMs = 0.0;
@@ -30,6 +31,7 @@ struct VoxelPlanningProfile
     std::size_t hashEntryCount = 0;
     std::size_t hashQueryCellCount = 0;
     std::size_t hashRawTriangleCount = 0;
+    std::size_t lazyEnsureCallCount = 0;
     std::size_t lazyChunkBuildCount = 0;
     std::size_t lazyCacheHitCount = 0;
     std::size_t lazyFailedBuildCount = 0;

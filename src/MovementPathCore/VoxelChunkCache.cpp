@@ -1,6 +1,7 @@
 #include "VoxelChunkCache.h"
 
 #include <algorithm>
+#include <chrono>
 
 bool VoxelChunkCache::Configure(
     const std::vector<MeshTriangle>* triangles,
@@ -41,6 +42,8 @@ bool VoxelChunkCache::EnsureChunkForIndex(
     VoxelSpace& space,
     const VoxelIndex& index)
 {
+    ++m_stats.ensureCallCount;
+
     if (!IsConfigured() || !space.IsValid())
     {
         ++m_stats.failedBuildCount;
@@ -49,13 +52,23 @@ bool VoxelChunkCache::EnsureChunkForIndex(
 
     const VoxelChunkIndex chunk = ToChunkIndex(index);
 
-    if (m_builtChunks.find(chunk) != m_builtChunks.end())
+    if (m_hasLastChunk && chunk == m_lastChunk)
     {
         ++m_stats.cacheHitCount;
         return true;
     }
 
+    if (m_builtChunks.find(chunk) != m_builtChunks.end())
+    {
+        m_hasLastChunk = true;
+        m_lastChunk = chunk;
+        ++m_stats.cacheHitCount;
+        return true;
+    }
+
     const MeshAABB buildBox = MakeChunkBuildBox(space, chunk);
+
+    const auto buildStart = std::chrono::steady_clock::now();
 
     const VoxelMeshBuildResult result =
         VoxelMeshBuilder::AppendVoxelSpaceFromTrianglesInBox(
@@ -66,6 +79,11 @@ bool VoxelChunkCache::EnsureChunkForIndex(
             space
         );
 
+    const auto buildEnd = std::chrono::steady_clock::now();
+    m_stats.totalBuildMs +=
+        std::chrono::duration<double, std::milli>(
+            buildEnd - buildStart).count();
+
     if (!result.success)
     {
         ++m_stats.failedBuildCount;
@@ -73,6 +91,8 @@ bool VoxelChunkCache::EnsureChunkForIndex(
     }
 
     m_builtChunks.insert(chunk);
+    m_hasLastChunk = true;
+    m_lastChunk = chunk;
     ++m_stats.chunkBuildCount;
     m_stats.totalCandidateTriangleCount += result.candidateTriangleCount;
     m_stats.totalRawCandidateTriangleCount +=
@@ -112,6 +132,8 @@ void VoxelChunkCache::Clear()
     m_buildOptions = VoxelMeshBuildOptions();
     m_cacheOptions = VoxelChunkCacheOptions();
     m_stats = VoxelChunkCacheStats();
+    m_hasLastChunk = false;
+    m_lastChunk = VoxelChunkIndex();
     m_builtChunks.clear();
 }
 

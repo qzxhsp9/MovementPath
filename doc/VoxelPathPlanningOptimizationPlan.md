@@ -1254,10 +1254,12 @@ CSV 字段：
 ```text
 scene,mode,success,buildRegionMode,lazyFallbackTriggered,
 lazyFallbackReason,triangulationMs,spatialIndexBuildMs,
-voxelBuildMs,astarMs,optimizeMs,totalMeasuredMs,
+voxelBuildMs,astarMs,lazyChunkBuildMs,astarNonChunkMs,
+optimizeMs,totalMeasuredMs,
 triangleCount,candidateTriangleCount,rawCandidateTriangleCount,
 storedCellCount,occupiedCount,clearanceBandCount,
-lazyChunkBuildCount,lazyCacheHitCount,lazyFailedBuildCount,
+lazyEnsureCallCount,lazyChunkBuildCount,
+lazyCacheHitCount,lazyFailedBuildCount,
 lazyCandidateTriangleCount,lazyRawCandidateTriangleCount,
 astarVisitedCount,rawPathCount,optimizedPathCount,totalCost,
 lazyAttemptCost,fallbackCost
@@ -1285,3 +1287,52 @@ box_long_face_to_face / lazy  success=true cost=85.2 chunks=35 measuredMs≈248
 - 将 benchmark 输出扩展为可选 JSON，方便后续自动比较多轮运行结果。
 - 增加至少一个“短路径、小局部范围”的非球体 benchmark，用于观察 lazy/local 的潜在收益边界。
 - 针对 lazy 耗时高的问题先做 profile 分解，不直接改算法：区分 A* 本身耗时、chunk 构建耗时和 chunk cache 命中开销。
+
+### 2026-04-28：Lazy benchmark 耗时拆分与初步判断
+
+针对 benchmark 中 lazy 模式路径正确但未加速的问题，本轮先补统计，不改变默认算法策略。
+
+新增统计：
+
+- `VoxelChunkCacheStats::ensureCallCount`：记录 A* 过程中调用 chunk ensure 的次数。
+- `VoxelChunkCacheStats::totalBuildMs`：记录实际追加构建 chunk 的累计耗时。
+- `VoxelPlanningProfile::lazyEnsureCallCount`。
+- `VoxelPlanningProfile::lazyChunkBuildMs`。
+- benchmark CSV 新增 `lazyChunkBuildMs` 和 `astarNonChunkMs`。
+- `VoxelChunkCache` 增加 last-chunk 快路径，减少连续访问同一 chunk 时的 unordered_set 查询成本。
+
+本轮实测结果摘要：
+
+```text
+sphere_pole_to_pole / lazy:
+  totalMeasuredMs≈10174
+  astarMs≈10169
+  lazyChunkBuildMs≈9745
+  astarNonChunkMs≈423
+  lazyEnsureCallCount=524054
+  lazyChunkBuildCount=236
+  lazyCacheHitCount=523818
+
+box_long_face_to_face / lazy:
+  totalMeasuredMs≈231
+  astarMs≈227
+  lazyChunkBuildMs≈187
+  astarNonChunkMs≈40
+  lazyEnsureCallCount=60830
+  lazyChunkBuildCount=35
+  lazyCacheHitCount=60795
+```
+
+判断：
+
+- chunk cache 不是没有命中；命中次数很高，说明 chunk 缓存机制确实在工作。
+- lazy 未加速的主要原因是 chunk 构建本身太贵，且当前 chunk 构建被计入 A* 阶段。
+- `sphere_pole_to_pole` 中 236 个 chunk 累计候选三角形数远高于全局三角形数，说明相邻 chunk 重复处理三角形影响显著。
+- 对当前实现而言，lazy 更像“推迟并分批支付体素化成本”，还没有做到“显著减少总体体素化成本”。
+
+后续优化方向必须基于这些数据推进，避免只看 `storedCellCount` 或路径正确性：
+
+- 优先拆分 chunk 构建耗时来源：空间索引查询、append bounds 扩展、体素遍历、距离计算。
+- 评估 chunk size 对 `lazyChunkBuildCount`、重复候选三角形和总构建耗时的影响。
+- 评估是否需要对 chunk build result 做更粗粒度的 triangle influence 缓存，避免相邻 chunk 重复处理同一批三角形。
+- 在这些数据收敛前，继续保持 lazy 默认关闭。

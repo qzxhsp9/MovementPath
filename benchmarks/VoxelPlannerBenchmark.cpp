@@ -36,7 +36,9 @@ struct BenchmarkRow
     double triangulationMs = 0.0;
     double spatialIndexBuildMs = 0.0;
     double voxelBuildMs = 0.0;
+    double lazyChunkBuildMs = 0.0;
     double astarMs = 0.0;
+    double astarNonChunkMs = 0.0;
     double optimizeMs = 0.0;
     double totalMeasuredMs = 0.0;
 
@@ -46,6 +48,7 @@ struct BenchmarkRow
     std::size_t storedCellCount = 0;
     std::size_t occupiedCount = 0;
     std::size_t clearanceBandCount = 0;
+    std::size_t lazyEnsureCallCount = 0;
     std::size_t lazyChunkBuildCount = 0;
     std::size_t lazyCacheHitCount = 0;
     std::size_t lazyFailedBuildCount = 0;
@@ -172,7 +175,13 @@ BenchmarkRow MakeRow(
     row.triangulationMs = profile.triangulationMs;
     row.spatialIndexBuildMs = profile.spatialIndexBuildMs;
     row.voxelBuildMs = profile.voxelBuildMs;
+    row.lazyChunkBuildMs = profile.lazyChunkBuildMs;
     row.astarMs = profile.astarMs;
+    row.astarNonChunkMs = profile.astarMs - profile.lazyChunkBuildMs;
+    if (row.astarNonChunkMs < 0.0)
+    {
+        row.astarNonChunkMs = 0.0;
+    }
     row.optimizeMs = profile.optimizeMs;
     row.totalMeasuredMs =
         profile.triangulationMs +
@@ -186,6 +195,7 @@ BenchmarkRow MakeRow(
     row.storedCellCount = profile.storedCellCount;
     row.occupiedCount = profile.occupiedCount;
     row.clearanceBandCount = profile.clearanceBandCount;
+    row.lazyEnsureCallCount = profile.lazyEnsureCallCount;
     row.lazyChunkBuildCount = profile.lazyChunkBuildCount;
     row.lazyCacheHitCount = profile.lazyCacheHitCount;
     row.lazyFailedBuildCount = profile.lazyFailedBuildCount;
@@ -208,10 +218,12 @@ void WriteCsvHeader(std::ostream& os)
     os
         << "scene,mode,success,buildRegionMode,lazyFallbackTriggered,"
         << "lazyFallbackReason,triangulationMs,spatialIndexBuildMs,"
-        << "voxelBuildMs,astarMs,optimizeMs,totalMeasuredMs,"
+        << "voxelBuildMs,astarMs,lazyChunkBuildMs,astarNonChunkMs,"
+        << "optimizeMs,totalMeasuredMs,"
         << "triangleCount,candidateTriangleCount,rawCandidateTriangleCount,"
         << "storedCellCount,occupiedCount,clearanceBandCount,"
-        << "lazyChunkBuildCount,lazyCacheHitCount,lazyFailedBuildCount,"
+        << "lazyEnsureCallCount,lazyChunkBuildCount,"
+        << "lazyCacheHitCount,lazyFailedBuildCount,"
         << "lazyCandidateTriangleCount,lazyRawCandidateTriangleCount,"
         << "astarVisitedCount,rawPathCount,optimizedPathCount,totalCost,"
         << "lazyAttemptCost,fallbackCost\n";
@@ -232,6 +244,8 @@ void WriteCsvRow(
         << row.spatialIndexBuildMs << ","
         << row.voxelBuildMs << ","
         << row.astarMs << ","
+        << row.lazyChunkBuildMs << ","
+        << row.astarNonChunkMs << ","
         << row.optimizeMs << ","
         << row.totalMeasuredMs << ","
         << row.triangleCount << ","
@@ -240,6 +254,7 @@ void WriteCsvRow(
         << row.storedCellCount << ","
         << row.occupiedCount << ","
         << row.clearanceBandCount << ","
+        << row.lazyEnsureCallCount << ","
         << row.lazyChunkBuildCount << ","
         << row.lazyCacheHitCount << ","
         << row.lazyFailedBuildCount << ","

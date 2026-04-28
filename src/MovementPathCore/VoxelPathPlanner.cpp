@@ -66,6 +66,10 @@ void PreserveLazyAttemptOnFallback(
         lazyProfile.lazyFallbackReason;
     fallbackResult.profile.lazyChunkBuildCount =
         lazyProfile.lazyChunkBuildCount;
+    fallbackResult.profile.lazyEnsureCallCount =
+        lazyProfile.lazyEnsureCallCount;
+    fallbackResult.profile.lazyChunkBuildMs =
+        lazyProfile.lazyChunkBuildMs;
     fallbackResult.profile.lazyCacheHitCount =
         lazyProfile.lazyCacheHitCount;
     fallbackResult.profile.lazyFailedBuildCount =
@@ -254,9 +258,11 @@ void CopyLazyStatsToProfile(
     const VoxelChunkCacheStats& stats,
     VoxelPlanningProfile& profile)
 {
+    profile.lazyEnsureCallCount = stats.ensureCallCount;
     profile.lazyChunkBuildCount = stats.chunkBuildCount;
     profile.lazyCacheHitCount = stats.cacheHitCount;
     profile.lazyFailedBuildCount = stats.failedBuildCount;
+    profile.lazyChunkBuildMs = stats.totalBuildMs;
     profile.lazyCandidateTriangleCount =
         stats.totalCandidateTriangleCount;
     profile.lazyRawCandidateTriangleCount =
@@ -1010,6 +1016,8 @@ void VoxelPathPlanner::PrintProfile(
         << profile.spatialIndexBuildMs << std::endl;
     std::cout << "Voxel build ms: "
         << profile.voxelBuildMs << std::endl;
+    std::cout << "Lazy chunk build ms: "
+        << profile.lazyChunkBuildMs << std::endl;
     std::cout << "A* ms: "
         << profile.astarMs << std::endl;
     std::cout << "Optimize ms: "
@@ -1048,6 +1056,8 @@ void VoxelPathPlanner::PrintProfile(
         << profile.hashQueryCellCount << std::endl;
     std::cout << "Hash raw triangle count: "
         << profile.hashRawTriangleCount << std::endl;
+    std::cout << "Lazy ensure call count: "
+        << profile.lazyEnsureCallCount << std::endl;
     std::cout << "Lazy chunk build count: "
         << profile.lazyChunkBuildCount << std::endl;
     std::cout << "Lazy cache hit count: "
