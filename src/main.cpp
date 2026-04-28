@@ -3,6 +3,7 @@
 #include "VoxelAStar.h"
 #include "VoxelVtkExporter.h"
 #include "VoxelPathOptimizer.h"
+#include "MeshVtkExporter.h"
 
 #include <TopoDS_Shape.hxx>
 #include <gp_Pnt.hxx>
@@ -99,6 +100,22 @@ void TestVoxelAStar(
     buildOptions.meshDeflection = 0.25;
     buildOptions.angularDeflection = 0.3;
 
+    bool ok = MeshVtkExporter::ExportShapeMeshToVtk(
+        shape,
+        "D:/shape_mesh.vtk",
+        buildOptions.meshDeflection,
+        buildOptions.angularDeflection
+    );
+
+    if (!ok)
+    {
+        std::cout << "Export shape mesh failed." << std::endl;
+    }
+    else
+    {
+        std::cout << "Export shape mesh success." << std::endl;
+    }
+
     // 路径要在该安全距离层中搜索
     buildOptions.clearance = 3.0;
 
@@ -141,7 +158,7 @@ void TestVoxelAStar(
     VoxelAStarOptions astarOptions;
 
     astarOptions.searchMode = VoxelAStarSearchMode::ClearanceBand;
-    astarOptions.neighborType = VoxelNeighborType::FaceEdgeVertex26;
+    astarOptions.neighborType = VoxelNeighborType::Face6;
     astarOptions.heuristicWeight = 1.0;
     astarOptions.turnPenalty = voxelSpace.GetVoxelSize() * 0.1;
 

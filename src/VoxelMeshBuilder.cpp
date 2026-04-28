@@ -107,7 +107,7 @@ bool VoxelMeshBuilder::BuildShapeTriangulation(
         const gp_Trsf trsf = loc.Transformation();
 
         Standard_Integer nbTriangles = triangulation->NbTriangles();
-        for (int i = 1; i < nbTriangles; ++i)
+        for (int i = 1; i <= nbTriangles; ++i)
         {
             const Poly_Triangle& triangle = triangulation->Triangle(i);
             MeshTriangle tri;
