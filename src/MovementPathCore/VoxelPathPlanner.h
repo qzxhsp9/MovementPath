@@ -78,6 +78,7 @@ struct VoxelPlanningRunOptions
     std::string astarPathVtkPath = "D:/astar_path.vtk";
     std::string optimizedPathVoxelsVtkPath = "D:/optimized_path_voxels.vtk";
     std::string optimizedPathPolylineVtkPath = "D:/optimized_path_polyline.vtk";
+    std::string lazyChunkBoundsVtkPath = "D:/lazy_chunk_bounds.vtk";
 };
 
 enum class VoxelBuildRegionMode

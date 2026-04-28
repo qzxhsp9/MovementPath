@@ -1,5 +1,7 @@
 #include "VoxelVtkExporter.h"
 
+#include "VoxelChunkCache.h"
+
 #include <fstream>
 #include <iomanip>
 #include <vector>
@@ -317,6 +319,125 @@ bool VoxelVtkExporter::ExportPathPolylineToVtk(
     }
 
     ofs.close();
+
+    return true;
+}
+
+bool VoxelVtkExporter::ExportChunkBoundsToVtk(
+    const VoxelSpace& space,
+    const VoxelChunkIndex* chunks,
+    std::size_t chunkCount,
+    int chunkVoxelSize,
+    const std::string& filePath)
+{
+    if (!space.IsValid() ||
+        chunks == nullptr ||
+        chunkCount == 0 ||
+        chunkVoxelSize <= 0)
+    {
+        return false;
+    }
+
+    std::ofstream ofs(filePath.c_str(), std::ios::out);
+    if (!ofs.is_open())
+    {
+        return false;
+    }
+
+    const std::size_t cellCount = chunkCount;
+    const std::size_t pointCount = cellCount * 8;
+
+    ofs << "# vtk DataFile Version 3.0\n";
+    ofs << "Lazy voxel chunk bounds\n";
+    ofs << "ASCII\n";
+    ofs << "DATASET UNSTRUCTURED_GRID\n";
+
+    ofs << std::setprecision(15);
+    ofs << "POINTS " << pointCount << " double\n";
+
+    for (std::size_t i = 0; i < chunkCount; ++i)
+    {
+        const VoxelChunkIndex& chunk = chunks[i];
+        const VoxelIndex minIndex(
+            chunk.x * chunkVoxelSize,
+            chunk.y * chunkVoxelSize,
+            chunk.z * chunkVoxelSize
+        );
+        const VoxelIndex maxIndex(
+            minIndex.x + chunkVoxelSize - 1,
+            minIndex.y + chunkVoxelSize - 1,
+            minIndex.z + chunkVoxelSize - 1
+        );
+
+        const Vec minP = space.IndexToMinCorner(minIndex);
+        const Vec maxP = space.IndexToMaxCorner(maxIndex);
+
+        const double x0 = minP.x;
+        const double y0 = minP.y;
+        const double z0 = minP.z;
+
+        const double x1 = maxP.x;
+        const double y1 = maxP.y;
+        const double z1 = maxP.z;
+
+        ofs << x0 << " " << y0 << " " << z0 << "\n";
+        ofs << x1 << " " << y0 << " " << z0 << "\n";
+        ofs << x1 << " " << y1 << " " << z0 << "\n";
+        ofs << x0 << " " << y1 << " " << z0 << "\n";
+        ofs << x0 << " " << y0 << " " << z1 << "\n";
+        ofs << x1 << " " << y0 << " " << z1 << "\n";
+        ofs << x1 << " " << y1 << " " << z1 << "\n";
+        ofs << x0 << " " << y1 << " " << z1 << "\n";
+    }
+
+    ofs << "CELLS " << cellCount << " " << cellCount * 9 << "\n";
+
+    for (std::size_t i = 0; i < cellCount; ++i)
+    {
+        const std::size_t base = i * 8;
+        ofs << "8 "
+            << base + 0 << " "
+            << base + 1 << " "
+            << base + 2 << " "
+            << base + 3 << " "
+            << base + 4 << " "
+            << base + 5 << " "
+            << base + 6 << " "
+            << base + 7 << "\n";
+    }
+
+    ofs << "CELL_TYPES " << cellCount << "\n";
+
+    for (std::size_t i = 0; i < cellCount; ++i)
+    {
+        ofs << "12\n";
+    }
+
+    ofs << "CELL_DATA " << cellCount << "\n";
+
+    ofs << "SCALARS chunk_x int 1\n";
+    ofs << "LOOKUP_TABLE default\n";
+    for (std::size_t i = 0; i < chunkCount; ++i)
+    {
+        const VoxelChunkIndex& chunk = chunks[i];
+        ofs << chunk.x << "\n";
+    }
+
+    ofs << "SCALARS chunk_y int 1\n";
+    ofs << "LOOKUP_TABLE default\n";
+    for (std::size_t i = 0; i < chunkCount; ++i)
+    {
+        const VoxelChunkIndex& chunk = chunks[i];
+        ofs << chunk.y << "\n";
+    }
+
+    ofs << "SCALARS chunk_z int 1\n";
+    ofs << "LOOKUP_TABLE default\n";
+    for (std::size_t i = 0; i < chunkCount; ++i)
+    {
+        const VoxelChunkIndex& chunk = chunks[i];
+        ofs << chunk.z << "\n";
+    }
 
     return true;
 }

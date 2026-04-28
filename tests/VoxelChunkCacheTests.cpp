@@ -1,8 +1,12 @@
 #include "TestCommon.h"
 
+#include "VoxelVtkExporter.h"
 #include "VoxelChunkCache.h"
 
 #include <cstdlib>
+#include <cstdio>
+#include <fstream>
+#include <sstream>
 
 namespace
 {
@@ -359,6 +363,51 @@ bool TestVoxelChunkCachePaddingExpandsBuildCoverage()
 
     return ok;
 }
+
+bool TestVoxelChunkBoundsVtkExport()
+{
+    const std::string filePath = "test_lazy_chunk_bounds.vtk";
+
+    std::remove(filePath.c_str());
+
+    VoxelSpace space(Vec(0, 0, 0), 1.0);
+    std::vector<VoxelChunkIndex> chunks;
+    chunks.push_back({ 0, 0, 0 });
+    chunks.push_back({ -1, 0, 0 });
+
+    bool ok = Expect(
+        VoxelVtkExporter::ExportChunkBoundsToVtk(
+            space,
+            chunks.data(),
+            chunks.size(),
+            4,
+            filePath),
+        "chunk bounds VTK export should succeed");
+
+    std::ifstream ifs(filePath.c_str(), std::ios::in);
+    ok &= Expect(ifs.is_open(), "chunk bounds VTK file should exist");
+
+    std::stringstream buffer;
+    buffer << ifs.rdbuf();
+    const std::string content = buffer.str();
+
+    ok &= Expect(
+        content.find("Lazy voxel chunk bounds") != std::string::npos,
+        "chunk bounds VTK should include title");
+    ok &= Expect(
+        content.find("POINTS 16 double") != std::string::npos,
+        "chunk bounds VTK should export 8 points per chunk");
+    ok &= Expect(
+        content.find("CELLS 2 18") != std::string::npos,
+        "chunk bounds VTK should export one hexahedron per chunk");
+    ok &= Expect(
+        content.find("SCALARS chunk_x int 1") != std::string::npos,
+        "chunk bounds VTK should export chunk index data");
+
+    std::remove(filePath.c_str());
+
+    return ok;
+}
 }
 
 int main()
@@ -370,5 +419,6 @@ int main()
     ok &= TestVoxelChunkCacheClearResetsState();
     ok &= TestVoxelChunkCacheNegativeAndAdjacentChunks();
     ok &= TestVoxelChunkCachePaddingExpandsBuildCoverage();
+    ok &= TestVoxelChunkBoundsVtkExport();
     return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }

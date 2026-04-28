@@ -98,6 +98,13 @@ const VoxelChunkCacheStats& VoxelChunkCache::GetStats() const
     return m_stats;
 }
 
+std::vector<VoxelChunkIndex> VoxelChunkCache::GetBuiltChunks() const
+{
+    return std::vector<VoxelChunkIndex>(
+        m_builtChunks.begin(),
+        m_builtChunks.end());
+}
+
 void VoxelChunkCache::Clear()
 {
     m_triangles = nullptr;

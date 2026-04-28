@@ -1,6 +1,9 @@
 #include "TestCommon.h"
 
 #include <cstdlib>
+#include <cstdio>
+#include <fstream>
+#include <sstream>
 
 namespace
 {
@@ -232,6 +235,52 @@ bool TestPlannerLazyCostRegressionFallback(
 
     return ok;
 }
+
+bool TestPlannerLazyChunkBoundsExport(
+    const VoxelPlanningScenario& scenario)
+{
+    const std::string shapeMeshPath = "test_planner_lazy_shape_mesh.vtk";
+    const std::string chunkBoundsPath =
+        "test_planner_lazy_chunk_bounds.vtk";
+
+    std::remove(shapeMeshPath.c_str());
+    std::remove(chunkBoundsPath.c_str());
+
+    VoxelPathPlannerOptions options = MakeLazySmokeOptions();
+    options.runOptions.exportVtk = true;
+    options.runOptions.shapeMeshVtkPath = shapeMeshPath;
+    options.runOptions.lazyChunkBoundsVtkPath = chunkBoundsPath;
+
+    const VoxelPathPlannerResult result =
+        VoxelPathPlanner::Plan(scenario, options);
+
+    bool ok = true;
+    ok &= Expect(result.success, "lazy export planner should succeed");
+    ok &= Expect(
+        result.executionMode == VoxelPlannerExecutionMode::LazyChunks,
+        "lazy export planner should stay in lazy mode");
+
+    std::ifstream ifs(chunkBoundsPath.c_str(), std::ios::in);
+    ok &= Expect(
+        ifs.is_open(),
+        "lazy planner should export chunk bounds VTK");
+
+    std::stringstream buffer;
+    buffer << ifs.rdbuf();
+    const std::string content = buffer.str();
+
+    ok &= Expect(
+        content.find("Lazy voxel chunk bounds") != std::string::npos,
+        "lazy planner chunk bounds VTK should include title");
+    ok &= Expect(
+        content.find("SCALARS chunk_x int 1") != std::string::npos,
+        "lazy planner chunk bounds VTK should include chunk indices");
+
+    std::remove(shapeMeshPath.c_str());
+    std::remove(chunkBoundsPath.c_str());
+
+    return ok;
+}
 }
 
 int main()
@@ -251,6 +300,7 @@ int main()
     ok &= TestLazyGuardrailFallback(localScenario);
     ok &= TestPlannerLazySuccessWithoutFallback(localScenario);
     ok &= TestPlannerLazyCostRegressionFallback(localScenario);
+    ok &= TestPlannerLazyChunkBoundsExport(localScenario);
 
     return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }

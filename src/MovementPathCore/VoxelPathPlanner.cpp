@@ -635,6 +635,21 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                     profile.clearanceBandCount);
                 profile.storedCellCount = lazyVoxelSpace.CellCount();
 
+                if (options.runOptions.exportVtk)
+                {
+                    const std::vector<VoxelChunkIndex> builtChunks =
+                        chunkCache.GetBuiltChunks();
+
+                    ScopedTimer timer(profile.vtkExportMs);
+                    VoxelVtkExporter::ExportChunkBoundsToVtk(
+                        lazyVoxelSpace,
+                        builtChunks.data(),
+                        builtChunks.size(),
+                        options.lazyBuildOptions
+                            .chunkCacheOptions.chunkVoxelSize,
+                        options.runOptions.lazyChunkBoundsVtkPath);
+                }
+
                 if (lazyGuardrailTriggered)
                 {
                     profile.lazyFallbackTriggered = true;

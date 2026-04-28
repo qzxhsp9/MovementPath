@@ -490,7 +490,24 @@ VTK_HEXAHEDRON
 - `voxel_y`
 - `voxel_z`
 
-### 7.3 路径折线导出
+### 7.3 Lazy chunk 覆盖范围导出
+
+`VoxelVtkExporter::ExportChunkBoundsToVtk()` 支持把已生成 lazy chunk 的 world-space 包围盒导出为 `UNSTRUCTURED_GRID` 六面体。
+
+该导出用于观察 lazy 模式实际生成了哪些 chunk，而不是导出每个 chunk 内部的全部体素。输出包含：
+
+- 每个 chunk 一个 `VTK_HEXAHEDRON`
+- `chunk_x`
+- `chunk_y`
+- `chunk_z`
+
+`VoxelPathPlanner` 在 `lazyBuildOptions.enabled = true` 且 `runOptions.exportVtk = true` 时，会通过 `runOptions.lazyChunkBoundsVtkPath` 输出该文件。默认路径为：
+
+```text
+D:/lazy_chunk_bounds.vtk
+```
+
+### 7.4 路径折线导出
 
 `ExportPathPolylineToVtk()` 支持两种输入：
 
@@ -637,3 +654,55 @@ ctest --test-dir out\build\x64-Debug --output-on-failure
 - lazy 模式支持 `maxChunkBuildCount` guardrail，失败或触发 guardrail 时可按 `FullMeshBoundsOnFailure` 回退。
 - `maxCostRegressionRatio` 已实现为质量回退阈值；lazy 成功后可与 full-bounds baseline 对照，超过阈值时返回 full-bounds 结果并保留 lazy 尝试统计。
 - `VoxelPathPlannerResult` 已暴露 `executionMode`、`fallbackExecutionMode`、`lazyAttemptCost`、`fallbackCost`、`optimizeResult` 和最终搜索边界，便于测试直接断言行为。
+
+## 13. Benchmark 入口
+
+当前提供独立 benchmark 可执行目标：
+
+```text
+MovementPathBenchmark
+```
+
+运行方式：
+
+```text
+out\build\x64-Debug\MovementPathBenchmark.exe
+```
+
+输出文件：
+
+```text
+voxel_planner_benchmark.csv
+```
+
+当前 benchmark 不用于优化算法，只用于记录同一场景下 `full`、`local`、`lazy` 三种模式的可比数据。CSV 字段包括：
+
+- `scene`
+- `mode`
+- `success`
+- `buildRegionMode`
+- `lazyFallbackTriggered`
+- `triangulationMs`
+- `spatialIndexBuildMs`
+- `voxelBuildMs`
+- `astarMs`
+- `optimizeMs`
+- `totalMeasuredMs`
+- `triangleCount`
+- `candidateTriangleCount`
+- `rawCandidateTriangleCount`
+- `storedCellCount`
+- `lazyChunkBuildCount`
+- `lazyCacheHitCount`
+- `lazyCandidateTriangleCount`
+- `astarVisitedCount`
+- `rawPathCount`
+- `optimizedPathCount`
+- `totalCost`
+- `lazyAttemptCost`
+- `fallbackCost`
+
+当前场景：
+
+- `sphere_pole_to_pole`：保留原有球体两极路径，用于观察局部裁剪和 lazy 行为。
+- `box_long_face_to_face`：非球体稳定场景，使用长方体表面两端点，避免后续优化只围绕球体场景调参。

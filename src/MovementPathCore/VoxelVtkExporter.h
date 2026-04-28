@@ -6,6 +6,8 @@
 #include <set>
 #include <vector>
 
+struct VoxelChunkIndex;
+
 class VoxelVtkExporter
 {
 public:
@@ -34,6 +36,14 @@ public:
     // 直接导出 Vec 路径折线。
     static bool ExportPathPolylineToVtk(
         const std::vector<Vec>& points,
+        const std::string& filePath);
+
+    // Export generated chunk world-space bounds for lazy debug views.
+    static bool ExportChunkBoundsToVtk(
+        const VoxelSpace& space,
+        const VoxelChunkIndex* chunks,
+        std::size_t chunkCount,
+        int chunkVoxelSize,
         const std::string& filePath);
 
 private:

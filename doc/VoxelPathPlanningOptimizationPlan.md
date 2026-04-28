@@ -1187,3 +1187,101 @@ Warning: 仅存在既有 MSVC C4819 编码警告
 - 增加 lazy debug/VTK 导出或 chunk 覆盖范围导出，便于定位 lazy 生成区域与路径质量差异。
 - 增加更贴近真实复杂模型的 benchmark 场景，记录 `lazyChunkBuildCount`、候选三角形比例、cost regression 和总耗时。
 - 评估 `maxCostRegressionRatio` 是否需要默认推荐值；在没有足够 benchmark 前，不建议默认开启 lazy。
+
+### 2026-04-28：Lazy chunk 覆盖范围 VTK 导出
+
+本轮继续执行上一节“下一步建议”中的第一项，增加 lazy debug/VTK 导出能力，用于观察 lazy chunk 实际覆盖范围。
+
+已完成：
+
+- `VoxelChunkCache` 新增 `GetBuiltChunks()`，可返回已生成 chunk 列表。
+- `VoxelVtkExporter` 新增 `ExportChunkBoundsToVtk()`，将 chunk world-space 包围盒导出为 `UNSTRUCTURED_GRID` 六面体。
+- `VoxelPlanningRunOptions` 新增 `lazyChunkBoundsVtkPath`，默认值为 `D:/lazy_chunk_bounds.vtk`。
+- `VoxelPathPlanner` 在 lazy 分支中，当 `runOptions.exportVtk = true` 时导出已生成 chunk 覆盖范围。
+- `VoxelChunkCacheTests` 增加 chunk bounds VTK 文件结构测试。
+- `VoxelPathPlannerTests` 增加 planner 级 lazy chunk bounds 导出测试，验证该能力不是孤立工具函数。
+- `doc/VoxelPathPlanning.md` 同步 VTK 导出能力说明。
+
+设计约束：
+
+- 该导出只输出 chunk 外包围盒，不输出 chunk 内全部体素，目的是快速观察 lazy 覆盖范围。
+- 默认规划仍不启用 lazy；默认示例也不会额外导出 lazy chunk bounds。
+- 该能力仅在 `lazyBuildOptions.enabled = true` 且 `runOptions.exportVtk = true` 时生效。
+
+验证结果：
+
+```text
+Build: cmake --build out\build\x64-Debug --config Debug
+CTest: ctest --test-dir out\build\x64-Debug --output-on-failure
+Run: out\build\x64-Debug\MovementPath.exe
+Result: success, 3/3 tests passed
+Warning: 仅存在既有 MSVC C4819 编码警告
+```
+
+下一步建议：
+
+- 设计 benchmark 数据结构和输出格式，先不优化算法，只记录 full/local/lazy 在同一场景下的耗时、候选三角形、chunk 数和路径 cost。
+- 增加一个非球体的稳定 benchmark 场景，避免后续优化只围绕 `sphere_pole_to_pole` 调参。
+- 在 benchmark 数据足够前，继续保持 lazy 默认关闭，`maxCostRegressionRatio` 不设置默认推荐值。
+
+### 2026-04-28：Benchmark 数据结构、CSV 输出与非球体场景
+
+本轮落实 benchmark 基础设施，目标是先记录数据，不调整算法策略。
+
+已完成：
+
+- 新增 `benchmarks/VoxelPlannerBenchmark.cpp`。
+- 新增可执行目标 `MovementPathBenchmark`。
+- 设计 `BenchmarkCase` 和 `BenchmarkRow` 两层数据结构：
+  - `BenchmarkCase` 描述场景、模式和 planner options。
+  - `BenchmarkRow` 承载一次规划后的 profile/result 指标。
+- 输出 CSV 文件 `voxel_planner_benchmark.csv`。
+- 每个场景固定运行三种模式：
+  - `full`：`FullMeshBounds`。
+  - `local`：显式 `StartGoalBox`。
+  - `lazy`：显式 `LazyChunks`。
+- 新增非球体稳定场景 `box_long_face_to_face`：
+  - 几何体为 `BRepPrimAPI_MakeBox(gp_Pnt(-30,-10,-10), gp_Pnt(30,10,10))`。
+  - 起点位于左侧面中心，终点位于右侧面中心。
+  - 起终点方向分别指向外侧，用于稳定吸附到外侧 `ClearanceBand`。
+- 保持默认 planner 行为不变：
+  - `lazyBuildOptions.enabled = false`。
+  - `maxCostRegressionRatio = 0.0`。
+  - benchmark 中的 lazy 仅作为显式模式运行。
+
+CSV 字段：
+
+```text
+scene,mode,success,buildRegionMode,lazyFallbackTriggered,
+lazyFallbackReason,triangulationMs,spatialIndexBuildMs,
+voxelBuildMs,astarMs,optimizeMs,totalMeasuredMs,
+triangleCount,candidateTriangleCount,rawCandidateTriangleCount,
+storedCellCount,occupiedCount,clearanceBandCount,
+lazyChunkBuildCount,lazyCacheHitCount,lazyFailedBuildCount,
+lazyCandidateTriangleCount,lazyRawCandidateTriangleCount,
+astarVisitedCount,rawPathCount,optimizedPathCount,totalCost,
+lazyAttemptCost,fallbackCost
+```
+
+本轮实测结果摘要：
+
+```text
+sphere_pole_to_pole / full  success=true cost=209.2 chunks=0   measuredMs≈2389
+sphere_pole_to_pole / local success=true cost=244.9 chunks=0   measuredMs≈2022
+sphere_pole_to_pole / lazy  success=true cost=209.2 chunks=236 measuredMs≈10211
+box_long_face_to_face / full  success=true cost=85.2 chunks=0  measuredMs≈128
+box_long_face_to_face / local success=true cost=85.2 chunks=0  measuredMs≈105
+box_long_face_to_face / lazy  success=true cost=85.2 chunks=35 measuredMs≈248
+```
+
+当前结论：
+
+- benchmark 已能稳定生成 full/local/lazy 对比数据。
+- 当前 lazy 在这两个场景下并不天然更快，特别是 `sphere_pole_to_pole` 中 chunk 构建嵌入 A* 主循环后耗时明显偏高。
+- 这支持继续保持 lazy 默认关闭，也支持暂不为 `maxCostRegressionRatio` 设置默认推荐值。
+
+下一步建议：
+
+- 将 benchmark 输出扩展为可选 JSON，方便后续自动比较多轮运行结果。
+- 增加至少一个“短路径、小局部范围”的非球体 benchmark，用于观察 lazy/local 的潜在收益边界。
+- 针对 lazy 耗时高的问题先做 profile 分解，不直接改算法：区分 A* 本身耗时、chunk 构建耗时和 chunk cache 命中开销。

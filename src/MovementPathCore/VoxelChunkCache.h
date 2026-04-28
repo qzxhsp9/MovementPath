@@ -68,6 +68,8 @@ public:
 
     const VoxelChunkCacheStats& GetStats() const;
 
+    std::vector<VoxelChunkIndex> GetBuiltChunks() const;
+
     void Clear();
 
 private:
