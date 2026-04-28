@@ -979,3 +979,107 @@ Warning: 仅存在既有 MSVC C4819 编码警告
 - 不要立即把 `VoxelChunkCache` 接入默认规划流程。
 - 先设计 lazy 模式的启用选项、统计字段和失败回退策略。
 - lazy 模式接入前必须新增路径质量对照测试，至少保证默认 `FullMeshBounds` 结果仍作为回退 baseline。
+
+### 2026-04-28：Lazy 模式选项、统计字段与回退策略设计
+
+本轮只完成 lazy 模式的接口设计和默认关闭验证，尚未把 `VoxelChunkCache` 接入 `VoxelPathPlanner` 主搜索流程。
+
+新增启用选项：
+
+```cpp
+enum class VoxelLazyFallbackPolicy
+{
+    None,
+    FullMeshBoundsOnFailure
+};
+
+struct VoxelLazyBuildOptions
+{
+    bool enabled = false;
+    VoxelChunkCacheOptions chunkCacheOptions;
+    std::size_t maxChunkBuildCount = 0;
+    double maxCostRegressionRatio = 0.0;
+    VoxelLazyFallbackPolicy fallbackPolicy =
+        VoxelLazyFallbackPolicy::FullMeshBoundsOnFailure;
+};
+```
+
+设计约束：
+
+- `enabled = false` 是默认值，默认规划仍走 `FullMeshBounds` 或显式 `StartGoalBox`。
+- `chunkCacheOptions` 只描述 chunk 尺寸和构建 padding，不直接改变当前 planner 行为。
+- `maxChunkBuildCount = 0` 表示不限制；非 0 时作为防止 lazy 模式退化为大量 chunk 生成的保护阈值。
+- `maxCostRegressionRatio = 0.0` 表示暂不启用路径质量阈值；未来可用于拒绝明显劣于 baseline 的 lazy 路径。
+- `FullMeshBoundsOnFailure` 是默认回退策略，表示 lazy 模式失败或触发 guardrail 时应回退到全局构建。
+
+新增 profile 统计字段：
+
+```cpp
+bool lazyBuildEnabled;
+bool lazyFallbackTriggered;
+std::string lazyFallbackReason;
+std::size_t lazyChunkBuildCount;
+std::size_t lazyCacheHitCount;
+std::size_t lazyFailedBuildCount;
+std::size_t lazyCandidateTriangleCount;
+std::size_t lazyRawCandidateTriangleCount;
+```
+
+这些字段用于后续判断 lazy 模式是否真的减少构建范围、是否频繁 miss、是否退化为大量 chunk 构建，以及是否触发回退。
+
+当前验证：
+
+- smoke test 断言 `VoxelPathPlanner::MakeDefaultOptions()` 下 lazy 默认关闭。
+- smoke test 断言默认 fallback policy 为 `FullMeshBoundsOnFailure`。
+- 示例输出中 `Lazy build enabled = false`，chunk build/cache/fail/candidate 统计均为 `0`。
+- build、CTest、示例运行均通过。
+
+下一步接入前必须完成：
+
+- 在 `VoxelPathPlanner` 中增加显式 lazy planning 分支，不能替换默认分支。
+- lazy 分支必须把 `VoxelChunkCacheStats` 汇总到 `VoxelPlanningProfile`。
+- lazy 分支必须实现 `maxChunkBuildCount` guardrail。
+- lazy 分支失败或触发 guardrail 时，按 `fallbackPolicy` 回退到 `FullMeshBounds`。
+- 接入后新增测试：lazy 关闭结果不变、lazy 失败可回退、chunk 统计正确、路径质量不劣于允许阈值。
+
+### 2026-04-28：Lazy 分支接入 planner 并实现 guardrail 回退
+
+本轮完成 lazy 模式的显式接入，但默认仍关闭。
+
+已完成：
+
+- `VoxelPathPlanner::Plan()` 在 `lazyBuildOptions.enabled = true` 时进入独立 lazy 分支。
+- lazy 分支使用空 `VoxelSpace` 初始化完整搜索 bounds，并通过 `VoxelAStarOptions::ensureCellBuilt` 调用 `VoxelChunkCache::EnsureChunkForIndex()`。
+- lazy 分支将 `VoxelChunkCacheStats` 汇总到 `VoxelPlanningProfile`。
+- 实现 `maxChunkBuildCount` guardrail；超过限制时停止继续构建新 chunk，并标记 fallback reason。
+- 实现 `FullMeshBoundsOnFailure` 回退：lazy A* 失败、chunk cache 配置失败、初始化失败或 guardrail 触发时，重新执行 `FullMeshBounds` 规划。
+- 回退结果保留 lazy 统计字段和 fallback 状态，便于判断是否发生过 lazy 尝试。
+
+当前未完成/刻意未做：
+
+- `maxCostRegressionRatio` 仅作为接口保留，尚未启用路径质量阈值判断。
+- lazy 模式未设为默认，也未替换 `FullMeshBounds` baseline。
+- lazy 模式成功路径的 VTK 导出还不是重点验证目标，当前测试主要覆盖回退和统计。
+
+新增测试：
+
+- 默认选项下 lazy 必须关闭。
+- 默认 fallback policy 必须是 `FullMeshBoundsOnFailure`。
+- lazy guardrail 场景中，`maxChunkBuildCount = 1` 会触发 fallback。
+- fallback 后规划必须成功，`buildRegionMode` 应回到 `FullMeshBounds`，并保留 lazy 统计。
+
+验证结果：
+
+```text
+Build: cmake --build out\build\x64-Debug --config Debug
+CTest: ctest --test-dir out\build\x64-Debug --output-on-failure
+Run: out\build\x64-Debug\MovementPath.exe
+Result: success
+Warning: 仅存在既有 MSVC C4819 编码警告
+```
+
+下一步：
+
+- 为 lazy 成功路径增加专门测试，选择足够小且局部 chunk 可覆盖的场景。
+- 启用 `maxCostRegressionRatio`，实现 lazy 成功后与 fallback/baseline 的路径质量对照。
+- 增加 lazy VTK/debug 输出验证，便于观察 chunk 覆盖范围。

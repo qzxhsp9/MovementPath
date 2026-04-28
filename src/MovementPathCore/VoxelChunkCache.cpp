@@ -81,6 +81,18 @@ bool VoxelChunkCache::EnsureChunkForIndex(
     return true;
 }
 
+bool VoxelChunkCache::IsChunkBuiltForIndex(
+    const VoxelIndex& index) const
+{
+    if (!IsConfigured())
+    {
+        return false;
+    }
+
+    const VoxelChunkIndex chunk = ToChunkIndex(index);
+    return m_builtChunks.find(chunk) != m_builtChunks.end();
+}
+
 const VoxelChunkCacheStats& VoxelChunkCache::GetStats() const
 {
     return m_stats;

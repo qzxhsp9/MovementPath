@@ -293,12 +293,30 @@ int main()
     const VoxelPlanningScenario localScenario =
         MakeLocalShortPathScenario(sphere, radius);
 
+    bool ok = true;
+
     VoxelPathPlannerOptions localOptions = MakeLocalBuildSmokeOptions();
+    ok &= Expect(
+        !localOptions.lazyBuildOptions.enabled,
+        "lazy build should be disabled by default");
+    ok &= Expect(
+        localOptions.lazyBuildOptions.fallbackPolicy ==
+            VoxelLazyFallbackPolicy::FullMeshBoundsOnFailure,
+        "lazy fallback policy should default to full-bounds fallback");
+
     const VoxelPathPlannerResult localResult =
         VoxelPathPlanner::Plan(localScenario, localOptions);
 
-    bool ok = true;
     ok &= Expect(localResult.success, "local plan should succeed");
+    ok &= Expect(
+        !localResult.profile.lazyBuildEnabled,
+        "planner profile should report lazy disabled by default");
+    ok &= Expect(
+        localResult.profile.lazyChunkBuildCount == 0,
+        "default planner should not build lazy chunks");
+    ok &= Expect(
+        !localResult.profile.lazyFallbackTriggered,
+        "default planner should not trigger lazy fallback");
     ok &= Expect(
         localResult.profile.astarSucceeded,
         "local A* should succeed");
@@ -369,6 +387,31 @@ int main()
     ok &= Expect(
         fullPoleResult.profile.totalCost < localPoleResult.profile.totalCost,
         "full-bounds pole-to-pole path should avoid local-box clipping");
+
+    VoxelPathPlannerOptions lazyFallbackOptions = MakeSmokeOptions();
+    lazyFallbackOptions.lazyBuildOptions.enabled = true;
+    lazyFallbackOptions.lazyBuildOptions.maxChunkBuildCount = 1;
+    lazyFallbackOptions.lazyBuildOptions.fallbackPolicy =
+        VoxelLazyFallbackPolicy::FullMeshBoundsOnFailure;
+
+    const VoxelPathPlannerResult lazyFallbackResult =
+        VoxelPathPlanner::Plan(localScenario, lazyFallbackOptions);
+
+    ok &= Expect(
+        lazyFallbackResult.success,
+        "lazy guardrail fallback plan should succeed");
+    ok &= Expect(
+        lazyFallbackResult.profile.lazyBuildEnabled,
+        "fallback result should preserve lazy enabled profile state");
+    ok &= Expect(
+        lazyFallbackResult.profile.lazyFallbackTriggered,
+        "lazy guardrail should trigger fallback");
+    ok &= Expect(
+        lazyFallbackResult.profile.lazyChunkBuildCount <= 1,
+        "lazy guardrail should limit chunk builds");
+    ok &= Expect(
+        lazyFallbackResult.profile.buildRegionMode == "FullMeshBounds",
+        "lazy fallback should rerun full-bounds planning");
 
     ok &= TestTriangleSpatialHashCoversBruteForce();
     ok &= TestAppendVoxelSpaceExpandsBoundsAndPreservesState();

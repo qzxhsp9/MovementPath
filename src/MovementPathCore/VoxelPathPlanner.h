@@ -1,6 +1,7 @@
 #pragma once
 
 #include "VoxelAStar.h"
+#include "VoxelChunkCache.h"
 #include "VoxelMeshBuilder.h"
 #include "VoxelPathOptimizer.h"
 
@@ -29,6 +30,11 @@ struct VoxelPlanningProfile
     std::size_t hashEntryCount = 0;
     std::size_t hashQueryCellCount = 0;
     std::size_t hashRawTriangleCount = 0;
+    std::size_t lazyChunkBuildCount = 0;
+    std::size_t lazyCacheHitCount = 0;
+    std::size_t lazyFailedBuildCount = 0;
+    std::size_t lazyCandidateTriangleCount = 0;
+    std::size_t lazyRawCandidateTriangleCount = 0;
     std::size_t storedCellCount = 0;
     std::size_t occupiedCount = 0;
     std::size_t clearanceBandCount = 0;
@@ -46,6 +52,9 @@ struct VoxelPlanningProfile
     double finalSearchPadding = 0.0;
     bool buildSucceeded = false;
     bool astarSucceeded = false;
+    bool lazyBuildEnabled = false;
+    bool lazyFallbackTriggered = false;
+    std::string lazyFallbackReason;
 };
 
 struct VoxelPlanningScenario
@@ -102,10 +111,39 @@ struct VoxelLocalBuildOptions
     double retryExpandFactor = 2.0;
 };
 
+enum class VoxelLazyFallbackPolicy
+{
+    // Do not fallback automatically. Lazy failures are reported to the caller.
+    None,
+
+    // If lazy planning fails or violates guardrails, rerun with FullMeshBounds.
+    FullMeshBoundsOnFailure
+};
+
+struct VoxelLazyBuildOptions
+{
+    // Experimental. Keep disabled for correctness baseline.
+    bool enabled = false;
+
+    VoxelChunkCacheOptions chunkCacheOptions;
+
+    // 0 means unlimited. Intended as a guardrail against accidental full-model
+    // expansion through lazy chunk generation.
+    std::size_t maxChunkBuildCount = 0;
+
+    // 0 means disabled. When enabled, callers can reject lazy paths that are
+    // much more expensive than the fallback/baseline path.
+    double maxCostRegressionRatio = 0.0;
+
+    VoxelLazyFallbackPolicy fallbackPolicy =
+        VoxelLazyFallbackPolicy::FullMeshBoundsOnFailure;
+};
+
 struct VoxelPathPlannerOptions
 {
     VoxelMeshBuildOptions meshBuildOptions;
     VoxelLocalBuildOptions localBuildOptions;
+    VoxelLazyBuildOptions lazyBuildOptions;
     VoxelAStarOptions astarOptions;
     VoxelPlanningRunOptions runOptions;
 

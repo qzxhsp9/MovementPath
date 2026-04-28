@@ -63,6 +63,9 @@ public:
         VoxelSpace& space,
         const VoxelIndex& index);
 
+    bool IsChunkBuiltForIndex(
+        const VoxelIndex& index) const;
+
     const VoxelChunkCacheStats& GetStats() const;
 
     void Clear();
