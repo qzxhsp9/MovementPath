@@ -230,6 +230,14 @@ halfDiag = 0.5 * sqrt(3.0) * voxelSize;
 effectiveClearance = clearance + halfDiag; // conservativeClearance = true 时
 ```
 
+若 `conservativeClearance = false`，则：
+
+```cpp
+effectiveClearance = clearance;
+```
+
+源码中的三角形候选体素范围也是按 `effectiveClearance` 扩展的。因此在关闭保守模式时，如果 `clearance` 很小，候选范围可能不足以覆盖所有“中心距离三角形小于 `halfDiag`”的体素。当前默认值为 `true`，也是更稳妥的设置。
+
 判定规则：
 
 ```text
@@ -344,6 +352,8 @@ enum class VoxelNeighborType
 10. 可选地把路径写回 VoxelSpace 为 Start / Goal / Path
 ```
 
+当 `markPathToVoxelSpace = true` 时，A* 成功后会把起点、终点和路径中间点写回 `VoxelSpace`。后续路径优化如果复用这个 `VoxelSpace`，这些 `Start` / `Goal` / `Path` 状态会被 `VoxelWalkability` 视为可走。
+
 ### 5.5 代价函数
 
 当前移动代价：
@@ -407,6 +417,8 @@ A -> B -> C
 - 先检查 `from` 和 `to` 本身是否可走
 - 沿 x/y/z 同步推进，处理直线恰好穿过边/角时的并列最小 `t`
 - 使用 `VoxelWalkability::IsIndexWalkable()`，因此与 A* 搜索模式保持一致
+
+该检查仍然是离散体素层面的 line-of-sight，不是连续几何层面的精确碰撞检测。它只能保证采样穿过的体素满足当前搜索模式的可通行规则。
 
 `Optimize()` 会：
 
@@ -573,6 +585,7 @@ astarOptions.markPathToVoxelSpace = true;
 - 没有 solid 内外判定，也没有实体内部填充
 - `distanceToSurface` 基于“体素中心到三角形距离”，不是 box-triangle 精确距离
 - `allowSpecialStates` 选项当前未被单独使用
+- `conservativeClearance = false` 时，单三角形候选范围不会额外按 `halfDiag` 扩展，极小 `clearance` 下可能漏标部分近表面体素
 - 缺少统一的 `VoxelAStarFailReason -> string`
 - 缺少优化前原始折线单独导出
 - 缺少“优化后线段经过体素集合”的完整采样与可视化

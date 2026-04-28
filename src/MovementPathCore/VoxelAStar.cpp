@@ -31,24 +31,43 @@ struct VoxelAStarOpenNodeGreater
     }
 };
 
+static void EnsureCellBuilt(
+    VoxelSpace& space,
+    const VoxelIndex& index,
+    const VoxelAStarOptions& options)
+{
+    if (options.ensureCellBuilt)
+    {
+        options.ensureCellBuilt(space, index);
+    }
+}
+
 // ============================================================
 // 找最近可通行体素
 // ============================================================
 
 bool VoxelAStar::FindNearestWalkableIndex(
-    const VoxelSpace& space,
+    VoxelSpace& space,
     const VoxelIndex& seed,
-    VoxelAStarSearchMode mode,
-    int maxRadius,
+    const VoxelAStarOptions& options,
     VoxelIndex& outIndex)
 {
+    const int maxRadius = options.snapMaxRadius;
+
     if (maxRadius < 0)
     {
         return false;
     }
 
+    if (space.IsInsideSearchBounds(seed))
+    {
+        EnsureCellBuilt(space, seed, options);
+    }
+
     if (space.IsInsideSearchBounds(seed) &&
-        VoxelWalkability::IsStateWalkable(space.GetCellState(seed), mode))
+        VoxelWalkability::IsStateWalkable(
+            space.GetCellState(seed),
+            options.searchMode))
     {
         outIndex = seed;
         return true;
@@ -84,9 +103,13 @@ bool VoxelAStar::FindNearestWalkableIndex(
                         continue;
                     }
 
+                    EnsureCellBuilt(space, index, options);
+
                     VoxelState state = space.GetCellState(index);
 
-                    if (!VoxelWalkability::IsStateWalkable(state, mode))
+                    if (!VoxelWalkability::IsStateWalkable(
+                        state,
+                        options.searchMode))
                     {
                         continue;
                     }
@@ -235,14 +258,15 @@ void VoxelAStar::MarkPath(
 }
 
 bool VoxelAStar::FindNearestWalkableIndexWithDirection(
-    const VoxelSpace& space,
+    VoxelSpace& space,
     const VoxelIndex& seed,
     const Vec& seedPoint,
     const Vec& preferredDirection,
-    VoxelAStarSearchMode mode,
-    int maxRadius,
+    const VoxelAStarOptions& options,
     VoxelIndex& outIndex)
 {
+    const int maxRadius = options.snapMaxRadius;
+
     if (maxRadius < 0)
     {
         return false;
@@ -255,8 +279,7 @@ bool VoxelAStar::FindNearestWalkableIndexWithDirection(
         return FindNearestWalkableIndex(
             space,
             seed,
-            mode,
-            maxRadius,
+            options,
             outIndex
         );
     }
@@ -296,9 +319,13 @@ bool VoxelAStar::FindNearestWalkableIndexWithDirection(
                         continue;
                     }
 
+                    EnsureCellBuilt(space, index, options);
+
                     VoxelState state = space.GetCellState(index);
 
-                    if (!VoxelWalkability::IsStateWalkable(state, mode))
+                    if (!VoxelWalkability::IsStateWalkable(
+                        state,
+                        options.searchMode))
                     {
                         continue;
                     }
@@ -395,8 +422,7 @@ VoxelAStarResult VoxelAStar::Search(
                 startIndex,
                 startPoint,
                 options.startSnapDirection,
-                options.searchMode,
-                options.snapMaxRadius,
+                options,
                 snappedStart
             );
         }
@@ -405,8 +431,7 @@ VoxelAStarResult VoxelAStar::Search(
             startOk = FindNearestWalkableIndex(
                 space,
                 startIndex,
-                options.searchMode,
-                options.snapMaxRadius,
+                options,
                 snappedStart
             );
         }
@@ -427,8 +452,7 @@ VoxelAStarResult VoxelAStar::Search(
                 goalIndex,
                 goalPoint,
                 options.goalSnapDirection,
-                options.searchMode,
-                options.snapMaxRadius,
+                options,
                 snappedGoal
             );
         }
@@ -437,8 +461,7 @@ VoxelAStarResult VoxelAStar::Search(
             goalOk = FindNearestWalkableIndex(
                 space,
                 goalIndex,
-                options.searchMode,
-                options.snapMaxRadius,
+                options,
                 snappedGoal
             );
         }
@@ -457,6 +480,8 @@ VoxelAStarResult VoxelAStar::Search(
     }
     else
     {
+        EnsureCellBuilt(space, startIndex, options);
+
         if (!VoxelWalkability::IsStateWalkable(
             space.GetCellState(startIndex),
             options.searchMode))
@@ -464,6 +489,8 @@ VoxelAStarResult VoxelAStar::Search(
             result.failReason = VoxelAStarFailReason::StartNotWalkable;
             return result;
         }
+
+        EnsureCellBuilt(space, goalIndex, options);
 
         if (!VoxelWalkability::IsStateWalkable(
             space.GetCellState(goalIndex),
@@ -582,6 +609,8 @@ VoxelAStarResult VoxelAStar::Search(
 
             const bool isGoal = neighborIndex == goalIndex;
             const bool isStart = neighborIndex == startIndex;
+
+            EnsureCellBuilt(space, neighborIndex, options);
 
             VoxelState neighborState =
                 space.GetCellState(neighborIndex);

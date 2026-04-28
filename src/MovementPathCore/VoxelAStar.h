@@ -3,6 +3,7 @@
 #include "VoxelSpace.h"
 #include "VoxelWalkability.h"
 
+#include <functional>
 #include <vector>
 
 // ============================================================
@@ -38,6 +39,10 @@ struct VoxelAStarOptions
     int maxVisitedCount = 0;
 
     bool markPathToVoxelSpace = true;
+
+    // Optional hook for lazy voxelization. The default empty hook preserves
+    // the current behavior where A* only consumes an already-built VoxelSpace.
+    std::function<void(VoxelSpace&, const VoxelIndex&)> ensureCellBuilt;
 };
 
 // ============================================================
@@ -99,10 +104,9 @@ public:
 
 private:
     static bool FindNearestWalkableIndex(
-        const VoxelSpace& space,
+        VoxelSpace& space,
         const VoxelIndex& seed,
-        VoxelAStarSearchMode mode,
-        int maxRadius,
+        const VoxelAStarOptions& options,
         VoxelIndex& outIndex);
 
     static double Heuristic(
@@ -131,11 +135,10 @@ private:
         const VoxelIndex& goalIndex);
 
     static bool FindNearestWalkableIndexWithDirection(
-        const VoxelSpace& space,
+        VoxelSpace& space,
         const VoxelIndex& seed,
         const Vec& seedPoint,
         const Vec& preferredDirection,
-        VoxelAStarSearchMode mode,
-        int maxRadius,
+        const VoxelAStarOptions& options,
         VoxelIndex& outIndex);
 };
