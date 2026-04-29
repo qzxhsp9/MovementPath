@@ -240,15 +240,26 @@ bool TestPlannerLazyChunkBoundsExport(
     const VoxelPlanningScenario& scenario)
 {
     const std::string shapeMeshPath = "test_planner_lazy_shape_mesh.vtk";
+    const std::string astarPathPath = "test_planner_lazy_astar_path.vtk";
+    const std::string optimizedVoxelPath =
+        "test_planner_lazy_optimized_path_voxels.vtk";
+    const std::string optimizedPolylinePath =
+        "test_planner_lazy_optimized_path_polyline.vtk";
     const std::string chunkBoundsPath =
         "test_planner_lazy_chunk_bounds.vtk";
 
     std::remove(shapeMeshPath.c_str());
+    std::remove(astarPathPath.c_str());
+    std::remove(optimizedVoxelPath.c_str());
+    std::remove(optimizedPolylinePath.c_str());
     std::remove(chunkBoundsPath.c_str());
 
     VoxelPathPlannerOptions options = MakeLazySmokeOptions();
     options.runOptions.exportVtk = true;
     options.runOptions.shapeMeshVtkPath = shapeMeshPath;
+    options.runOptions.astarPathVtkPath = astarPathPath;
+    options.runOptions.optimizedPathVoxelsVtkPath = optimizedVoxelPath;
+    options.runOptions.optimizedPathPolylineVtkPath = optimizedPolylinePath;
     options.runOptions.lazyChunkBoundsVtkPath = chunkBoundsPath;
 
     const VoxelPathPlannerResult result =
@@ -276,7 +287,29 @@ bool TestPlannerLazyChunkBoundsExport(
         content.find("SCALARS chunk_x int 1") != std::string::npos,
         "lazy planner chunk bounds VTK should include chunk indices");
 
+    std::ifstream astarPathIfs(astarPathPath.c_str(), std::ios::in);
+    ok &= Expect(
+        astarPathIfs.is_open(),
+        "lazy planner should export A* path voxels VTK");
+
+    std::ifstream optimizedVoxelIfs(
+        optimizedVoxelPath.c_str(),
+        std::ios::in);
+    ok &= Expect(
+        optimizedVoxelIfs.is_open(),
+        "lazy planner should export optimized path voxels VTK");
+
+    std::ifstream optimizedPolylineIfs(
+        optimizedPolylinePath.c_str(),
+        std::ios::in);
+    ok &= Expect(
+        optimizedPolylineIfs.is_open(),
+        "lazy planner should export optimized path polyline VTK");
+
     std::remove(shapeMeshPath.c_str());
+    std::remove(astarPathPath.c_str());
+    std::remove(optimizedVoxelPath.c_str());
+    std::remove(optimizedPolylinePath.c_str());
     std::remove(chunkBoundsPath.c_str());
 
     return ok;

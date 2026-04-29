@@ -707,6 +707,20 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
 
                 if (lazyAStarResult.success && !lazyGuardrailTriggered)
                 {
+                    if (options.runOptions.exportVtk)
+                    {
+                        ScopedTimer timer(profile.vtkExportMs);
+                        VoxelVtkExporter::ExportVoxelSpaceToVtk(
+                            lazyVoxelSpace,
+                            options.runOptions.astarPathVtkPath,
+                            {
+                                VoxelState::Start,
+                                VoxelState::Goal,
+                                VoxelState::Path
+                            }
+                        );
+                    }
+
                     VoxelPathOptimizeOptions optOptions;
                     optOptions.searchMode = astarOptions.searchMode;
                     optOptions.removeCollinear = true;
@@ -731,6 +745,33 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                     result.optimizeResult = optResult;
                     result.success = true;
                     result.lazyAttemptCost = lazyAStarResult.totalCost;
+
+                    VoxelVtkExporter::MarkPathToVoxelSpace(
+                        lazyVoxelSpace,
+                        optResult.voxelPath
+                    );
+
+                    if (options.runOptions.exportVtk)
+                    {
+                        ScopedTimer timer(profile.vtkExportMs);
+                        VoxelVtkExporter::ExportVoxelSpaceToVtk(
+                            lazyVoxelSpace,
+                            options.runOptions.optimizedPathVoxelsVtkPath,
+                            {
+                                VoxelState::Occupied,
+                                VoxelState::ClearanceBand,
+                                VoxelState::Start,
+                                VoxelState::Goal,
+                                VoxelState::Path
+                            }
+                        );
+
+                        VoxelVtkExporter::ExportPathPolylineToVtk(
+                            lazyVoxelSpace,
+                            optResult.voxelPath,
+                            options.runOptions.optimizedPathPolylineVtkPath
+                        );
+                    }
 
                     if (options.lazyBuildOptions.maxCostRegressionRatio > 0.0)
                     {

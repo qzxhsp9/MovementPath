@@ -120,6 +120,7 @@ VoxelPathPlannerOptions MakeLazyOptions()
     options.lazyBuildOptions.maxCostRegressionRatio = 0.0;
     options.lazyBuildOptions.fallbackPolicy =
         VoxelLazyFallbackPolicy::FullMeshBoundsOnFailure;
+    // options.runOptions.exportVtk = true;
     return options;
 }
 

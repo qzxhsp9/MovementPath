@@ -1529,3 +1529,34 @@ box_long_face_to_face / lazy:
 - 继续分析 `distanceCalculationCount` 与 `distanceImprovedCount` / `stateWriteCount` 的比例，确认有多少计算没有改善距离或状态。
 - 评估是否在单个 chunk build 内对同一 voxel 的多 triangle 距离计算做更细粒度统计，但暂不改变可通行性判定。
 - 若继续优化行为，应优先考虑空间局部性更好的 triangle-to-voxel 分派或 voxel-to-nearby-triangle 查询，避免在有效 chunk 内重复计算大量远离当前 voxel 的 triangle。
+
+### 2026-04-29：lazy VTK 导出补齐与 chunk bounds 语义确认
+本轮修复 lazy 成功分支的导出不完整问题，并明确 `lazy_chunk_bounds.vtk` 的含义。
+
+问题：
+- `lazyBuildOptions.enabled=true` 且 `runOptions.exportVtk=true` 时，lazy 成功分支只导出 `lazy_chunk_bounds.vtk`，没有导出 `astarPathVtkPath`、`optimizedPathVoxelsVtkPath` 和 `optimizedPathPolylineVtkPath`。
+- `sphere_pole_to_pole` 中观察到的 chunk bounds 不是围绕球体的封闭外壳，容易误判为 chunk 构建遗漏。
+
+修改：
+- lazy A* 成功后导出 raw A* path voxels，与非 lazy 成功分支保持一致。
+- lazy path optimize 后调用 `MarkPathToVoxelSpace()` 标记优化路径，并导出 optimized path voxels 与 optimized path polyline。
+- 扩展 `TestPlannerLazyChunkBoundsExport`，验证 lazy 模式 exportVtk 会同时生成 chunk bounds、A* path voxels、optimized path voxels、optimized polyline。
+- `MakeDefaultOptions()` 继续保持 `lazyBuildOptions.enabled=false`，lazy 仍需显式开启。
+
+结论：
+- `lazy_chunk_bounds.vtk` 表示 A* 搜索过程中实际触发构建的 chunk 集合，不表示 mesh 的完整体素化范围，也不保证形成封闭包壳。
+- 对 `sphere_pole_to_pole`，chunk bounds 不封闭是 lazy/on-demand 构建的正常表现：未被 A* 探索或邻居展开触达的区域不会生成 chunk。
+- 判断 chunk 是否正确，应重点看路径是否成功、路径经过 voxel 所在 chunk 是否已构建、以及 `optimized_path_voxels.vtk` / `optimized_path_polyline.vtk` 是否与 chunk bounds 对齐，而不是要求 chunk bounds 封闭包围 sphere。
+
+验证：
+```text
+ctest --test-dir out\build\x64-Debug --output-on-failure
+100% tests passed, 0 tests failed out of 3
+
+MovementPathBenchmark.exe
+sphere_pole_to_pole / lazy success=true cost=209.2 chunks=236 measuredMs≈2817
+box_long_face_to_face / lazy success=true cost=85.2 chunks=35 measuredMs≈126
+```
+
+备注：
+- 完整 `MovementPath.exe` 链接时本地存在旧进程句柄占用，触发 `LNK1168`。核心库、测试目标和 benchmark 目标已成功构建并验证。
