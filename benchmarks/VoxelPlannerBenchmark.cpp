@@ -327,7 +327,8 @@ void WriteCsvRow(
 
 int main()
 {
-    const std::string outputPath = "voxel_planner_benchmark.csv";
+    // Keep generated benchmark data with the planning documents.
+    const std::string outputPath = "doc/voxel_planner_benchmark.csv";
     std::ofstream ofs(outputPath.c_str(), std::ios::out);
     if (!ofs.is_open())
     {

@@ -1,41 +1,58 @@
 # MovementPath
 
-一个使用 Open CASCADE (OCCT) 创建简单几何并导出为 STEP 文件的 C++ 示例项目。
+MovementPath is a C++17 / Open CASCADE based voxel path planning prototype.
 
-项目概述
-- 使用 C++17 和 CMake（最低版本 3.19）构建。
-- 演示如何使用 OCCT 的 BRepPrimAPI 创建一个 box 并将其导出为 STEP（src/main.cpp）。
+The project triangulates an OCCT `TopoDS_Shape`, builds a voxel search space
+around the mesh, searches a path in the clearance band with A*, optionally
+optimizes the path, and exports VTK files for inspection.
 
-先决条件
-- CMake >= 3.19
-- 支持 C++17 的编译器（在 Windows 上通常使用 MSVC）
-- Ninja（或其它 CMake 生成器）
-- Open CASCADE Technology (OCCT) 库及其头文件、库和 DLL。项目包含了一个 cmake 脚本（src/cmake/occt_setup_install.cmake）用于设置 OCCT 路径。
+## Current Focus
 
-构建（示例，Windows / 命令行）
-1. 在仓库根目录执行：
-   cmake -S . -B build -G "Ninja"
-2. 构建：
-   cmake --build build
+- Keep `FullMeshBounds` as the correctness baseline.
+- Support experimental `StartGoalBox` and `LazyChunks` build modes.
+- Measure performance with stable benchmark scenarios before enabling lazy by
+  default.
+- Keep planner logic inside `src/MovementPathCore`; examples and tests should
+  call public interfaces instead of duplicating workflow code.
 
-构建产物和运行
-- 可执行文件为 MovementPath（在 build 目录内）。
-- 运行程序会在当前工作目录生成 `box.step`，这是 main.cpp 中创建的简单立方体的 STEP 文件。
+## Documentation
 
-项目结构（重要文件）
-- CMakeLists.txt — 根 CMake 配置
-- src/CMakeLists.txt — 二级 CMake 配置，包含 OCCT 设置
-- src/main.cpp — 演示代码：创建 box 并导出 STEP
-- src/cmake/occt_setup_install.cmake — OCCT 的查找/配置脚本
-- depends/occt — （可选）仓库内的 OCCT 头文件/二进制依赖目录
+The `doc/` directory is the source of truth for project status and planning:
 
-注意事项
-- 确保 OCCT 的库和 DLL 在 CMake 配置中能被正确找到。默认脚本会将所需 DLL/PDB 复制到构建输出目录。
-- 如果使用不同的 OCCT 安装路径，请编辑或通过 CMake 选项覆盖 cmake/occt_setup_install.cmake 中的变量。
+- `doc/ProjectImplementationStatus.md` describes the current implementation.
+- `doc/ProjectRoadmap.md` tracks current and final progress plans.
+- `doc/VoxelPathPlanningOptimizationPlan.md` tracks performance optimization.
+- `doc/ChangeLog.md` records important changes.
+- `doc/voxel_planner_benchmark.csv` is the latest benchmark CSV output.
 
-贡献及许可证
-- 欢迎提交 issue 与 PR。
-- 当前仓库未包含许可证文件，请在需要时添加 LICENSE。
+## Source Layout
 
-作者
-- 本项目演示代码由仓库维护者提供。
+- `src/main.cpp`: sample executable.
+- `src/MovementPathCore/`: core planner library.
+- `tests/`: unit and planner integration tests.
+- `benchmarks/VoxelPlannerBenchmark.cpp`: benchmark executable.
+- `doc/`: documentation and benchmark CSV output.
+
+## Build And Test
+
+On the current Windows/MSVC setup:
+
+```powershell
+cmd.exe /c "call ""D:\software\ide\vs\Microsoft Visual Studio2022\Community\VC\Auxiliary\Build\vcvars64.bat"" && cmake --build out\build\x64-Debug --config Debug"
+ctest --test-dir out\build\x64-Debug --output-on-failure
+out\build\x64-Debug\MovementPathBenchmark.exe
+```
+
+The benchmark writes:
+
+```text
+doc/voxel_planner_benchmark.csv
+```
+
+## Notes
+
+- `LazyChunks` remains disabled by default.
+- `StartGoalBox` can clip valid detours and should not be used as a quality
+  baseline without fallback.
+- Some source files currently trigger MSVC C4819 code-page warnings because of
+  Chinese comments. These warnings do not block the current build.
