@@ -76,9 +76,10 @@ int main()
     VoxelPathPlannerOptions fastOptions =
         VoxelPathPlanner::MakeDefaultOptions();
     fastOptions.localBuildOptions.regionMode = VoxelBuildRegionMode::StartGoalBox;
-    fastOptions.runOptions.exportVtk = false;
+    fastOptions.runOptions.exportVtk = true;
     fastOptions.runOptions.debugNeighborhood = false;
     fastOptions.runOptions.verbose = true;
+    fastOptions.lazyBuildOptions.enabled = true;
 
     RunScenario(
         MakeLocalShortPathScenario(sphere, radius),

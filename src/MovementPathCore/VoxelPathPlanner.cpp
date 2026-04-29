@@ -756,10 +756,8 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                         ScopedTimer timer(profile.vtkExportMs);
                         VoxelVtkExporter::ExportVoxelSpaceToVtk(
                             lazyVoxelSpace,
-                            options.runOptions.optimizedPathVoxelsVtkPath,
+                            options.runOptions.astarPathVtkPath,
                             {
-                                VoxelState::Occupied,
-                                VoxelState::ClearanceBand,
                                 VoxelState::Start,
                                 VoxelState::Goal,
                                 VoxelState::Path
@@ -1064,7 +1062,7 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
             options.runOptions.optimizedPathVoxelsVtkPath,
             {
                 VoxelState::Occupied,
-                VoxelState::ClearanceBand,
+                VoxelState::Path,
                 VoxelState::Start,
                 VoxelState::Goal,
                 VoxelState::Path
