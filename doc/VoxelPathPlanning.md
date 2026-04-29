@@ -654,6 +654,7 @@ ctest --test-dir out\build\x64-Debug --output-on-failure
 - lazy 模式支持 `maxChunkBuildCount` guardrail，失败或触发 guardrail 时可按 `FullMeshBoundsOnFailure` 回退。
 - `maxCostRegressionRatio` 已实现为质量回退阈值；lazy 成功后可与 full-bounds baseline 对照，超过阈值时返回 full-bounds 结果并保留 lazy 尝试统计。
 - `VoxelPathPlannerResult` 已暴露 `executionMode`、`fallbackExecutionMode`、`lazyAttemptCost`、`fallbackCost`、`optimizeResult` 和最终搜索边界，便于测试直接断言行为。
+- append chunk 构建不再逐 chunk 扫描全量 `VoxelSpace::Cells()` 做状态统计；lazy 最终状态总数由 planner 在搜索后统一统计一次。
 
 ## 13. Benchmark 入口
 

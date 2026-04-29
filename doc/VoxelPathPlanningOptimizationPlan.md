@@ -1349,3 +1349,32 @@ box_long_face_to_face / lazy:
 - 评估 chunk size 对 `lazyChunkBuildCount`、重复候选三角形和总构建耗时的影响。
 - 评估是否需要对 chunk build result 做更粗粒度的 triangle influence 缓存，避免相邻 chunk 重复处理同一批三角形。
 - 在这些数据收敛前，继续保持 lazy 默认关闭。
+
+### 2026-04-29：移除 append 后全量状态统计重复扫描
+
+本轮优先处理已确认的 lazy chunk 重复统计问题，不调整 lazy 参数。
+
+修改：
+
+- `AppendVoxelSpaceFromTrianglesInBox()` 不再在每个 chunk append 后扫描整个 `VoxelSpace::Cells()` 统计 `Occupied` / `ClearanceBand`。
+- `VoxelMeshBuildResult` 注释明确：full/local 构建会报告当前空间状态总数，append 构建不做全局状态计数；需要全局总数时由调用方最终统一统计。
+- lazy planner 原本已在 A* 结束后调用一次 `CountVoxelStates()`，因此最终 profile 的 `occupiedCount` / `clearanceBandCount` 仍保持可用。
+- 保留 `lazyStateCountMs` 字段，用于确认 append 阶段是否仍存在重复状态统计。
+
+实测结果：
+
+```text
+sphere_pole_to_pole / lazy:
+  before: totalMeasuredMs≈11231, lazyStateCountMs≈5761
+  after : totalMeasuredMs≈4886,  lazyStateCountMs=0
+
+box_long_face_to_face / lazy:
+  before: totalMeasuredMs≈268, lazyStateCountMs≈28
+  after : totalMeasuredMs≈221, lazyStateCountMs=0
+```
+
+结论：
+
+- append 后全量状态统计是 lazy 慢的主要浪费之一，移除后 `sphere_pole_to_pole` lazy 耗时下降明显。
+- lazy 仍慢于 full，剩余主要瓶颈是 `lazyVoxelMarkMs`，也就是 `MarkTriangleToVoxelSpace()` 中的体素遍历和点到三角形距离计算。
+- 下一步应分析体素标记重复计算：包括相邻 chunk 重复处理同一 triangle influence、同一 voxel 多次距离计算，以及是否可以对 triangle influence 的 voxel index range 做缓存。

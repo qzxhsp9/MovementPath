@@ -159,6 +159,10 @@ struct VoxelMeshBuildResult
     std::size_t rawCandidateTriangleCount = 0;
     std::size_t hashQueryCellCount = 0;
     std::size_t hashRawTriangleCount = 0;
+
+    // Full/local builders report current VoxelSpace totals. Append builds do
+    // not scan the whole existing space per chunk; callers should perform one
+    // final count if global totals are needed.
     std::size_t occupiedVoxelCount = 0;
     std::size_t clearanceBandVoxelCount = 0;
 

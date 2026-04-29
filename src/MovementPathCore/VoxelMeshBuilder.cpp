@@ -1034,29 +1034,10 @@ VoxelMeshBuildResult VoxelMeshBuilder::AppendVoxelSpaceFromTrianglesInBox(
 
     outSpace.SetSearchBounds(combinedBounds);
 
-    std::size_t occupiedCount = 0;
-    std::size_t clearanceBandCount = 0;
-
-    const auto stateCountStart = Now();
-    for (const auto& kv : outSpace.Cells())
-    {
-        if (kv.second.state == VoxelState::Occupied)
-        {
-            ++occupiedCount;
-        }
-        else if (kv.second.state == VoxelState::ClearanceBand)
-        {
-            ++clearanceBandCount;
-        }
-    }
-    result.stateCountMs = ElapsedMs(stateCountStart, Now());
-
     result.success = true;
     result.triangleCount = triangles.size();
     result.candidateTriangleCount = candidateTriangleCount;
     result.rawCandidateTriangleCount = candidateTriangleIds.size();
-    result.occupiedVoxelCount = occupiedCount;
-    result.clearanceBandVoxelCount = clearanceBandCount;
     result.bounds = appendBounds;
     result.totalBuildMs = ElapsedMs(totalStart, Now());
 
