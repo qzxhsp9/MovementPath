@@ -145,6 +145,15 @@ struct VoxelMeshBuildResult
 {
     bool success = false;
 
+    // Timing breakdown used by lazy chunk benchmarks. Full builds mostly
+    // report voxelMarkMs/stateCountMs; local and chunk builds also report
+    // candidate query/filter costs.
+    double candidateQueryMs = 0.0;
+    double candidateFilterMs = 0.0;
+    double voxelMarkMs = 0.0;
+    double stateCountMs = 0.0;
+    double totalBuildMs = 0.0;
+
     std::size_t triangleCount = 0;
     std::size_t candidateTriangleCount = 0;
     std::size_t rawCandidateTriangleCount = 0;

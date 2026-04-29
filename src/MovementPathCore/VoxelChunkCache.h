@@ -8,18 +8,29 @@
 
 struct VoxelChunkCacheOptions
 {
+    // Edge length of one lazy chunk in voxel-index units.
     int chunkVoxelSize = 16;
+
+    // Extra world-space padding around a chunk build box. This must cover
+    // clearance influence near chunk boundaries.
     double buildPadding = 0.0;
 };
 
 struct VoxelChunkCacheStats
 {
+    // ensureCallCount includes both chunk builds and cache hits. It helps
+    // quantify lazy hook pressure from A* neighbor expansion.
     std::size_t ensureCallCount = 0;
     std::size_t chunkBuildCount = 0;
     std::size_t cacheHitCount = 0;
     std::size_t failedBuildCount = 0;
     std::size_t totalCandidateTriangleCount = 0;
     std::size_t totalRawCandidateTriangleCount = 0;
+
+    double totalCandidateQueryMs = 0.0;
+    double totalCandidateFilterMs = 0.0;
+    double totalVoxelMarkMs = 0.0;
+    double totalStateCountMs = 0.0;
     double totalBuildMs = 0.0;
 };
 
@@ -53,6 +64,8 @@ struct VoxelChunkIndexHash
 class VoxelChunkCache
 {
 public:
+    // Keeps references to shared mesh/index data; callers must keep those
+    // objects alive while the cache is used.
     bool Configure(
         const std::vector<MeshTriangle>* triangles,
         const TriangleSpatialHash* spatialHash,
@@ -61,6 +74,8 @@ public:
 
     bool IsConfigured() const;
 
+    // Builds the containing chunk on first access, then returns cache hits for
+    // later indices in already-built chunks.
     bool EnsureChunkForIndex(
         VoxelSpace& space,
         const VoxelIndex& index);
@@ -75,9 +90,13 @@ public:
     void Clear();
 
 private:
+    // Convert from global voxel coordinates to signed chunk coordinates.
+    // Uses floor division so negative voxel indices map to intuitive chunks.
     VoxelChunkIndex ToChunkIndex(
         const VoxelIndex& index) const;
 
+    // Returns the world-space chunk box with buildPadding already applied, so
+    // boundary-adjacent triangle influence is included during append builds.
     MeshAABB MakeChunkBuildBox(
         const VoxelSpace& space,
         const VoxelChunkIndex& chunk) const;

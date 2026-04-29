@@ -70,6 +70,14 @@ void PreserveLazyAttemptOnFallback(
         lazyProfile.lazyEnsureCallCount;
     fallbackResult.profile.lazyChunkBuildMs =
         lazyProfile.lazyChunkBuildMs;
+    fallbackResult.profile.lazyCandidateQueryMs =
+        lazyProfile.lazyCandidateQueryMs;
+    fallbackResult.profile.lazyCandidateFilterMs =
+        lazyProfile.lazyCandidateFilterMs;
+    fallbackResult.profile.lazyVoxelMarkMs =
+        lazyProfile.lazyVoxelMarkMs;
+    fallbackResult.profile.lazyStateCountMs =
+        lazyProfile.lazyStateCountMs;
     fallbackResult.profile.lazyCacheHitCount =
         lazyProfile.lazyCacheHitCount;
     fallbackResult.profile.lazyFailedBuildCount =
@@ -263,6 +271,10 @@ void CopyLazyStatsToProfile(
     profile.lazyCacheHitCount = stats.cacheHitCount;
     profile.lazyFailedBuildCount = stats.failedBuildCount;
     profile.lazyChunkBuildMs = stats.totalBuildMs;
+    profile.lazyCandidateQueryMs = stats.totalCandidateQueryMs;
+    profile.lazyCandidateFilterMs = stats.totalCandidateFilterMs;
+    profile.lazyVoxelMarkMs = stats.totalVoxelMarkMs;
+    profile.lazyStateCountMs = stats.totalStateCountMs;
     profile.lazyCandidateTriangleCount =
         stats.totalCandidateTriangleCount;
     profile.lazyRawCandidateTriangleCount =
@@ -1018,6 +1030,14 @@ void VoxelPathPlanner::PrintProfile(
         << profile.voxelBuildMs << std::endl;
     std::cout << "Lazy chunk build ms: "
         << profile.lazyChunkBuildMs << std::endl;
+    std::cout << "Lazy candidate query ms: "
+        << profile.lazyCandidateQueryMs << std::endl;
+    std::cout << "Lazy candidate filter ms: "
+        << profile.lazyCandidateFilterMs << std::endl;
+    std::cout << "Lazy voxel mark ms: "
+        << profile.lazyVoxelMarkMs << std::endl;
+    std::cout << "Lazy state count ms: "
+        << profile.lazyStateCountMs << std::endl;
     std::cout << "A* ms: "
         << profile.astarMs << std::endl;
     std::cout << "Optimize ms: "

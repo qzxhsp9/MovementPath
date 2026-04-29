@@ -1254,7 +1254,9 @@ CSV 字段：
 ```text
 scene,mode,success,buildRegionMode,lazyFallbackTriggered,
 lazyFallbackReason,triangulationMs,spatialIndexBuildMs,
-voxelBuildMs,astarMs,lazyChunkBuildMs,astarNonChunkMs,
+voxelBuildMs,astarMs,lazyChunkBuildMs,
+lazyCandidateQueryMs,lazyCandidateFilterMs,lazyVoxelMarkMs,
+lazyStateCountMs,astarNonChunkMs,
 optimizeMs,totalMeasuredMs,
 triangleCount,candidateTriangleCount,rawCandidateTriangleCount,
 storedCellCount,occupiedCount,clearanceBandCount,
@@ -1298,7 +1300,8 @@ box_long_face_to_face / lazy  success=true cost=85.2 chunks=35 measuredMs≈248
 - `VoxelChunkCacheStats::totalBuildMs`：记录实际追加构建 chunk 的累计耗时。
 - `VoxelPlanningProfile::lazyEnsureCallCount`。
 - `VoxelPlanningProfile::lazyChunkBuildMs`。
-- benchmark CSV 新增 `lazyChunkBuildMs` 和 `astarNonChunkMs`。
+- `VoxelPlanningProfile` 新增 `lazyCandidateQueryMs`、`lazyCandidateFilterMs`、`lazyVoxelMarkMs`、`lazyStateCountMs`。
+- benchmark CSV 新增 `lazyChunkBuildMs`、`lazyCandidateQueryMs`、`lazyCandidateFilterMs`、`lazyVoxelMarkMs`、`lazyStateCountMs` 和 `astarNonChunkMs`。
 - `VoxelChunkCache` 增加 last-chunk 快路径，减少连续访问同一 chunk 时的 unordered_set 查询成本。
 
 本轮实测结果摘要：
@@ -1306,18 +1309,26 @@ box_long_face_to_face / lazy  success=true cost=85.2 chunks=35 measuredMs≈248
 ```text
 sphere_pole_to_pole / lazy:
   totalMeasuredMs≈10174
-  astarMs≈10169
-  lazyChunkBuildMs≈9745
-  astarNonChunkMs≈423
+  astarMs≈10794
+  lazyChunkBuildMs≈10359
+  lazyCandidateQueryMs≈25
+  lazyCandidateFilterMs≈5
+  lazyVoxelMarkMs≈4709
+  lazyStateCountMs≈5620
+  astarNonChunkMs≈434
   lazyEnsureCallCount=524054
   lazyChunkBuildCount=236
   lazyCacheHitCount=523818
 
 box_long_face_to_face / lazy:
-  totalMeasuredMs≈231
-  astarMs≈227
-  lazyChunkBuildMs≈187
-  astarNonChunkMs≈40
+  totalMeasuredMs≈238
+  astarMs≈233
+  lazyChunkBuildMs≈193
+  lazyCandidateQueryMs≈1
+  lazyCandidateFilterMs≈0
+  lazyVoxelMarkMs≈171
+  lazyStateCountMs≈20
+  astarNonChunkMs≈41
   lazyEnsureCallCount=60830
   lazyChunkBuildCount=35
   lazyCacheHitCount=60795
@@ -1327,12 +1338,14 @@ box_long_face_to_face / lazy:
 
 - chunk cache 不是没有命中；命中次数很高，说明 chunk 缓存机制确实在工作。
 - lazy 未加速的主要原因是 chunk 构建本身太贵，且当前 chunk 构建被计入 A* 阶段。
+- 在当前 benchmark 中，候选查询和候选过滤不是主要瓶颈；主要耗时来自 `voxelMarkMs` 和每次 append 后对 `VoxelSpace::Cells()` 的状态统计。
 - `sphere_pole_to_pole` 中 236 个 chunk 累计候选三角形数远高于全局三角形数，说明相邻 chunk 重复处理三角形影响显著。
 - 对当前实现而言，lazy 更像“推迟并分批支付体素化成本”，还没有做到“显著减少总体体素化成本”。
 
 后续优化方向必须基于这些数据推进，避免只看 `storedCellCount` 或路径正确性：
 
-- 优先拆分 chunk 构建耗时来源：空间索引查询、append bounds 扩展、体素遍历、距离计算。
+- 优先处理 append 后全量状态统计的重复扫描；该统计目前对每个 chunk 都扫描 `VoxelSpace::Cells()`。
+- 再处理 `MarkTriangleToVoxelSpace()` 的重复体素标记和距离计算成本。
 - 评估 chunk size 对 `lazyChunkBuildCount`、重复候选三角形和总构建耗时的影响。
 - 评估是否需要对 chunk build result 做更粗粒度的 triangle influence 缓存，避免相邻 chunk 重复处理同一批三角形。
 - 在这些数据收敛前，继续保持 lazy 默认关闭。

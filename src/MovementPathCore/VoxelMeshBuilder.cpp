@@ -1,6 +1,7 @@
 #include "VoxelMeshBuilder.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <limits>
 #include <unordered_set>
@@ -54,6 +55,19 @@ static MeshAABB ComputeTriangleAABBLocal(
     );
 
     return box;
+}
+
+static std::chrono::steady_clock::time_point Now()
+{
+    return std::chrono::steady_clock::now();
+}
+
+static double ElapsedMs(
+    const std::chrono::steady_clock::time_point& start,
+    const std::chrono::steady_clock::time_point& end)
+{
+    return std::chrono::duration<double, std::milli>(
+        end - start).count();
 }
 
 static bool ComputeTrianglesAABBLocal(
@@ -635,6 +649,7 @@ VoxelMeshBuildResult VoxelMeshBuilder::BuildVoxelSpaceFromTriangles(
     VoxelSpace& outSpace)
 {
     VoxelMeshBuildResult result;
+    const auto totalStart = Now();
 
     outSpace.Clear();
 
@@ -672,10 +687,12 @@ VoxelMeshBuildResult VoxelMeshBuilder::BuildVoxelSpaceFromTriangles(
         StoreFreeCellsInBounds(bounds, outSpace);
     }
 
+    const auto markStart = Now();
     for (const MeshTriangle& tri : triangles)
     {
         MarkTriangleToVoxelSpace(tri, options, outSpace);
     }
+    result.voxelMarkMs = ElapsedMs(markStart, Now());
 
     std::size_t occupiedCount = 0;
     std::size_t clearanceBandCount = 0;
@@ -710,6 +727,7 @@ VoxelMeshBuildResult VoxelMeshBuilder::BuildVoxelSpaceFromShapeMeshInBox(
     VoxelSpace& outSpace)
 {
     VoxelMeshBuildResult result;
+    const auto totalStart = Now();
 
     outSpace.Clear();
 
@@ -758,6 +776,7 @@ VoxelMeshBuildResult VoxelMeshBuilder::BuildVoxelSpaceFromTrianglesInBox(
     VoxelSpace& outSpace)
 {
     VoxelMeshBuildResult result;
+    const auto totalStart = Now();
 
     outSpace.Clear();
 
@@ -807,6 +826,7 @@ VoxelMeshBuildResult VoxelMeshBuilder::BuildVoxelSpaceFromTrianglesInBox(
 
     ExpandAABB(queryBox, queryExpand);
 
+    const auto candidateQueryStart = Now();
     if (spatialHash != nullptr && spatialHash->IsValid())
     {
         TriangleSpatialHashStats queryStats;
@@ -823,7 +843,12 @@ VoxelMeshBuildResult VoxelMeshBuilder::BuildVoxelSpaceFromTrianglesInBox(
             candidateTriangleIds.push_back(static_cast<int>(i));
         }
     }
+    result.candidateQueryMs = ElapsedMs(candidateQueryStart, Now());
 
+    std::vector<int> filteredTriangleIds;
+    filteredTriangleIds.reserve(candidateTriangleIds.size());
+
+    const auto candidateFilterStart = Now();
     for (int triangleId : candidateTriangleIds)
     {
         if (triangleId < 0 ||
@@ -843,12 +868,24 @@ VoxelMeshBuildResult VoxelMeshBuilder::BuildVoxelSpaceFromTrianglesInBox(
         }
 
         ++candidateTriangleCount;
-        MarkTriangleToVoxelSpace(tri, options, outSpace);
+        filteredTriangleIds.push_back(triangleId);
     }
+    result.candidateFilterMs = ElapsedMs(candidateFilterStart, Now());
+
+    const auto markStart = Now();
+    for (int triangleId : filteredTriangleIds)
+    {
+        MarkTriangleToVoxelSpace(
+            triangles[static_cast<std::size_t>(triangleId)],
+            options,
+            outSpace);
+    }
+    result.voxelMarkMs = ElapsedMs(markStart, Now());
 
     std::size_t occupiedCount = 0;
     std::size_t clearanceBandCount = 0;
 
+    const auto stateCountStart = Now();
     for (const auto& kv : outSpace.Cells())
     {
         if (kv.second.state == VoxelState::Occupied)
@@ -860,6 +897,7 @@ VoxelMeshBuildResult VoxelMeshBuilder::BuildVoxelSpaceFromTrianglesInBox(
             ++clearanceBandCount;
         }
     }
+    result.stateCountMs = ElapsedMs(stateCountStart, Now());
 
     result.success = true;
     result.triangleCount = triangles.size();
@@ -868,6 +906,7 @@ VoxelMeshBuildResult VoxelMeshBuilder::BuildVoxelSpaceFromTrianglesInBox(
     result.occupiedVoxelCount = occupiedCount;
     result.clearanceBandVoxelCount = clearanceBandCount;
     result.bounds = bounds;
+    result.totalBuildMs = ElapsedMs(totalStart, Now());
 
     return result;
 }
@@ -880,6 +919,7 @@ VoxelMeshBuildResult VoxelMeshBuilder::AppendVoxelSpaceFromTrianglesInBox(
     VoxelSpace& outSpace)
 {
     VoxelMeshBuildResult result;
+    const auto totalStart = Now();
 
     if (options.voxelSize <= 0.0 || !outSpace.IsValid())
     {
@@ -936,6 +976,7 @@ VoxelMeshBuildResult VoxelMeshBuilder::AppendVoxelSpaceFromTrianglesInBox(
 
     ExpandAABB(queryBox, queryExpand);
 
+    const auto candidateQueryStart = Now();
     if (spatialHash != nullptr && spatialHash->IsValid())
     {
         TriangleSpatialHashStats queryStats;
@@ -952,7 +993,12 @@ VoxelMeshBuildResult VoxelMeshBuilder::AppendVoxelSpaceFromTrianglesInBox(
             candidateTriangleIds.push_back(static_cast<int>(i));
         }
     }
+    result.candidateQueryMs = ElapsedMs(candidateQueryStart, Now());
 
+    std::vector<int> filteredTriangleIds;
+    filteredTriangleIds.reserve(candidateTriangleIds.size());
+
+    const auto candidateFilterStart = Now();
     for (int triangleId : candidateTriangleIds)
     {
         if (triangleId < 0 ||
@@ -972,14 +1018,26 @@ VoxelMeshBuildResult VoxelMeshBuilder::AppendVoxelSpaceFromTrianglesInBox(
         }
 
         ++candidateTriangleCount;
-        MarkTriangleToVoxelSpace(tri, options, outSpace);
+        filteredTriangleIds.push_back(triangleId);
     }
+    result.candidateFilterMs = ElapsedMs(candidateFilterStart, Now());
+
+    const auto markStart = Now();
+    for (int triangleId : filteredTriangleIds)
+    {
+        MarkTriangleToVoxelSpace(
+            triangles[static_cast<std::size_t>(triangleId)],
+            options,
+            outSpace);
+    }
+    result.voxelMarkMs = ElapsedMs(markStart, Now());
 
     outSpace.SetSearchBounds(combinedBounds);
 
     std::size_t occupiedCount = 0;
     std::size_t clearanceBandCount = 0;
 
+    const auto stateCountStart = Now();
     for (const auto& kv : outSpace.Cells())
     {
         if (kv.second.state == VoxelState::Occupied)
@@ -991,6 +1049,7 @@ VoxelMeshBuildResult VoxelMeshBuilder::AppendVoxelSpaceFromTrianglesInBox(
             ++clearanceBandCount;
         }
     }
+    result.stateCountMs = ElapsedMs(stateCountStart, Now());
 
     result.success = true;
     result.triangleCount = triangles.size();
@@ -999,6 +1058,7 @@ VoxelMeshBuildResult VoxelMeshBuilder::AppendVoxelSpaceFromTrianglesInBox(
     result.occupiedVoxelCount = occupiedCount;
     result.clearanceBandVoxelCount = clearanceBandCount;
     result.bounds = appendBounds;
+    result.totalBuildMs = ElapsedMs(totalStart, Now());
 
     return result;
 }

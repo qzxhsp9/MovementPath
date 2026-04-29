@@ -687,6 +687,10 @@ voxel_planner_benchmark.csv
 - `voxelBuildMs`
 - `astarMs`
 - `lazyChunkBuildMs`
+- `lazyCandidateQueryMs`
+- `lazyCandidateFilterMs`
+- `lazyVoxelMarkMs`
+- `lazyStateCountMs`
 - `astarNonChunkMs`
 - `optimizeMs`
 - `totalMeasuredMs`

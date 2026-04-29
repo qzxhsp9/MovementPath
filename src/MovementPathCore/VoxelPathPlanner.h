@@ -19,7 +19,14 @@ struct VoxelPlanningProfile
     double triangulationMs = 0.0;
     double spatialIndexBuildMs = 0.0;
     double voxelBuildMs = 0.0;
+
+    // Lazy chunk build time is included in astarMs because chunks are built
+    // from A* ensureCellBuilt callbacks. The fields below split that cost.
     double lazyChunkBuildMs = 0.0;
+    double lazyCandidateQueryMs = 0.0;
+    double lazyCandidateFilterMs = 0.0;
+    double lazyVoxelMarkMs = 0.0;
+    double lazyStateCountMs = 0.0;
     double astarMs = 0.0;
     double optimizeMs = 0.0;
     double vtkExportMs = 0.0;
@@ -31,6 +38,8 @@ struct VoxelPlanningProfile
     std::size_t hashEntryCount = 0;
     std::size_t hashQueryCellCount = 0;
     std::size_t hashRawTriangleCount = 0;
+
+    // Number of A* lazy hook invocations, including cache hits.
     std::size_t lazyEnsureCallCount = 0;
     std::size_t lazyChunkBuildCount = 0;
     std::size_t lazyCacheHitCount = 0;

@@ -1,7 +1,6 @@
 #include "VoxelChunkCache.h"
 
 #include <algorithm>
-#include <chrono>
 
 bool VoxelChunkCache::Configure(
     const std::vector<MeshTriangle>* triangles,
@@ -68,8 +67,6 @@ bool VoxelChunkCache::EnsureChunkForIndex(
 
     const MeshAABB buildBox = MakeChunkBuildBox(space, chunk);
 
-    const auto buildStart = std::chrono::steady_clock::now();
-
     const VoxelMeshBuildResult result =
         VoxelMeshBuilder::AppendVoxelSpaceFromTrianglesInBox(
             *m_triangles,
@@ -78,11 +75,6 @@ bool VoxelChunkCache::EnsureChunkForIndex(
             m_buildOptions,
             space
         );
-
-    const auto buildEnd = std::chrono::steady_clock::now();
-    m_stats.totalBuildMs +=
-        std::chrono::duration<double, std::milli>(
-            buildEnd - buildStart).count();
 
     if (!result.success)
     {
@@ -97,6 +89,11 @@ bool VoxelChunkCache::EnsureChunkForIndex(
     m_stats.totalCandidateTriangleCount += result.candidateTriangleCount;
     m_stats.totalRawCandidateTriangleCount +=
         result.rawCandidateTriangleCount;
+    m_stats.totalCandidateQueryMs += result.candidateQueryMs;
+    m_stats.totalCandidateFilterMs += result.candidateFilterMs;
+    m_stats.totalVoxelMarkMs += result.voxelMarkMs;
+    m_stats.totalStateCountMs += result.stateCountMs;
+    m_stats.totalBuildMs += result.totalBuildMs;
 
     return true;
 }

@@ -18,6 +18,8 @@ namespace
 {
 struct BenchmarkCase
 {
+    // One scene/mode/options tuple. The benchmark runs these independently
+    // instead of mutating one shared options object.
     std::string sceneName;
     std::string modeName;
     VoxelPlanningScenario scenario;
@@ -26,6 +28,8 @@ struct BenchmarkCase
 
 struct BenchmarkRow
 {
+    // Flat CSV-oriented result. Keep this struct close to WriteCsvHeader()
+    // so benchmark schema changes remain obvious in code review.
     std::string sceneName;
     std::string modeName;
     bool success = false;
@@ -37,6 +41,10 @@ struct BenchmarkRow
     double spatialIndexBuildMs = 0.0;
     double voxelBuildMs = 0.0;
     double lazyChunkBuildMs = 0.0;
+    double lazyCandidateQueryMs = 0.0;
+    double lazyCandidateFilterMs = 0.0;
+    double lazyVoxelMarkMs = 0.0;
+    double lazyStateCountMs = 0.0;
     double astarMs = 0.0;
     double astarNonChunkMs = 0.0;
     double optimizeMs = 0.0;
@@ -176,6 +184,10 @@ BenchmarkRow MakeRow(
     row.spatialIndexBuildMs = profile.spatialIndexBuildMs;
     row.voxelBuildMs = profile.voxelBuildMs;
     row.lazyChunkBuildMs = profile.lazyChunkBuildMs;
+    row.lazyCandidateQueryMs = profile.lazyCandidateQueryMs;
+    row.lazyCandidateFilterMs = profile.lazyCandidateFilterMs;
+    row.lazyVoxelMarkMs = profile.lazyVoxelMarkMs;
+    row.lazyStateCountMs = profile.lazyStateCountMs;
     row.astarMs = profile.astarMs;
     row.astarNonChunkMs = profile.astarMs - profile.lazyChunkBuildMs;
     if (row.astarNonChunkMs < 0.0)
@@ -218,7 +230,9 @@ void WriteCsvHeader(std::ostream& os)
     os
         << "scene,mode,success,buildRegionMode,lazyFallbackTriggered,"
         << "lazyFallbackReason,triangulationMs,spatialIndexBuildMs,"
-        << "voxelBuildMs,astarMs,lazyChunkBuildMs,astarNonChunkMs,"
+        << "voxelBuildMs,astarMs,lazyChunkBuildMs,"
+        << "lazyCandidateQueryMs,lazyCandidateFilterMs,"
+        << "lazyVoxelMarkMs,lazyStateCountMs,astarNonChunkMs,"
         << "optimizeMs,totalMeasuredMs,"
         << "triangleCount,candidateTriangleCount,rawCandidateTriangleCount,"
         << "storedCellCount,occupiedCount,clearanceBandCount,"
@@ -245,6 +259,10 @@ void WriteCsvRow(
         << row.voxelBuildMs << ","
         << row.astarMs << ","
         << row.lazyChunkBuildMs << ","
+        << row.lazyCandidateQueryMs << ","
+        << row.lazyCandidateFilterMs << ","
+        << row.lazyVoxelMarkMs << ","
+        << row.lazyStateCountMs << ","
         << row.astarNonChunkMs << ","
         << row.optimizeMs << ","
         << row.totalMeasuredMs << ","
