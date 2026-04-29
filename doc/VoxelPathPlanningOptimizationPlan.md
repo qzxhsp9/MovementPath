@@ -1378,3 +1378,41 @@ box_long_face_to_face / lazy:
 - append 后全量状态统计是 lazy 慢的主要浪费之一，移除后 `sphere_pole_to_pole` lazy 耗时下降明显。
 - lazy 仍慢于 full，剩余主要瓶颈是 `lazyVoxelMarkMs`，也就是 `MarkTriangleToVoxelSpace()` 中的体素遍历和点到三角形距离计算。
 - 下一步应分析体素标记重复计算：包括相邻 chunk 重复处理同一 triangle influence、同一 voxel 多次距离计算，以及是否可以对 triangle influence 的 voxel index range 做缓存。
+
+### 2026-04-29：拆分 chunk 查询范围与写入范围
+
+本轮继续处理 `MarkTriangleToVoxelSpace()` 相关重复计算。核心问题是此前 `VoxelChunkCacheOptions::buildPadding` 同时扩大了候选查询范围和 voxel 写入范围，导致相邻 chunk 会重复写入 padding 区域内的体素。
+
+修改：
+
+- `AppendVoxelSpaceFromTrianglesInBox()` 新增 `extraQueryPadding` 参数。
+- `VoxelChunkCache::MakeChunkBuildBox()` 只返回核心 chunk world box，不再把 `buildPadding` 扩入写入 bounds。
+- `VoxelChunkCache` 调用 append 时把 `buildPadding` 作为额外查询 padding 传入 builder。
+- chunk max corner 使用半开区间语义处理，避免 `WorldToIndex(maxCorner)` 落到相邻 chunk 的第一个体素。
+- 单测更新为验证：query padding 能让相邻三角形影响核心 chunk 边界体素，但不会扩展 voxel write bounds。
+
+实测结果：
+
+```text
+sphere_pole_to_pole / lazy:
+  before state-count fix: totalMeasuredMs≈11231, lazyVoxelMarkMs≈4986
+  after state-count fix : totalMeasuredMs≈4886,  lazyVoxelMarkMs≈4440
+  after write-bound fix : totalMeasuredMs≈2182,  lazyVoxelMarkMs≈1746
+
+box_long_face_to_face / lazy:
+  before state-count fix: totalMeasuredMs≈268, lazyVoxelMarkMs≈191
+  after state-count fix : totalMeasuredMs≈221, lazyVoxelMarkMs≈173
+  after write-bound fix : totalMeasuredMs≈113, lazyVoxelMarkMs≈68
+```
+
+结论：
+
+- 相邻 chunk 重复写 padding 区域是 `voxelMarkMs` 高的重要原因。
+- 拆分查询范围与写入范围后，lazy 在 `box_long_face_to_face` 已接近/略优于 full，在 `sphere_pole_to_pole` 中也接近 full。
+- lazy 仍有大量 ensure/cache hit，`astarNonChunkMs` 约 400ms；后续可继续优化 A* lazy hook 调用频率或 chunk 命中路径，但这已经不是主要构建瓶颈。
+
+下一步建议：
+
+- 继续分析 `MarkTriangleToVoxelSpace()` 内部：统计被遍历 voxel 数、实际写入 voxel 数、距离计算次数。
+- 对同一 triangle 在多个 chunk 中的 influence index range 做缓存，避免重复计算 triangle influence AABB 和 index range。
+- 评估是否需要在 `VoxelSpace::SetCellDistanceIfSmaller()` 层增加“距离没有变小则少写状态”的细粒度统计，而不是立即改变行为。

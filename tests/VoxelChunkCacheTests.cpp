@@ -326,7 +326,7 @@ bool TestVoxelChunkCachePaddingExpandsBuildCoverage()
 {
     std::vector<MeshTriangle> triangles;
     triangles.push_back(
-        { Vec(4.5, 0, 0), Vec(5.5, 0, 0), Vec(5.0, 1.0, 0) }
+        { Vec(4.0, 0, 0), Vec(5.0, 0, 0), Vec(4.5, 1.0, 0) }
     );
 
     VoxelMeshBuildOptions buildOptions;
@@ -349,17 +349,21 @@ bool TestVoxelChunkCachePaddingExpandsBuildCoverage()
 
     VoxelSpace space(Vec(0, 0, 0), buildOptions.voxelSize);
     const VoxelIndex chunkZeroIndex = space.WorldToIndex(Vec(1, 0, 0));
-    const VoxelIndex paddedInfluenceIndex = space.WorldToIndex(Vec(4.5, 0, 0));
+    const VoxelIndex coreBoundaryIndex = space.WorldToIndex(Vec(3.5, 0, 0));
+    const VoxelIndex adjacentChunkIndex = space.WorldToIndex(Vec(4.5, 0, 0));
 
     ok &= Expect(
         cache.EnsureChunkForIndex(space, chunkZeroIndex),
         "chunk zero should build with padding");
     ok &= Expect(
-        space.IsInsideSearchBounds(paddedInfluenceIndex),
-        "padding should expand search bounds to include adjacent influence");
+        space.IsInsideSearchBounds(coreBoundaryIndex),
+        "core boundary index should be inside built chunk bounds");
     ok &= Expect(
-        space.GetCellState(paddedInfluenceIndex) != VoxelState::Free,
-        "padding should allow adjacent triangle influence to be written");
+        !space.IsInsideSearchBounds(adjacentChunkIndex),
+        "query padding should not expand voxel write bounds");
+    ok &= Expect(
+        space.GetCellState(coreBoundaryIndex) != VoxelState::Free,
+        "query padding should include adjacent triangle influence in core chunk");
 
     return ok;
 }

@@ -210,7 +210,8 @@ public:
         const TriangleSpatialHash* spatialHash,
         const MeshAABB& buildBox,
         const VoxelMeshBuildOptions& options,
-        VoxelSpace& outSpace);
+        VoxelSpace& outSpace,
+        double extraQueryPadding = 0.0);
 
 private:
     static MeshAABB ComputeTriangleAABB(

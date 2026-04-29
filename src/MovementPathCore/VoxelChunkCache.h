@@ -11,8 +11,8 @@ struct VoxelChunkCacheOptions
     // Edge length of one lazy chunk in voxel-index units.
     int chunkVoxelSize = 16;
 
-    // Extra world-space padding around a chunk build box. This must cover
-    // clearance influence near chunk boundaries.
+    // Extra world-space query padding around a chunk. It broadens candidate
+    // triangle lookup without expanding the voxel write bounds.
     double buildPadding = 0.0;
 };
 
@@ -95,8 +95,8 @@ private:
     VoxelChunkIndex ToChunkIndex(
         const VoxelIndex& index) const;
 
-    // Returns the world-space chunk box with buildPadding already applied, so
-    // boundary-adjacent triangle influence is included during append builds.
+    // Returns the core world-space chunk box. Candidate lookup padding is
+    // passed separately to the mesh builder to avoid overlapping writes.
     MeshAABB MakeChunkBuildBox(
         const VoxelSpace& space,
         const VoxelChunkIndex& chunk) const;

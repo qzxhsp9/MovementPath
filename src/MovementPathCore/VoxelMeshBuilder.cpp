@@ -916,7 +916,8 @@ VoxelMeshBuildResult VoxelMeshBuilder::AppendVoxelSpaceFromTrianglesInBox(
     const TriangleSpatialHash* spatialHash,
     const MeshAABB& buildBox,
     const VoxelMeshBuildOptions& options,
-    VoxelSpace& outSpace)
+    VoxelSpace& outSpace,
+    double extraQueryPadding)
 {
     VoxelMeshBuildResult result;
     const auto totalStart = Now();
@@ -973,6 +974,8 @@ VoxelMeshBuildResult VoxelMeshBuilder::AppendVoxelSpaceFromTrianglesInBox(
     {
         queryExpand += halfDiag;
     }
+
+    queryExpand += std::max(0.0, extraQueryPadding);
 
     ExpandAABB(queryBox, queryExpand);
 

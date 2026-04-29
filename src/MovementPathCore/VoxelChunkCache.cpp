@@ -1,6 +1,8 @@
 #include "VoxelChunkCache.h"
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 
 bool VoxelChunkCache::Configure(
     const std::vector<MeshTriangle>* triangles,
@@ -73,7 +75,8 @@ bool VoxelChunkCache::EnsureChunkForIndex(
             m_spatialHash,
             buildBox,
             m_buildOptions,
-            space
+            space,
+            m_cacheOptions.buildPadding
         );
 
     if (!result.success)
@@ -165,13 +168,15 @@ MeshAABB VoxelChunkCache::MakeChunkBuildBox(
     box.minP = space.IndexToMinCorner(minIndex);
     box.maxP = space.IndexToMaxCorner(maxIndex);
 
-    const double padding = std::max(0.0, m_cacheOptions.buildPadding);
-    box.minP.x -= padding;
-    box.minP.y -= padding;
-    box.minP.z -= padding;
-    box.maxP.x += padding;
-    box.maxP.y += padding;
-    box.maxP.z += padding;
+    box.maxP.x = std::nextafter(
+        box.maxP.x,
+        -std::numeric_limits<double>::infinity());
+    box.maxP.y = std::nextafter(
+        box.maxP.y,
+        -std::numeric_limits<double>::infinity());
+    box.maxP.z = std::nextafter(
+        box.maxP.z,
+        -std::numeric_limits<double>::infinity());
 
     return box;
 }
