@@ -1477,3 +1477,55 @@ box_long_face_to_face / lazy:
 - 在 `MarkTriangleToVoxelSpace()` 中引入“mark bounds 裁剪后的 index range”，对 append chunk 只遍历当前 chunk write bounds 与 triangle influence range 的交集。
 - 保持 `VoxelSpace::SetCellDistanceIfSmaller()` 行为不变，先继续用现有统计判断“距离未改善但状态仍写入”的比例。
 - 增加针对 index range 裁剪的单测：裁剪前后路径 cost、occupied/clearance 结果一致，且 out-of-bounds visit 显著下降。
+
+### 2026-04-29：Mark loop 按写入 bounds 裁剪
+本轮针对上一节确认的主要无效成本继续推进：`MarkTriangleToVoxelSpace()` 原先按 triangle influence range 遍历，再通过 `IsInsideSearchBounds()` 丢弃 chunk 外 voxel；这会在 lazy chunk 中产生大量 out-of-bounds visit。
+
+修改：
+- `MarkTriangleToVoxelSpace()` 新增 `markBounds` 参数，在进入三重循环前，将 triangle influence index range 与当前写入 bounds 求交集。
+- full build 传入 full bounds，local build 传入 local bounds，append/lazy chunk 传入当前 chunk 的 `appendBounds`。
+- 保留 `IsInsideSearchBounds()` 检查作为防御，不改变距离计算、Occupied/ClearanceBand 判定和状态写入规则。
+- 新增 `TestAppendVoxelSpaceClipsMarkRangeToWriteBounds`：对同一 build box 比较 local build 与 append build 的 voxel state / distance，验证裁剪不改变结果，并断言 append 不再访问 bounds 外 voxel。
+
+验证：
+```text
+ctest --test-dir out\build\x64-Debug --output-on-failure
+100% tests passed, 0 tests failed out of 3
+
+MovementPathBenchmark.exe
+sphere_pole_to_pole / full success=true cost=209.2 measuredMs≈2934
+sphere_pole_to_pole / local success=true cost=244.9 measuredMs≈2635
+sphere_pole_to_pole / lazy success=true cost=209.2 chunks=236 measuredMs≈2716
+box_long_face_to_face / full success=true cost=85.2 measuredMs≈139
+box_long_face_to_face / local success=true cost=85.2 measuredMs≈124
+box_long_face_to_face / lazy success=true cost=85.2 chunks=35 measuredMs≈119
+```
+
+本轮数据变化：
+```text
+sphere_pole_to_pole / lazy:
+  before lazyVoxelVisitCount=27034963
+  after  lazyVoxelVisitCount=5141175
+  before lazyOutOfBoundsVoxelCount=21893788
+  after  lazyOutOfBoundsVoxelCount=0
+  lazyDistanceCalculationCount=5141175
+  lazyVoxelMarkMs≈2269
+
+box_long_face_to_face / lazy:
+  before lazyVoxelVisitCount=3213056
+  after  lazyVoxelVisitCount=135204
+  before lazyOutOfBoundsVoxelCount=3077852
+  after  lazyOutOfBoundsVoxelCount=0
+  lazyDistanceCalculationCount=135204
+  lazyVoxelMarkMs≈73
+```
+
+结论：
+- index range 裁剪有效消除了 chunk 外无效遍历，`lazyOutOfBoundsVoxelCount` 降为 0。
+- `box_long_face_to_face` 的 lazy 总耗时进一步下降，说明该场景主要受无效遍历影响。
+- `sphere_pole_to_pole` 的 voxel visit 大幅下降，但 `lazyVoxelMarkMs` 下降不明显，说明剩余瓶颈主要是有效范围内的点到三角形距离计算和重复状态写入，而不是 bounds 外过滤。
+
+下一步建议：
+- 继续分析 `distanceCalculationCount` 与 `distanceImprovedCount` / `stateWriteCount` 的比例，确认有多少计算没有改善距离或状态。
+- 评估是否在单个 chunk build 内对同一 voxel 的多 triangle 距离计算做更细粒度统计，但暂不改变可通行性判定。
+- 若继续优化行为，应优先考虑空间局部性更好的 triangle-to-voxel 分派或 voxel-to-nearby-triangle 查询，避免在有效 chunk 内重复计算大量远离当前 voxel 的 triangle。

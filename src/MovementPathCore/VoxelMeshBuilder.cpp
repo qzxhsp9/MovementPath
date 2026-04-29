@@ -571,7 +571,8 @@ VoxelTriangleMarkStats VoxelMeshBuilder::MarkTriangleToVoxelSpace(
     const MeshTriangle& tri,
     const VoxelMeshBuildOptions& options,
     VoxelSpace& space,
-    const VoxelTriangleInfluenceRange& influenceRange)
+    const VoxelTriangleInfluenceRange& influenceRange,
+    const VoxelBounds& markBounds)
 {
     VoxelTriangleMarkStats stats;
     const double halfDiag = space.GetHalfDiagonal();
@@ -585,6 +586,24 @@ VoxelTriangleMarkStats VoxelMeshBuilder::MarkTriangleToVoxelSpace(
 
     VoxelIndex minIndex = influenceRange.minIndex;
     VoxelIndex maxIndex = influenceRange.maxIndex;
+
+    if (markBounds.IsValid())
+    {
+        minIndex.x = std::max(minIndex.x, markBounds.minIndex.x);
+        minIndex.y = std::max(minIndex.y, markBounds.minIndex.y);
+        minIndex.z = std::max(minIndex.z, markBounds.minIndex.z);
+
+        maxIndex.x = std::min(maxIndex.x, markBounds.maxIndex.x);
+        maxIndex.y = std::min(maxIndex.y, markBounds.maxIndex.y);
+        maxIndex.z = std::min(maxIndex.z, markBounds.maxIndex.z);
+    }
+
+    if (minIndex.x > maxIndex.x ||
+        minIndex.y > maxIndex.y ||
+        minIndex.z > maxIndex.z)
+    {
+        return stats;
+    }
 
     for (int ix = minIndex.x;
         ix <= maxIndex.x;
@@ -744,7 +763,12 @@ VoxelMeshBuildResult VoxelMeshBuilder::BuildVoxelSpaceFromTriangles(
             ComputeTriangleInfluenceRange(tri, options, outSpace);
         AddMarkStats(
             result,
-            MarkTriangleToVoxelSpace(tri, options, outSpace, range));
+            MarkTriangleToVoxelSpace(
+                tri,
+                options,
+                outSpace,
+                range,
+                bounds));
     }
     result.voxelMarkMs = ElapsedMs(markStart, Now());
 
@@ -939,7 +963,8 @@ VoxelMeshBuildResult VoxelMeshBuilder::BuildVoxelSpaceFromTrianglesInBox(
                 triangles[static_cast<std::size_t>(triangleId)],
                 options,
                 outSpace,
-                filteredInfluenceRanges[i]));
+                filteredInfluenceRanges[i],
+                bounds));
     }
     result.voxelMarkMs = ElapsedMs(markStart, Now());
 
@@ -1128,7 +1153,8 @@ VoxelMeshBuildResult VoxelMeshBuilder::AppendVoxelSpaceFromTrianglesInBox(
                 triangles[static_cast<std::size_t>(triangleId)],
                 options,
                 outSpace,
-                filteredInfluenceRanges[i]));
+                filteredInfluenceRanges[i],
+                appendBounds));
     }
     result.voxelMarkMs = ElapsedMs(markStart, Now());
 

@@ -5,6 +5,7 @@
 
 #include <cstdlib>
 #include <cstdio>
+#include <cmath>
 #include <fstream>
 #include <sstream>
 
@@ -426,6 +427,96 @@ bool TestVoxelChunkCacheReusesTriangleInfluenceRanges()
     return ok;
 }
 
+bool TestAppendVoxelSpaceClipsMarkRangeToWriteBounds()
+{
+    std::vector<MeshTriangle> triangles;
+    triangles.push_back(
+        { Vec(-8, -8, 0), Vec(12, -8, 0), Vec(-8, 12, 0) }
+    );
+
+    VoxelMeshBuildOptions options;
+    options.voxelSize = 1.0;
+    options.clearance = 2.0;
+    options.conservativeClearance = true;
+    options.storeFreeCells = false;
+
+    MeshAABB buildBox;
+    buildBox.minP = Vec(-1, -1, -1);
+    buildBox.maxP = Vec(2, 2, 1);
+
+    VoxelSpace referenceSpace;
+    const VoxelMeshBuildResult referenceResult =
+        VoxelMeshBuilder::BuildVoxelSpaceFromTrianglesInBox(
+            triangles,
+            nullptr,
+            buildBox,
+            options,
+            referenceSpace
+        );
+
+    VoxelSpace appendSpace(buildBox.minP, options.voxelSize);
+    const VoxelMeshBuildResult appendResult =
+        VoxelMeshBuilder::AppendVoxelSpaceFromTrianglesInBox(
+            triangles,
+            nullptr,
+            buildBox,
+            options,
+            appendSpace
+        );
+
+    bool ok = true;
+    ok &= Expect(
+        referenceResult.success && appendResult.success,
+        "reference and append builds should succeed");
+    ok &= Expect(
+        appendResult.outOfBoundsVoxelCount == 0,
+        "append mark range should be clipped to write bounds");
+    ok &= Expect(
+        appendResult.voxelVisitCount ==
+            appendResult.distanceCalculationCount,
+        "clipped append range should not visit voxels outside bounds");
+    ok &= Expect(
+        appendResult.voxelVisitCount > 0,
+        "append build should still mark voxels inside bounds");
+
+    const VoxelBounds bounds = referenceResult.bounds;
+    for (int ix = bounds.minIndex.x; ix <= bounds.maxIndex.x; ++ix)
+    {
+        for (int iy = bounds.minIndex.y; iy <= bounds.maxIndex.y; ++iy)
+        {
+            for (int iz = bounds.minIndex.z; iz <= bounds.maxIndex.z; ++iz)
+            {
+                const VoxelIndex index(ix, iy, iz);
+                ok &= Expect(
+                    appendSpace.GetCellState(index) ==
+                        referenceSpace.GetCellState(index),
+                    "clipped append should preserve voxel states");
+
+                const VoxelCell* appendCell = appendSpace.FindCell(index);
+                const VoxelCell* referenceCell =
+                    referenceSpace.FindCell(index);
+
+                if (appendCell != nullptr || referenceCell != nullptr)
+                {
+                    ok &= Expect(
+                        appendCell != nullptr && referenceCell != nullptr,
+                        "clipped append should preserve stored cells");
+                    if (appendCell != nullptr && referenceCell != nullptr)
+                    {
+                        ok &= Expect(
+                            std::fabs(
+                                appendCell->distanceToSurface -
+                                referenceCell->distanceToSurface) < 1.0e-9,
+                            "clipped append should preserve distances");
+                    }
+                }
+            }
+        }
+    }
+
+    return ok;
+}
+
 bool TestVoxelChunkBoundsVtkExport()
 {
     const std::string filePath = "test_lazy_chunk_bounds.vtk";
@@ -482,6 +573,7 @@ int main()
     ok &= TestVoxelChunkCacheNegativeAndAdjacentChunks();
     ok &= TestVoxelChunkCachePaddingExpandsBuildCoverage();
     ok &= TestVoxelChunkCacheReusesTriangleInfluenceRanges();
+    ok &= TestAppendVoxelSpaceClipsMarkRangeToWriteBounds();
     ok &= TestVoxelChunkBoundsVtkExport();
     return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }

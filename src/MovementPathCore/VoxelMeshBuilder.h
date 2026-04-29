@@ -288,7 +288,8 @@ private:
         const MeshTriangle& tri,
         const VoxelMeshBuildOptions& options,
         VoxelSpace& space,
-        const VoxelTriangleInfluenceRange& influenceRange);
+        const VoxelTriangleInfluenceRange& influenceRange,
+        const VoxelBounds& markBounds);
 
     static void StoreFreeCellsInBounds(
         const VoxelBounds& bounds,
