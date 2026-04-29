@@ -1560,3 +1560,31 @@ box_long_face_to_face / lazy success=true cost=85.2 chunks=35 measuredMs≈126
 
 备注：
 - 完整 `MovementPath.exe` 链接时本地存在旧进程句柄占用，触发 `LNK1168`。核心库、测试目标和 benchmark 目标已成功构建并验证。
+
+### 2026-04-29：路径显示端点对齐接口入参
+本轮处理 VTK path 显示中起点/终点与接口入参不一致的问题。
+
+原因：
+- A* 的搜索路径是 `VoxelIndex` 序列，点路径默认由 voxel center 转换得到。
+- 当 `snapStartGoalToWalkable=true` 时，A* 会把接口入参点吸附到可通行 voxel；因此 raw/optimized 的首尾 voxel center 可能与 `scenario.startPoint` / `scenario.goalPoint` 不一致。
+- 这是算法内部必要行为，但不应直接作为对外显示路径的首尾坐标。
+
+修改：
+- 在 planner 结果层增加显示语义修正：`astarResult.pointPath` 和 `optimizeResult.pointPath` 的首尾替换为接口传入的 start/goal 点。
+- `voxelPath` 保持 snapped voxel 序列不变，用于 A*、碰撞/可通行性判断和 voxel 可视化。
+- optimized polyline VTK 改为直接导出修正后的 `pointPath`，不再从 `voxelPath` 重新转换 voxel center。
+- 补充测试，验证 local/lazy 两类 planner 的 A* point path 和 optimized point path 首尾均等于接口入参点。
+
+验证：
+```text
+ctest --test-dir out\build\x64-Debug --output-on-failure
+100% tests passed, 0 tests failed out of 3
+
+MovementPathBenchmark.exe
+sphere_pole_to_pole / lazy success=true cost=209.2 chunks=236
+box_long_face_to_face / lazy success=true cost=85.2 chunks=35
+```
+
+说明：
+- `optimized_path_polyline.vtk` 现在用于观察真实接口端点到端点的显示路径。
+- `optimized_path_voxels.vtk` 仍显示 snapped voxel 的 Start/Goal 单元，这是体素搜索空间的内部结果，不代表接口点被修改。

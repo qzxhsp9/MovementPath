@@ -56,6 +56,24 @@ VoxelPlannerExecutionMode ToExecutionMode(
     return VoxelPlannerExecutionMode::FullMeshBounds;
 }
 
+void ReplacePathEndpoints(
+    std::vector<Vec>& points,
+    const Vec& startPoint,
+    const Vec& goalPoint)
+{
+    if (points.empty())
+    {
+        return;
+    }
+
+    points.front() = startPoint;
+
+    if (points.size() > 1)
+    {
+        points.back() = goalPoint;
+    }
+}
+
 void PreserveLazyAttemptOnFallback(
     const VoxelPlanningProfile& lazyProfile,
     VoxelPathPlannerResult& fallbackResult)
@@ -677,6 +695,10 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                 profile.rawPathCount = lazyAStarResult.voxelPath.size();
                 profile.totalCost = lazyAStarResult.totalCost;
                 profile.astarSucceeded = lazyAStarResult.success;
+                ReplacePathEndpoints(
+                    lazyAStarResult.pointPath,
+                    startPoint3D,
+                    goalPoint3D);
                 result.astarResult = lazyAStarResult;
 
                 CountVoxelStates(
@@ -742,6 +764,10 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
 
                     profile.optimizedPathCount = optResult.outputCount;
                     profile.lineCheckCount = optResult.lineCheckCount;
+                    ReplacePathEndpoints(
+                        optResult.pointPath,
+                        startPoint3D,
+                        goalPoint3D);
                     result.optimizeResult = optResult;
                     result.success = true;
                     result.lazyAttemptCost = lazyAStarResult.totalCost;
@@ -756,8 +782,10 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                         ScopedTimer timer(profile.vtkExportMs);
                         VoxelVtkExporter::ExportVoxelSpaceToVtk(
                             lazyVoxelSpace,
-                            options.runOptions.astarPathVtkPath,
+                            options.runOptions.optimizedPathVoxelsVtkPath,
                             {
+                                VoxelState::Occupied,
+                                VoxelState::ClearanceBand,
                                 VoxelState::Start,
                                 VoxelState::Goal,
                                 VoxelState::Path
@@ -765,8 +793,7 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                         );
 
                         VoxelVtkExporter::ExportPathPolylineToVtk(
-                            lazyVoxelSpace,
-                            optResult.voxelPath,
+                            optResult.pointPath,
                             options.runOptions.optimizedPathPolylineVtkPath
                         );
                     }
@@ -955,6 +982,10 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
     }
 
     result.astarResult = astarResult;
+    ReplacePathEndpoints(
+        result.astarResult.pointPath,
+        startPoint3D,
+        goalPoint3D);
 
     if (!profile.buildSucceeded)
     {
@@ -1034,6 +1065,10 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
 
     profile.optimizedPathCount = optResult.outputCount;
     profile.lineCheckCount = optResult.lineCheckCount;
+    ReplacePathEndpoints(
+        optResult.pointPath,
+        startPoint3D,
+        goalPoint3D);
     result.optimizeResult = optResult;
 
     if (options.runOptions.verbose)
@@ -1070,8 +1105,7 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
         );
 
         VoxelVtkExporter::ExportPathPolylineToVtk(
-            voxelSpace,
-            optResult.voxelPath,
+            optResult.pointPath,
             options.runOptions.optimizedPathPolylineVtkPath
         );
     }
@@ -1079,6 +1113,10 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
     profile.storedCellCount = voxelSpace.CellCount();
     result.success = true;
     result.astarResult = astarResult;
+    ReplacePathEndpoints(
+        result.astarResult.pointPath,
+        startPoint3D,
+        goalPoint3D);
 
     return result;
 }

@@ -7,6 +7,16 @@
 
 namespace
 {
+bool IsNear(
+    const Vec& p,
+    const gp_Pnt& q,
+    double tolerance = 1.0e-9)
+{
+    return std::abs(p.x - q.X()) <= tolerance &&
+        std::abs(p.y - q.Y()) <= tolerance &&
+        std::abs(p.z - q.Z()) <= tolerance;
+}
+
 bool TestLocalPlannerDefaultBehavior(
     const VoxelPlanningScenario& scenario,
     VoxelPathPlannerResult& localResult)
@@ -53,6 +63,20 @@ bool TestLocalPlannerDefaultBehavior(
     ok &= Expect(
         localResult.hasFinalSearchBounds,
         "planner result should expose final search bounds");
+    ok &= Expect(
+        !localResult.astarResult.pointPath.empty() &&
+            IsNear(localResult.astarResult.pointPath.front(),
+                scenario.startPoint) &&
+            IsNear(localResult.astarResult.pointPath.back(),
+                scenario.goalPoint),
+        "A* point path should preserve API start and goal points");
+    ok &= Expect(
+        !localResult.optimizeResult.pointPath.empty() &&
+            IsNear(localResult.optimizeResult.pointPath.front(),
+                scenario.startPoint) &&
+            IsNear(localResult.optimizeResult.pointPath.back(),
+                scenario.goalPoint),
+        "optimized point path should preserve API start and goal points");
 
     return ok;
 }
@@ -194,6 +218,20 @@ bool TestPlannerLazySuccessWithoutFallback(
     ok &= Expect(
         lazyResult.profile.totalCost <= baselineResult.profile.totalCost * 1.25,
         "lazy planner cost should stay close to full baseline");
+    ok &= Expect(
+        !lazyResult.astarResult.pointPath.empty() &&
+            IsNear(lazyResult.astarResult.pointPath.front(),
+                scenario.startPoint) &&
+            IsNear(lazyResult.astarResult.pointPath.back(),
+                scenario.goalPoint),
+        "lazy A* point path should preserve API start and goal points");
+    ok &= Expect(
+        !lazyResult.optimizeResult.pointPath.empty() &&
+            IsNear(lazyResult.optimizeResult.pointPath.front(),
+                scenario.startPoint) &&
+            IsNear(lazyResult.optimizeResult.pointPath.back(),
+                scenario.goalPoint),
+        "lazy optimized point path should preserve API start and goal points");
 
     return ok;
 }
