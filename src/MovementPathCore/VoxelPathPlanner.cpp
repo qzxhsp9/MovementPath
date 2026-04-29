@@ -86,6 +86,24 @@ void PreserveLazyAttemptOnFallback(
         lazyProfile.lazyCandidateTriangleCount;
     fallbackResult.profile.lazyRawCandidateTriangleCount =
         lazyProfile.lazyRawCandidateTriangleCount;
+    fallbackResult.profile.lazyVoxelVisitCount =
+        lazyProfile.lazyVoxelVisitCount;
+    fallbackResult.profile.lazyOutOfBoundsVoxelCount =
+        lazyProfile.lazyOutOfBoundsVoxelCount;
+    fallbackResult.profile.lazyDistanceCalculationCount =
+        lazyProfile.lazyDistanceCalculationCount;
+    fallbackResult.profile.lazyDistanceImprovedCount =
+        lazyProfile.lazyDistanceImprovedCount;
+    fallbackResult.profile.lazyStateWriteCount =
+        lazyProfile.lazyStateWriteCount;
+    fallbackResult.profile.lazyOccupiedWriteCount =
+        lazyProfile.lazyOccupiedWriteCount;
+    fallbackResult.profile.lazyClearanceWriteCount =
+        lazyProfile.lazyClearanceWriteCount;
+    fallbackResult.profile.lazyInfluenceCacheHitCount =
+        lazyProfile.lazyInfluenceCacheHitCount;
+    fallbackResult.profile.lazyInfluenceCacheMissCount =
+        lazyProfile.lazyInfluenceCacheMissCount;
 }
 
 MeshAABB MakeStartGoalBuildBox(
@@ -279,6 +297,20 @@ void CopyLazyStatsToProfile(
         stats.totalCandidateTriangleCount;
     profile.lazyRawCandidateTriangleCount =
         stats.totalRawCandidateTriangleCount;
+    profile.lazyVoxelVisitCount = stats.totalVoxelVisitCount;
+    profile.lazyOutOfBoundsVoxelCount =
+        stats.totalOutOfBoundsVoxelCount;
+    profile.lazyDistanceCalculationCount =
+        stats.totalDistanceCalculationCount;
+    profile.lazyDistanceImprovedCount =
+        stats.totalDistanceImprovedCount;
+    profile.lazyStateWriteCount = stats.totalStateWriteCount;
+    profile.lazyOccupiedWriteCount = stats.totalOccupiedWriteCount;
+    profile.lazyClearanceWriteCount = stats.totalClearanceWriteCount;
+    profile.lazyInfluenceCacheHitCount =
+        stats.totalInfluenceCacheHitCount;
+    profile.lazyInfluenceCacheMissCount =
+        stats.totalInfluenceCacheMissCount;
 }
 
 bool ComputeTrianglesAABBForPlanner(
@@ -1088,6 +1120,24 @@ void VoxelPathPlanner::PrintProfile(
         << profile.lazyCandidateTriangleCount << std::endl;
     std::cout << "Lazy raw candidate triangle count: "
         << profile.lazyRawCandidateTriangleCount << std::endl;
+    std::cout << "Lazy voxel visit count: "
+        << profile.lazyVoxelVisitCount << std::endl;
+    std::cout << "Lazy out-of-bounds voxel count: "
+        << profile.lazyOutOfBoundsVoxelCount << std::endl;
+    std::cout << "Lazy distance calculation count: "
+        << profile.lazyDistanceCalculationCount << std::endl;
+    std::cout << "Lazy distance improved count: "
+        << profile.lazyDistanceImprovedCount << std::endl;
+    std::cout << "Lazy state write count: "
+        << profile.lazyStateWriteCount << std::endl;
+    std::cout << "Lazy occupied write count: "
+        << profile.lazyOccupiedWriteCount << std::endl;
+    std::cout << "Lazy clearance write count: "
+        << profile.lazyClearanceWriteCount << std::endl;
+    std::cout << "Lazy influence cache hit count: "
+        << profile.lazyInfluenceCacheHitCount << std::endl;
+    std::cout << "Lazy influence cache miss count: "
+        << profile.lazyInfluenceCacheMissCount << std::endl;
     std::cout << "Stored cell count: "
         << profile.storedCellCount << std::endl;
     std::cout << "Occupied count: "

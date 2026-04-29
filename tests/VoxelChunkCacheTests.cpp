@@ -368,6 +368,64 @@ bool TestVoxelChunkCachePaddingExpandsBuildCoverage()
     return ok;
 }
 
+bool TestVoxelChunkCacheReusesTriangleInfluenceRanges()
+{
+    std::vector<MeshTriangle> triangles;
+    triangles.push_back(
+        { Vec(0, 0, 0), Vec(10, 0, 0), Vec(0, 10, 0) }
+    );
+
+    VoxelMeshBuildOptions buildOptions;
+    buildOptions.voxelSize = 1.0;
+    buildOptions.clearance = 2.0;
+    buildOptions.conservativeClearance = true;
+
+    VoxelChunkCacheOptions cacheOptions;
+    cacheOptions.chunkVoxelSize = 4;
+
+    VoxelChunkCache cache;
+    bool ok = Expect(
+        cache.Configure(
+            &triangles,
+            nullptr,
+            buildOptions,
+            cacheOptions),
+        "chunk cache should configure for influence cache test");
+
+    VoxelSpace space(Vec(-1, -1, -1), buildOptions.voxelSize);
+    const VoxelIndex firstIndex = space.WorldToIndex(Vec(1, 1, 0));
+    const VoxelIndex secondIndex = space.WorldToIndex(Vec(5, 1, 0));
+
+    ok &= Expect(
+        cache.EnsureChunkForIndex(space, firstIndex),
+        "first chunk should build");
+    ok &= Expect(
+        cache.EnsureChunkForIndex(space, secondIndex),
+        "second chunk should build");
+
+    const VoxelChunkCacheStats stats = cache.GetStats();
+    ok &= Expect(
+        stats.chunkBuildCount == 2,
+        "two distinct chunks should be built");
+    ok &= Expect(
+        stats.totalInfluenceCacheMissCount == 1,
+        "first triangle influence lookup should miss once");
+    ok &= Expect(
+        stats.totalInfluenceCacheHitCount >= 1,
+        "second chunk should reuse cached triangle influence");
+    ok &= Expect(
+        stats.totalVoxelVisitCount > 0,
+        "chunk cache should record visited voxels");
+    ok &= Expect(
+        stats.totalDistanceCalculationCount > 0,
+        "chunk cache should record distance calculations");
+    ok &= Expect(
+        stats.totalStateWriteCount > 0,
+        "chunk cache should record state writes");
+
+    return ok;
+}
+
 bool TestVoxelChunkBoundsVtkExport()
 {
     const std::string filePath = "test_lazy_chunk_bounds.vtk";
@@ -423,6 +481,7 @@ int main()
     ok &= TestVoxelChunkCacheClearResetsState();
     ok &= TestVoxelChunkCacheNegativeAndAdjacentChunks();
     ok &= TestVoxelChunkCachePaddingExpandsBuildCoverage();
+    ok &= TestVoxelChunkCacheReusesTriangleInfluenceRanges();
     ok &= TestVoxelChunkBoundsVtkExport();
     return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }

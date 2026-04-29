@@ -46,6 +46,15 @@ struct VoxelPlanningProfile
     std::size_t lazyFailedBuildCount = 0;
     std::size_t lazyCandidateTriangleCount = 0;
     std::size_t lazyRawCandidateTriangleCount = 0;
+    std::size_t lazyVoxelVisitCount = 0;
+    std::size_t lazyOutOfBoundsVoxelCount = 0;
+    std::size_t lazyDistanceCalculationCount = 0;
+    std::size_t lazyDistanceImprovedCount = 0;
+    std::size_t lazyStateWriteCount = 0;
+    std::size_t lazyOccupiedWriteCount = 0;
+    std::size_t lazyClearanceWriteCount = 0;
+    std::size_t lazyInfluenceCacheHitCount = 0;
+    std::size_t lazyInfluenceCacheMissCount = 0;
     std::size_t storedCellCount = 0;
     std::size_t occupiedCount = 0;
     std::size_t clearanceBandCount = 0;

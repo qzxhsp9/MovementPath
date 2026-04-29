@@ -70,6 +70,19 @@ static double ElapsedMs(
         end - start).count();
 }
 
+static void AddMarkStats(
+    VoxelMeshBuildResult& result,
+    const VoxelTriangleMarkStats& stats)
+{
+    result.voxelVisitCount += stats.voxelVisitCount;
+    result.outOfBoundsVoxelCount += stats.outOfBoundsVoxelCount;
+    result.distanceCalculationCount += stats.distanceCalculationCount;
+    result.distanceImprovedCount += stats.distanceImprovedCount;
+    result.stateWriteCount += stats.stateWriteCount;
+    result.occupiedWriteCount += stats.occupiedWriteCount;
+    result.clearanceWriteCount += stats.clearanceWriteCount;
+}
+
 static bool ComputeTrianglesAABBLocal(
     const std::vector<MeshTriangle>& triangles,
     MeshAABB& outBox)
@@ -538,11 +551,29 @@ void VoxelMeshBuilder::StoreFreeCellsInBounds(
 // 核心：单个三角形写入 VoxelSpace
 // ============================================================
 
-void VoxelMeshBuilder::MarkTriangleToVoxelSpace(
+VoxelTriangleInfluenceRange VoxelMeshBuilder::ComputeTriangleInfluenceRange(
     const MeshTriangle& tri,
     const VoxelMeshBuildOptions& options,
-    VoxelSpace& space)
+    const VoxelSpace& space)
 {
+    const double halfDiag = space.GetHalfDiagonal();
+
+    VoxelTriangleInfluenceRange range;
+    range.influenceBox =
+        ComputeTriangleInfluenceAABB(tri, options, halfDiag);
+    range.minIndex = space.WorldToIndex(range.influenceBox.minP);
+    range.maxIndex = space.WorldToIndex(range.influenceBox.maxP);
+    NormalizeIndexRange(range.minIndex, range.maxIndex);
+    return range;
+}
+
+VoxelTriangleMarkStats VoxelMeshBuilder::MarkTriangleToVoxelSpace(
+    const MeshTriangle& tri,
+    const VoxelMeshBuildOptions& options,
+    VoxelSpace& space,
+    const VoxelTriangleInfluenceRange& influenceRange)
+{
+    VoxelTriangleMarkStats stats;
     const double halfDiag = space.GetHalfDiagonal();
 
     double effectiveClearance = options.clearance;
@@ -552,38 +583,53 @@ void VoxelMeshBuilder::MarkTriangleToVoxelSpace(
         effectiveClearance += halfDiag;
     }
 
-    MeshAABB expandedBox =
-        ComputeTriangleInfluenceAABB(tri, options, halfDiag);
+    VoxelIndex minIndex = influenceRange.minIndex;
+    VoxelIndex maxIndex = influenceRange.maxIndex;
 
-    VoxelIndex minIndex = space.WorldToIndex(expandedBox.minP);
-    VoxelIndex maxIndex = space.WorldToIndex(expandedBox.maxP);
-
-    NormalizeIndexRange(minIndex, maxIndex);
-
-    for (int ix = minIndex.x; ix <= maxIndex.x; ++ix)
+    for (int ix = minIndex.x;
+        ix <= maxIndex.x;
+        ++ix)
     {
-        for (int iy = minIndex.y; iy <= maxIndex.y; ++iy)
+        for (int iy = minIndex.y;
+            iy <= maxIndex.y;
+            ++iy)
         {
-            for (int iz = minIndex.z; iz <= maxIndex.z; ++iz)
+            for (int iz = minIndex.z;
+                iz <= maxIndex.z;
+                ++iz)
             {
+                ++stats.voxelVisitCount;
                 VoxelIndex index(ix, iy, iz);
 
                 if (!space.IsInsideSearchBounds(index))
                 {
+                    ++stats.outOfBoundsVoxelCount;
                     continue;
                 }
 
                 Vec center = space.IndexToCenter(index);
 
                 const double d = DistancePointToTriangle(center, tri);
+                ++stats.distanceCalculationCount;
+
+                const VoxelCell* oldCell = space.FindCell(index);
+                const bool distanceWillImprove =
+                    oldCell == nullptr ||
+                    d < oldCell->distanceToSurface;
 
                 space.SetCellDistanceIfSmaller(index, d);
 
-                // 与表面相交的体素：
-                // 体素中心到三角形距离 <= 半体素对角线，认为三角形可能穿过该体素。
+                if (distanceWillImprove)
+                {
+                    ++stats.distanceImprovedCount;
+                }
+
+                // Treat a cell as occupied when the triangle can cross it.
                 if (d <= halfDiag)
                 {
                     space.SetCellState(index, VoxelState::Occupied);
+                    ++stats.stateWriteCount;
+                    ++stats.occupiedWriteCount;
                     continue;
                 }
 
@@ -599,11 +645,15 @@ void VoxelMeshBuilder::MarkTriangleToVoxelSpace(
                             index,
                             VoxelState::ClearanceBand
                         );
+                        ++stats.stateWriteCount;
+                        ++stats.clearanceWriteCount;
                     }
                 }
             }
         }
     }
+
+    return stats;
 }
 
 // ============================================================
@@ -690,7 +740,11 @@ VoxelMeshBuildResult VoxelMeshBuilder::BuildVoxelSpaceFromTriangles(
     const auto markStart = Now();
     for (const MeshTriangle& tri : triangles)
     {
-        MarkTriangleToVoxelSpace(tri, options, outSpace);
+        const VoxelTriangleInfluenceRange range =
+            ComputeTriangleInfluenceRange(tri, options, outSpace);
+        AddMarkStats(
+            result,
+            MarkTriangleToVoxelSpace(tri, options, outSpace, range));
     }
     result.voxelMarkMs = ElapsedMs(markStart, Now());
 
@@ -846,7 +900,9 @@ VoxelMeshBuildResult VoxelMeshBuilder::BuildVoxelSpaceFromTrianglesInBox(
     result.candidateQueryMs = ElapsedMs(candidateQueryStart, Now());
 
     std::vector<int> filteredTriangleIds;
+    std::vector<VoxelTriangleInfluenceRange> filteredInfluenceRanges;
     filteredTriangleIds.reserve(candidateTriangleIds.size());
+    filteredInfluenceRanges.reserve(candidateTriangleIds.size());
 
     const auto candidateFilterStart = Now();
     for (int triangleId : candidateTriangleIds)
@@ -859,26 +915,31 @@ VoxelMeshBuildResult VoxelMeshBuilder::BuildVoxelSpaceFromTrianglesInBox(
 
         const MeshTriangle& tri = triangles[triangleId];
 
-        const MeshAABB influenceBox =
-            ComputeTriangleInfluenceAABB(tri, options, halfDiag);
+        const VoxelTriangleInfluenceRange influenceRange =
+            ComputeTriangleInfluenceRange(tri, options, outSpace);
 
-        if (!IntersectsAABB(influenceBox, buildBox))
+        if (!IntersectsAABB(influenceRange.influenceBox, buildBox))
         {
             continue;
         }
 
         ++candidateTriangleCount;
         filteredTriangleIds.push_back(triangleId);
+        filteredInfluenceRanges.push_back(influenceRange);
     }
     result.candidateFilterMs = ElapsedMs(candidateFilterStart, Now());
 
     const auto markStart = Now();
-    for (int triangleId : filteredTriangleIds)
+    for (std::size_t i = 0; i < filteredTriangleIds.size(); ++i)
     {
-        MarkTriangleToVoxelSpace(
-            triangles[static_cast<std::size_t>(triangleId)],
-            options,
-            outSpace);
+        const int triangleId = filteredTriangleIds[i];
+        AddMarkStats(
+            result,
+            MarkTriangleToVoxelSpace(
+                triangles[static_cast<std::size_t>(triangleId)],
+                options,
+                outSpace,
+                filteredInfluenceRanges[i]));
     }
     result.voxelMarkMs = ElapsedMs(markStart, Now());
 
@@ -917,7 +978,8 @@ VoxelMeshBuildResult VoxelMeshBuilder::AppendVoxelSpaceFromTrianglesInBox(
     const MeshAABB& buildBox,
     const VoxelMeshBuildOptions& options,
     VoxelSpace& outSpace,
-    double extraQueryPadding)
+    double extraQueryPadding,
+    VoxelMeshBuildCache* buildCache)
 {
     VoxelMeshBuildResult result;
     const auto totalStart = Now();
@@ -999,7 +1061,9 @@ VoxelMeshBuildResult VoxelMeshBuilder::AppendVoxelSpaceFromTrianglesInBox(
     result.candidateQueryMs = ElapsedMs(candidateQueryStart, Now());
 
     std::vector<int> filteredTriangleIds;
+    std::vector<VoxelTriangleInfluenceRange> filteredInfluenceRanges;
     filteredTriangleIds.reserve(candidateTriangleIds.size());
+    filteredInfluenceRanges.reserve(candidateTriangleIds.size());
 
     const auto candidateFilterStart = Now();
     for (int triangleId : candidateTriangleIds)
@@ -1010,28 +1074,61 @@ VoxelMeshBuildResult VoxelMeshBuilder::AppendVoxelSpaceFromTrianglesInBox(
             continue;
         }
 
-        const MeshTriangle& tri = triangles[triangleId];
+        VoxelTriangleInfluenceRange influenceRange;
 
-        const MeshAABB influenceBox =
-            ComputeTriangleInfluenceAABB(tri, options, halfDiag);
+        if (buildCache != nullptr)
+        {
+            const auto cacheIt =
+                buildCache->triangleInfluence.find(triangleId);
 
-        if (!IntersectsAABB(influenceBox, buildBox))
+            if (cacheIt != buildCache->triangleInfluence.end())
+            {
+                influenceRange = cacheIt->second;
+                ++result.influenceCacheHitCount;
+            }
+            else
+            {
+                influenceRange = ComputeTriangleInfluenceRange(
+                    triangles[static_cast<std::size_t>(triangleId)],
+                    options,
+                    outSpace);
+                buildCache->triangleInfluence.emplace(
+                    triangleId,
+                    influenceRange);
+                ++result.influenceCacheMissCount;
+            }
+        }
+        else
+        {
+            influenceRange = ComputeTriangleInfluenceRange(
+                triangles[static_cast<std::size_t>(triangleId)],
+                options,
+                outSpace);
+            ++result.influenceCacheMissCount;
+        }
+
+        if (!IntersectsAABB(influenceRange.influenceBox, buildBox))
         {
             continue;
         }
 
         ++candidateTriangleCount;
         filteredTriangleIds.push_back(triangleId);
+        filteredInfluenceRanges.push_back(influenceRange);
     }
     result.candidateFilterMs = ElapsedMs(candidateFilterStart, Now());
 
     const auto markStart = Now();
-    for (int triangleId : filteredTriangleIds)
+    for (std::size_t i = 0; i < filteredTriangleIds.size(); ++i)
     {
-        MarkTriangleToVoxelSpace(
-            triangles[static_cast<std::size_t>(triangleId)],
-            options,
-            outSpace);
+        const int triangleId = filteredTriangleIds[i];
+        AddMarkStats(
+            result,
+            MarkTriangleToVoxelSpace(
+                triangles[static_cast<std::size_t>(triangleId)],
+                options,
+                outSpace,
+                filteredInfluenceRanges[i]));
     }
     result.voxelMarkMs = ElapsedMs(markStart, Now());
 

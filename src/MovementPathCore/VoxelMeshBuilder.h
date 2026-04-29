@@ -159,6 +159,15 @@ struct VoxelMeshBuildResult
     std::size_t rawCandidateTriangleCount = 0;
     std::size_t hashQueryCellCount = 0;
     std::size_t hashRawTriangleCount = 0;
+    std::size_t voxelVisitCount = 0;
+    std::size_t outOfBoundsVoxelCount = 0;
+    std::size_t distanceCalculationCount = 0;
+    std::size_t distanceImprovedCount = 0;
+    std::size_t stateWriteCount = 0;
+    std::size_t occupiedWriteCount = 0;
+    std::size_t clearanceWriteCount = 0;
+    std::size_t influenceCacheHitCount = 0;
+    std::size_t influenceCacheMissCount = 0;
 
     // Full/local builders report current VoxelSpace totals. Append builds do
     // not scan the whole existing space per chunk; callers should perform one
@@ -167,6 +176,33 @@ struct VoxelMeshBuildResult
     std::size_t clearanceBandVoxelCount = 0;
 
     VoxelBounds bounds;
+};
+
+struct VoxelTriangleMarkStats
+{
+    // Counts loop pressure inside MarkTriangleToVoxelSpace without changing
+    // how VoxelSpace stores distance/state.
+    std::size_t voxelVisitCount = 0;
+    std::size_t outOfBoundsVoxelCount = 0;
+    std::size_t distanceCalculationCount = 0;
+    std::size_t distanceImprovedCount = 0;
+    std::size_t stateWriteCount = 0;
+    std::size_t occupiedWriteCount = 0;
+    std::size_t clearanceWriteCount = 0;
+};
+
+struct VoxelTriangleInfluenceRange
+{
+    // Cached per triangle because lazy chunks may test and mark the same
+    // triangle many times against different chunk boxes.
+    MeshAABB influenceBox;
+    VoxelIndex minIndex;
+    VoxelIndex maxIndex;
+};
+
+struct VoxelMeshBuildCache
+{
+    std::unordered_map<int, VoxelTriangleInfluenceRange> triangleInfluence;
 };
 
 // ============================================================
@@ -211,7 +247,8 @@ public:
         const MeshAABB& buildBox,
         const VoxelMeshBuildOptions& options,
         VoxelSpace& outSpace,
-        double extraQueryPadding = 0.0);
+        double extraQueryPadding = 0.0,
+        VoxelMeshBuildCache* buildCache = nullptr);
 
 private:
     static MeshAABB ComputeTriangleAABB(
@@ -242,10 +279,16 @@ private:
         VoxelIndex& minIndex,
         VoxelIndex& maxIndex);
 
-    static void MarkTriangleToVoxelSpace(
+    static VoxelTriangleInfluenceRange ComputeTriangleInfluenceRange(
         const MeshTriangle& tri,
         const VoxelMeshBuildOptions& options,
-        VoxelSpace& space);
+        const VoxelSpace& space);
+
+    static VoxelTriangleMarkStats MarkTriangleToVoxelSpace(
+        const MeshTriangle& tri,
+        const VoxelMeshBuildOptions& options,
+        VoxelSpace& space,
+        const VoxelTriangleInfluenceRange& influenceRange);
 
     static void StoreFreeCellsInBounds(
         const VoxelBounds& bounds,

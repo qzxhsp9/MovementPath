@@ -62,6 +62,15 @@ struct BenchmarkRow
     std::size_t lazyFailedBuildCount = 0;
     std::size_t lazyCandidateTriangleCount = 0;
     std::size_t lazyRawCandidateTriangleCount = 0;
+    std::size_t lazyVoxelVisitCount = 0;
+    std::size_t lazyOutOfBoundsVoxelCount = 0;
+    std::size_t lazyDistanceCalculationCount = 0;
+    std::size_t lazyDistanceImprovedCount = 0;
+    std::size_t lazyStateWriteCount = 0;
+    std::size_t lazyOccupiedWriteCount = 0;
+    std::size_t lazyClearanceWriteCount = 0;
+    std::size_t lazyInfluenceCacheHitCount = 0;
+    std::size_t lazyInfluenceCacheMissCount = 0;
 
     int astarVisitedCount = 0;
     std::size_t rawPathCount = 0;
@@ -215,6 +224,20 @@ BenchmarkRow MakeRow(
         profile.lazyCandidateTriangleCount;
     row.lazyRawCandidateTriangleCount =
         profile.lazyRawCandidateTriangleCount;
+    row.lazyVoxelVisitCount = profile.lazyVoxelVisitCount;
+    row.lazyOutOfBoundsVoxelCount =
+        profile.lazyOutOfBoundsVoxelCount;
+    row.lazyDistanceCalculationCount =
+        profile.lazyDistanceCalculationCount;
+    row.lazyDistanceImprovedCount =
+        profile.lazyDistanceImprovedCount;
+    row.lazyStateWriteCount = profile.lazyStateWriteCount;
+    row.lazyOccupiedWriteCount = profile.lazyOccupiedWriteCount;
+    row.lazyClearanceWriteCount = profile.lazyClearanceWriteCount;
+    row.lazyInfluenceCacheHitCount =
+        profile.lazyInfluenceCacheHitCount;
+    row.lazyInfluenceCacheMissCount =
+        profile.lazyInfluenceCacheMissCount;
     row.astarVisitedCount = profile.astarVisitedCount;
     row.rawPathCount = profile.rawPathCount;
     row.optimizedPathCount = profile.optimizedPathCount;
@@ -239,6 +262,11 @@ void WriteCsvHeader(std::ostream& os)
         << "lazyEnsureCallCount,lazyChunkBuildCount,"
         << "lazyCacheHitCount,lazyFailedBuildCount,"
         << "lazyCandidateTriangleCount,lazyRawCandidateTriangleCount,"
+        << "lazyVoxelVisitCount,lazyOutOfBoundsVoxelCount,"
+        << "lazyDistanceCalculationCount,lazyDistanceImprovedCount,"
+        << "lazyStateWriteCount,lazyOccupiedWriteCount,"
+        << "lazyClearanceWriteCount,lazyInfluenceCacheHitCount,"
+        << "lazyInfluenceCacheMissCount,"
         << "astarVisitedCount,rawPathCount,optimizedPathCount,totalCost,"
         << "lazyAttemptCost,fallbackCost\n";
 }
@@ -278,6 +306,15 @@ void WriteCsvRow(
         << row.lazyFailedBuildCount << ","
         << row.lazyCandidateTriangleCount << ","
         << row.lazyRawCandidateTriangleCount << ","
+        << row.lazyVoxelVisitCount << ","
+        << row.lazyOutOfBoundsVoxelCount << ","
+        << row.lazyDistanceCalculationCount << ","
+        << row.lazyDistanceImprovedCount << ","
+        << row.lazyStateWriteCount << ","
+        << row.lazyOccupiedWriteCount << ","
+        << row.lazyClearanceWriteCount << ","
+        << row.lazyInfluenceCacheHitCount << ","
+        << row.lazyInfluenceCacheMissCount << ","
         << row.astarVisitedCount << ","
         << row.rawPathCount << ","
         << row.optimizedPathCount << ","

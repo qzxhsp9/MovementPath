@@ -1416,3 +1416,64 @@ box_long_face_to_face / lazy:
 - 继续分析 `MarkTriangleToVoxelSpace()` 内部：统计被遍历 voxel 数、实际写入 voxel 数、距离计算次数。
 - 对同一 triangle 在多个 chunk 中的 influence index range 做缓存，避免重复计算 triangle influence AABB 和 index range。
 - 评估是否需要在 `VoxelSpace::SetCellDistanceIfSmaller()` 层增加“距离没有变小则少写状态”的细粒度统计，而不是立即改变行为。
+
+### 2026-04-29：MarkTriangleToVoxelSpace 内部统计与 triangle influence range 缓存
+本轮继续沿着“先定位成本来源，不调 lazy 参数”的方向推进，重点拆分 `MarkTriangleToVoxelSpace()` 内部成本。
+
+修改：
+- `VoxelMeshBuildResult` 增加 voxel 标记阶段统计：`voxelVisitCount`、`outOfBoundsVoxelCount`、`distanceCalculationCount`、`distanceImprovedCount`、`stateWriteCount`、`occupiedWriteCount`、`clearanceWriteCount`。
+- `VoxelChunkCacheStats`、`VoxelPlanningProfile` 和 benchmark CSV 同步暴露 lazy 聚合统计，便于对比 chunk 构建中的遍历、距离计算和状态写入规模。
+- 新增 `VoxelTriangleInfluenceRange` / `VoxelMeshBuildCache`，按 triangle id 缓存 influence AABB 与 voxel index range；lazy chunk 构建时同一 triangle 跨 chunk 复用该 range。
+- `MarkTriangleToVoxelSpace()` 改为接收已计算的 influence range，避免在候选过滤和实际标记阶段重复计算 triangle influence AABB / index range。
+- `VoxelSpace::SetCellDistanceIfSmaller()` 暂不改变行为；当前只在调用前用 `FindCell()` 统计“距离是否会变小”。这是诊断数据，不引入“距离没变小就跳过状态写入”的行为变更。
+- 补充 `VoxelChunkCacheReusesTriangleInfluenceRanges` 单测，覆盖跨 chunk influence range cache hit/miss 和新增标记统计非零。
+
+验证：
+```text
+ctest --test-dir out\build\x64-Debug --output-on-failure
+100% tests passed, 0 tests failed out of 3
+
+MovementPathBenchmark.exe
+sphere_pole_to_pole / full success=true cost=209.2 measuredMs≈2900
+sphere_pole_to_pole / local success=true cost=244.9 measuredMs≈2600
+sphere_pole_to_pole / lazy success=true cost=209.2 chunks=236 measuredMs≈2773
+box_long_face_to_face / full success=true cost=85.2 measuredMs≈139
+box_long_face_to_face / local success=true cost=85.2 measuredMs≈121
+box_long_face_to_face / lazy success=true cost=85.2 chunks=35 measuredMs≈135
+```
+
+本轮数据摘录：
+```text
+sphere_pole_to_pole / lazy:
+  lazyVoxelVisitCount=27034963
+  lazyOutOfBoundsVoxelCount=21893788
+  lazyDistanceCalculationCount=5141175
+  lazyDistanceImprovedCount=1449289
+  lazyStateWriteCount=1533215
+  lazyOccupiedWriteCount=116338
+  lazyClearanceWriteCount=1416877
+  lazyInfluenceCacheHitCount=27775
+  lazyInfluenceCacheMissCount=2004
+
+box_long_face_to_face / lazy:
+  lazyVoxelVisitCount=3213056
+  lazyOutOfBoundsVoxelCount=3077852
+  lazyDistanceCalculationCount=135204
+  lazyDistanceImprovedCount=63886
+  lazyStateWriteCount=72808
+  lazyOccupiedWriteCount=13728
+  lazyClearanceWriteCount=59080
+  lazyInfluenceCacheHitCount=226
+  lazyInfluenceCacheMissCount=12
+```
+
+结论：
+- influence range cache 生效：两个 benchmark 的 miss 数等于场景 triangle 数，hit 数反映同一 triangle 被多个 chunk 重复触达。
+- 当前 lazy 的主要成本仍在 voxel 遍历和距离计算，而不是 influence AABB / index range 计算；range 缓存是必要基础设施，但不是决定性加速点。
+- `sphere_pole_to_pole` 中 out-of-bounds voxel visit 占比很高，说明即使写入范围已限制到 chunk core，triangle influence range 仍会在 `MarkTriangleToVoxelSpace()` 内遍历大量 chunk 外 voxel，再由 `IsInsideSearchBounds()` 过滤。
+- 下一步更有效的方向是把 mark loop 的 index range 裁剪到当前 append/build box bounds 内，而不是在完整 triangle influence range 上遍历后再丢弃 out-of-bounds voxel。该改动属于减少无效遍历，不改变体素判定规则。
+
+下一步建议：
+- 在 `MarkTriangleToVoxelSpace()` 中引入“mark bounds 裁剪后的 index range”，对 append chunk 只遍历当前 chunk write bounds 与 triangle influence range 的交集。
+- 保持 `VoxelSpace::SetCellDistanceIfSmaller()` 行为不变，先继续用现有统计判断“距离未改善但状态仍写入”的比例。
+- 增加针对 index range 裁剪的单测：裁剪前后路径 cost、occupied/clearance 结果一致，且 out-of-bounds visit 显著下降。

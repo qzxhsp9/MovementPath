@@ -76,7 +76,8 @@ bool VoxelChunkCache::EnsureChunkForIndex(
             buildBox,
             m_buildOptions,
             space,
-            m_cacheOptions.buildPadding
+            m_cacheOptions.buildPadding,
+            &m_buildCache
         );
 
     if (!result.success)
@@ -92,6 +93,16 @@ bool VoxelChunkCache::EnsureChunkForIndex(
     m_stats.totalCandidateTriangleCount += result.candidateTriangleCount;
     m_stats.totalRawCandidateTriangleCount +=
         result.rawCandidateTriangleCount;
+    m_stats.totalVoxelVisitCount += result.voxelVisitCount;
+    m_stats.totalOutOfBoundsVoxelCount += result.outOfBoundsVoxelCount;
+    m_stats.totalDistanceCalculationCount +=
+        result.distanceCalculationCount;
+    m_stats.totalDistanceImprovedCount += result.distanceImprovedCount;
+    m_stats.totalStateWriteCount += result.stateWriteCount;
+    m_stats.totalOccupiedWriteCount += result.occupiedWriteCount;
+    m_stats.totalClearanceWriteCount += result.clearanceWriteCount;
+    m_stats.totalInfluenceCacheHitCount += result.influenceCacheHitCount;
+    m_stats.totalInfluenceCacheMissCount += result.influenceCacheMissCount;
     m_stats.totalCandidateQueryMs += result.candidateQueryMs;
     m_stats.totalCandidateFilterMs += result.candidateFilterMs;
     m_stats.totalVoxelMarkMs += result.voxelMarkMs;
@@ -132,6 +143,7 @@ void VoxelChunkCache::Clear()
     m_buildOptions = VoxelMeshBuildOptions();
     m_cacheOptions = VoxelChunkCacheOptions();
     m_stats = VoxelChunkCacheStats();
+    m_buildCache = VoxelMeshBuildCache();
     m_hasLastChunk = false;
     m_lastChunk = VoxelChunkIndex();
     m_builtChunks.clear();

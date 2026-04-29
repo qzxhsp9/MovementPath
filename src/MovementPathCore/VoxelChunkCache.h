@@ -26,6 +26,15 @@ struct VoxelChunkCacheStats
     std::size_t failedBuildCount = 0;
     std::size_t totalCandidateTriangleCount = 0;
     std::size_t totalRawCandidateTriangleCount = 0;
+    std::size_t totalVoxelVisitCount = 0;
+    std::size_t totalOutOfBoundsVoxelCount = 0;
+    std::size_t totalDistanceCalculationCount = 0;
+    std::size_t totalDistanceImprovedCount = 0;
+    std::size_t totalStateWriteCount = 0;
+    std::size_t totalOccupiedWriteCount = 0;
+    std::size_t totalClearanceWriteCount = 0;
+    std::size_t totalInfluenceCacheHitCount = 0;
+    std::size_t totalInfluenceCacheMissCount = 0;
 
     double totalCandidateQueryMs = 0.0;
     double totalCandidateFilterMs = 0.0;
@@ -111,6 +120,7 @@ private:
     VoxelMeshBuildOptions m_buildOptions;
     VoxelChunkCacheOptions m_cacheOptions;
     VoxelChunkCacheStats m_stats;
+    VoxelMeshBuildCache m_buildCache;
     bool m_hasLastChunk = false;
     VoxelChunkIndex m_lastChunk;
 
