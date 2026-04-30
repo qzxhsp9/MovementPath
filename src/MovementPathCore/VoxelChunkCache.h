@@ -30,11 +30,17 @@ struct VoxelChunkCacheStats
     std::size_t totalOutOfBoundsVoxelCount = 0;
     std::size_t totalDistanceCalculationCount = 0;
     std::size_t totalDistanceImprovedCount = 0;
+    std::size_t totalDistanceNotImprovedCount = 0;
     std::size_t totalStateWriteCount = 0;
+    std::size_t totalStateUnchangedWriteCount = 0;
     std::size_t totalOccupiedWriteCount = 0;
     std::size_t totalClearanceWriteCount = 0;
     std::size_t totalInfluenceCacheHitCount = 0;
     std::size_t totalInfluenceCacheMissCount = 0;
+    std::size_t minCandidateTriangleCount = 0;
+    std::size_t maxCandidateTriangleCount = 0;
+    std::size_t minRawCandidateTriangleCount = 0;
+    std::size_t maxRawCandidateTriangleCount = 0;
 
     double totalCandidateQueryMs = 0.0;
     double totalCandidateFilterMs = 0.0;

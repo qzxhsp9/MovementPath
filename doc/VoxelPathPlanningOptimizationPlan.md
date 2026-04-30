@@ -137,12 +137,16 @@ box_long_face_to_face / lazy:
 
 ### Step 1：补充更细粒度统计
 
+状态：完成。
+
 - 统计距离未改善次数。
 - 统计状态写入前后状态是否变化。
 - 统计每个 chunk 的 candidate triangle 分布。
 - 统计每个 chunk 的 voxel visit / distance calculation 分布。
 
 ### Step 2：评估 SetCellDistanceIfSmaller 细粒度统计
+
+状态：已完成第一轮统计，不改变行为。
 
 原则：先统计，不改变行为。
 
@@ -152,6 +156,48 @@ box_long_face_to_face / lazy:
 - `stateUnchangedWriteCount`
 - `occupiedOverwriteCount`
 - `clearanceOverwriteCount`
+
+## 2026-04-29 统计增强结果
+
+本轮只增强统计，不改变体素距离、状态写入或路径搜索行为。
+
+新增字段：
+
+- `lazyDistanceNotImprovedCount`
+- `lazyStateUnchangedWriteCount`
+- `lazyMinCandidateTriangleCount`
+- `lazyMaxCandidateTriangleCount`
+- `lazyMinRawCandidateTriangleCount`
+- `lazyMaxRawCandidateTriangleCount`
+
+本轮 benchmark 摘要：
+
+```text
+sphere_pole_to_pole / lazy:
+  distanceCalculationCount=5141175
+  distanceImprovedCount=1449289
+  distanceNotImprovedCount=3691886
+  stateWriteCount=1533215
+  stateUnchangedWriteCount=1259536
+  candidateTriangleCount min/max=5/157
+  rawCandidateTriangleCount min/max=49/294
+
+box_long_face_to_face / lazy:
+  distanceCalculationCount=135204
+  distanceImprovedCount=63886
+  distanceNotImprovedCount=71318
+  stateWriteCount=72808
+  stateUnchangedWriteCount=31381
+  candidateTriangleCount min/max=4/10
+  rawCandidateTriangleCount min/max=4/10
+```
+
+初步判断：
+
+- `sphere_pole_to_pole` 中距离未改善约占 71.8%，状态未变化写入约占 82.2%，无效计算和重复写入比例很高。
+- `box_long_face_to_face` 中距离未改善约占 52.7%，状态未变化写入约占 43.1%，仍有优化空间但压力低于球体场景。
+- 当前数据支持继续研究 chunk-local 二次过滤，而不是优先转向并行化或 benchmark 格式调整。
+- 由于状态未变化写入比例高，后续可以继续细分 `Occupied` 覆盖、`ClearanceBand` 覆盖和状态变化类型，但仍应先统计再改变行为。
 
 ### Step 3：改进有效范围内候选过滤
 

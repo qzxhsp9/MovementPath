@@ -93,12 +93,42 @@ bool VoxelChunkCache::EnsureChunkForIndex(
     m_stats.totalCandidateTriangleCount += result.candidateTriangleCount;
     m_stats.totalRawCandidateTriangleCount +=
         result.rawCandidateTriangleCount;
+    if (m_stats.chunkBuildCount == 1)
+    {
+        m_stats.minCandidateTriangleCount =
+            result.candidateTriangleCount;
+        m_stats.maxCandidateTriangleCount =
+            result.candidateTriangleCount;
+        m_stats.minRawCandidateTriangleCount =
+            result.rawCandidateTriangleCount;
+        m_stats.maxRawCandidateTriangleCount =
+            result.rawCandidateTriangleCount;
+    }
+    else
+    {
+        m_stats.minCandidateTriangleCount = std::min(
+            m_stats.minCandidateTriangleCount,
+            result.candidateTriangleCount);
+        m_stats.maxCandidateTriangleCount = std::max(
+            m_stats.maxCandidateTriangleCount,
+            result.candidateTriangleCount);
+        m_stats.minRawCandidateTriangleCount = std::min(
+            m_stats.minRawCandidateTriangleCount,
+            result.rawCandidateTriangleCount);
+        m_stats.maxRawCandidateTriangleCount = std::max(
+            m_stats.maxRawCandidateTriangleCount,
+            result.rawCandidateTriangleCount);
+    }
     m_stats.totalVoxelVisitCount += result.voxelVisitCount;
     m_stats.totalOutOfBoundsVoxelCount += result.outOfBoundsVoxelCount;
     m_stats.totalDistanceCalculationCount +=
         result.distanceCalculationCount;
     m_stats.totalDistanceImprovedCount += result.distanceImprovedCount;
+    m_stats.totalDistanceNotImprovedCount +=
+        result.distanceNotImprovedCount;
     m_stats.totalStateWriteCount += result.stateWriteCount;
+    m_stats.totalStateUnchangedWriteCount +=
+        result.stateUnchangedWriteCount;
     m_stats.totalOccupiedWriteCount += result.occupiedWriteCount;
     m_stats.totalClearanceWriteCount += result.clearanceWriteCount;
     m_stats.totalInfluenceCacheHitCount += result.influenceCacheHitCount;

@@ -423,6 +423,23 @@ bool TestVoxelChunkCacheReusesTriangleInfluenceRanges()
     ok &= Expect(
         stats.totalStateWriteCount > 0,
         "chunk cache should record state writes");
+    ok &= Expect(
+        stats.totalDistanceCalculationCount ==
+            stats.totalDistanceImprovedCount +
+            stats.totalDistanceNotImprovedCount,
+        "distance improvement stats should partition calculations");
+    ok &= Expect(
+        stats.totalStateUnchangedWriteCount <=
+            stats.totalStateWriteCount,
+        "unchanged state writes should not exceed total state writes");
+    ok &= Expect(
+        stats.minCandidateTriangleCount <=
+            stats.maxCandidateTriangleCount,
+        "chunk cache should record candidate triangle range");
+    ok &= Expect(
+        stats.minRawCandidateTriangleCount <=
+            stats.maxRawCandidateTriangleCount,
+        "chunk cache should record raw candidate triangle range");
 
     return ok;
 }

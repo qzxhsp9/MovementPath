@@ -50,6 +50,8 @@ CSV 记录 full/local/lazy 在同一场景下的耗时、候选三角形、chunk
 - `sphere_pole_to_pole`：球体南北极路径，用于观察 long detour 和 StartGoalBox 裁剪风险。
 - `box_long_face_to_face`：非球体稳定场景，避免优化只围绕球体调参。
 
+当前 lazy 诊断字段包括距离计算、距离改善/未改善、状态写入/未变化写入、chunk candidate triangle min/max 分布和 influence cache hit/miss。
+
 ## 当前验证基线
 
 常用验证命令：

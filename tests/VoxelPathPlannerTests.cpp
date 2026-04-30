@@ -206,6 +206,19 @@ bool TestPlannerLazySuccessWithoutFallback(
         lazyResult.profile.lazyCandidateTriangleCount > 0,
         "lazy planner should accumulate candidate triangles");
     ok &= Expect(
+        lazyResult.profile.lazyDistanceCalculationCount ==
+            lazyResult.profile.lazyDistanceImprovedCount +
+            lazyResult.profile.lazyDistanceNotImprovedCount,
+        "lazy distance stats should partition calculations");
+    ok &= Expect(
+        lazyResult.profile.lazyStateUnchangedWriteCount <=
+            lazyResult.profile.lazyStateWriteCount,
+        "lazy unchanged state writes should not exceed total writes");
+    ok &= Expect(
+        lazyResult.profile.lazyMinCandidateTriangleCount <=
+            lazyResult.profile.lazyMaxCandidateTriangleCount,
+        "lazy profile should expose candidate count distribution");
+    ok &= Expect(
         lazyResult.profile.lazyFailedBuildCount == 0,
         "lazy planner should not report failed chunk builds");
     ok &= Expect(

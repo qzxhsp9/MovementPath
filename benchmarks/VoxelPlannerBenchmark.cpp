@@ -66,11 +66,17 @@ struct BenchmarkRow
     std::size_t lazyOutOfBoundsVoxelCount = 0;
     std::size_t lazyDistanceCalculationCount = 0;
     std::size_t lazyDistanceImprovedCount = 0;
+    std::size_t lazyDistanceNotImprovedCount = 0;
     std::size_t lazyStateWriteCount = 0;
+    std::size_t lazyStateUnchangedWriteCount = 0;
     std::size_t lazyOccupiedWriteCount = 0;
     std::size_t lazyClearanceWriteCount = 0;
     std::size_t lazyInfluenceCacheHitCount = 0;
     std::size_t lazyInfluenceCacheMissCount = 0;
+    std::size_t lazyMinCandidateTriangleCount = 0;
+    std::size_t lazyMaxCandidateTriangleCount = 0;
+    std::size_t lazyMinRawCandidateTriangleCount = 0;
+    std::size_t lazyMaxRawCandidateTriangleCount = 0;
 
     int astarVisitedCount = 0;
     std::size_t rawPathCount = 0;
@@ -232,13 +238,25 @@ BenchmarkRow MakeRow(
         profile.lazyDistanceCalculationCount;
     row.lazyDistanceImprovedCount =
         profile.lazyDistanceImprovedCount;
+    row.lazyDistanceNotImprovedCount =
+        profile.lazyDistanceNotImprovedCount;
     row.lazyStateWriteCount = profile.lazyStateWriteCount;
+    row.lazyStateUnchangedWriteCount =
+        profile.lazyStateUnchangedWriteCount;
     row.lazyOccupiedWriteCount = profile.lazyOccupiedWriteCount;
     row.lazyClearanceWriteCount = profile.lazyClearanceWriteCount;
     row.lazyInfluenceCacheHitCount =
         profile.lazyInfluenceCacheHitCount;
     row.lazyInfluenceCacheMissCount =
         profile.lazyInfluenceCacheMissCount;
+    row.lazyMinCandidateTriangleCount =
+        profile.lazyMinCandidateTriangleCount;
+    row.lazyMaxCandidateTriangleCount =
+        profile.lazyMaxCandidateTriangleCount;
+    row.lazyMinRawCandidateTriangleCount =
+        profile.lazyMinRawCandidateTriangleCount;
+    row.lazyMaxRawCandidateTriangleCount =
+        profile.lazyMaxRawCandidateTriangleCount;
     row.astarVisitedCount = profile.astarVisitedCount;
     row.rawPathCount = profile.rawPathCount;
     row.optimizedPathCount = profile.optimizedPathCount;
@@ -265,9 +283,14 @@ void WriteCsvHeader(std::ostream& os)
         << "lazyCandidateTriangleCount,lazyRawCandidateTriangleCount,"
         << "lazyVoxelVisitCount,lazyOutOfBoundsVoxelCount,"
         << "lazyDistanceCalculationCount,lazyDistanceImprovedCount,"
-        << "lazyStateWriteCount,lazyOccupiedWriteCount,"
-        << "lazyClearanceWriteCount,lazyInfluenceCacheHitCount,"
-        << "lazyInfluenceCacheMissCount,"
+        << "lazyDistanceNotImprovedCount,"
+        << "lazyStateWriteCount,lazyStateUnchangedWriteCount,"
+        << "lazyOccupiedWriteCount,lazyClearanceWriteCount,"
+        << "lazyInfluenceCacheHitCount,lazyInfluenceCacheMissCount,"
+        << "lazyMinCandidateTriangleCount,"
+        << "lazyMaxCandidateTriangleCount,"
+        << "lazyMinRawCandidateTriangleCount,"
+        << "lazyMaxRawCandidateTriangleCount,"
         << "astarVisitedCount,rawPathCount,optimizedPathCount,totalCost,"
         << "lazyAttemptCost,fallbackCost\n";
 }
@@ -311,11 +334,17 @@ void WriteCsvRow(
         << row.lazyOutOfBoundsVoxelCount << ","
         << row.lazyDistanceCalculationCount << ","
         << row.lazyDistanceImprovedCount << ","
+        << row.lazyDistanceNotImprovedCount << ","
         << row.lazyStateWriteCount << ","
+        << row.lazyStateUnchangedWriteCount << ","
         << row.lazyOccupiedWriteCount << ","
         << row.lazyClearanceWriteCount << ","
         << row.lazyInfluenceCacheHitCount << ","
         << row.lazyInfluenceCacheMissCount << ","
+        << row.lazyMinCandidateTriangleCount << ","
+        << row.lazyMaxCandidateTriangleCount << ","
+        << row.lazyMinRawCandidateTriangleCount << ","
+        << row.lazyMaxRawCandidateTriangleCount << ","
         << row.astarVisitedCount << ","
         << row.rawPathCount << ","
         << row.optimizedPathCount << ","

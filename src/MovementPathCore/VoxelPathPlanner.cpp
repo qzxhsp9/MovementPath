@@ -112,8 +112,12 @@ void PreserveLazyAttemptOnFallback(
         lazyProfile.lazyDistanceCalculationCount;
     fallbackResult.profile.lazyDistanceImprovedCount =
         lazyProfile.lazyDistanceImprovedCount;
+    fallbackResult.profile.lazyDistanceNotImprovedCount =
+        lazyProfile.lazyDistanceNotImprovedCount;
     fallbackResult.profile.lazyStateWriteCount =
         lazyProfile.lazyStateWriteCount;
+    fallbackResult.profile.lazyStateUnchangedWriteCount =
+        lazyProfile.lazyStateUnchangedWriteCount;
     fallbackResult.profile.lazyOccupiedWriteCount =
         lazyProfile.lazyOccupiedWriteCount;
     fallbackResult.profile.lazyClearanceWriteCount =
@@ -122,6 +126,14 @@ void PreserveLazyAttemptOnFallback(
         lazyProfile.lazyInfluenceCacheHitCount;
     fallbackResult.profile.lazyInfluenceCacheMissCount =
         lazyProfile.lazyInfluenceCacheMissCount;
+    fallbackResult.profile.lazyMinCandidateTriangleCount =
+        lazyProfile.lazyMinCandidateTriangleCount;
+    fallbackResult.profile.lazyMaxCandidateTriangleCount =
+        lazyProfile.lazyMaxCandidateTriangleCount;
+    fallbackResult.profile.lazyMinRawCandidateTriangleCount =
+        lazyProfile.lazyMinRawCandidateTriangleCount;
+    fallbackResult.profile.lazyMaxRawCandidateTriangleCount =
+        lazyProfile.lazyMaxRawCandidateTriangleCount;
 }
 
 MeshAABB MakeStartGoalBuildBox(
@@ -322,13 +334,25 @@ void CopyLazyStatsToProfile(
         stats.totalDistanceCalculationCount;
     profile.lazyDistanceImprovedCount =
         stats.totalDistanceImprovedCount;
+    profile.lazyDistanceNotImprovedCount =
+        stats.totalDistanceNotImprovedCount;
     profile.lazyStateWriteCount = stats.totalStateWriteCount;
+    profile.lazyStateUnchangedWriteCount =
+        stats.totalStateUnchangedWriteCount;
     profile.lazyOccupiedWriteCount = stats.totalOccupiedWriteCount;
     profile.lazyClearanceWriteCount = stats.totalClearanceWriteCount;
     profile.lazyInfluenceCacheHitCount =
         stats.totalInfluenceCacheHitCount;
     profile.lazyInfluenceCacheMissCount =
         stats.totalInfluenceCacheMissCount;
+    profile.lazyMinCandidateTriangleCount =
+        stats.minCandidateTriangleCount;
+    profile.lazyMaxCandidateTriangleCount =
+        stats.maxCandidateTriangleCount;
+    profile.lazyMinRawCandidateTriangleCount =
+        stats.minRawCandidateTriangleCount;
+    profile.lazyMaxRawCandidateTriangleCount =
+        stats.maxRawCandidateTriangleCount;
 }
 
 bool ComputeTrianglesAABBForPlanner(
@@ -1205,8 +1229,12 @@ void VoxelPathPlanner::PrintProfile(
         << profile.lazyDistanceCalculationCount << std::endl;
     std::cout << "Lazy distance improved count: "
         << profile.lazyDistanceImprovedCount << std::endl;
+    std::cout << "Lazy distance not improved count: "
+        << profile.lazyDistanceNotImprovedCount << std::endl;
     std::cout << "Lazy state write count: "
         << profile.lazyStateWriteCount << std::endl;
+    std::cout << "Lazy state unchanged write count: "
+        << profile.lazyStateUnchangedWriteCount << std::endl;
     std::cout << "Lazy occupied write count: "
         << profile.lazyOccupiedWriteCount << std::endl;
     std::cout << "Lazy clearance write count: "
@@ -1215,6 +1243,14 @@ void VoxelPathPlanner::PrintProfile(
         << profile.lazyInfluenceCacheHitCount << std::endl;
     std::cout << "Lazy influence cache miss count: "
         << profile.lazyInfluenceCacheMissCount << std::endl;
+    std::cout << "Lazy min candidate triangle count: "
+        << profile.lazyMinCandidateTriangleCount << std::endl;
+    std::cout << "Lazy max candidate triangle count: "
+        << profile.lazyMaxCandidateTriangleCount << std::endl;
+    std::cout << "Lazy min raw candidate triangle count: "
+        << profile.lazyMinRawCandidateTriangleCount << std::endl;
+    std::cout << "Lazy max raw candidate triangle count: "
+        << profile.lazyMaxRawCandidateTriangleCount << std::endl;
     std::cout << "Stored cell count: "
         << profile.storedCellCount << std::endl;
     std::cout << "Occupied count: "

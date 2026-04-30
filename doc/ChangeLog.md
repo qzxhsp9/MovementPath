@@ -4,6 +4,14 @@
 
 ## 2026-04-29
 
+### Lazy 统计增强
+
+- 新增 `distanceNotImprovedCount`，用于判断距离计算中有多少没有改善 cell 最近表面距离。
+- 新增 `stateUnchangedWriteCount`，用于判断状态写入中有多少没有改变原状态。
+- 新增 lazy chunk candidate triangle min/max 分布统计。
+- benchmark CSV 同步输出新增字段。
+- 补充 chunk cache 和 planner 测试，验证统计字段自洽且不改变路径行为。
+
 ### 文档与文件结构整理
 
 - 将 `doc/` 下文档归纳为四份固定文档：

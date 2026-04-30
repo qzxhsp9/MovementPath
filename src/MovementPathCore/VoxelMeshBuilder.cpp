@@ -78,7 +78,9 @@ static void AddMarkStats(
     result.outOfBoundsVoxelCount += stats.outOfBoundsVoxelCount;
     result.distanceCalculationCount += stats.distanceCalculationCount;
     result.distanceImprovedCount += stats.distanceImprovedCount;
+    result.distanceNotImprovedCount += stats.distanceNotImprovedCount;
     result.stateWriteCount += stats.stateWriteCount;
+    result.stateUnchangedWriteCount += stats.stateUnchangedWriteCount;
     result.occupiedWriteCount += stats.occupiedWriteCount;
     result.clearanceWriteCount += stats.clearanceWriteCount;
 }
@@ -642,13 +644,23 @@ VoxelTriangleMarkStats VoxelMeshBuilder::MarkTriangleToVoxelSpace(
                 {
                     ++stats.distanceImprovedCount;
                 }
+                else
+                {
+                    ++stats.distanceNotImprovedCount;
+                }
 
                 // Treat a cell as occupied when the triangle can cross it.
                 if (d <= halfDiag)
                 {
+                    const VoxelState oldState =
+                        space.GetCellState(index);
                     space.SetCellState(index, VoxelState::Occupied);
                     ++stats.stateWriteCount;
                     ++stats.occupiedWriteCount;
+                    if (oldState == VoxelState::Occupied)
+                    {
+                        ++stats.stateUnchangedWriteCount;
+                    }
                     continue;
                 }
 
@@ -666,6 +678,10 @@ VoxelTriangleMarkStats VoxelMeshBuilder::MarkTriangleToVoxelSpace(
                         );
                         ++stats.stateWriteCount;
                         ++stats.clearanceWriteCount;
+                        if (oldState == VoxelState::ClearanceBand)
+                        {
+                            ++stats.stateUnchangedWriteCount;
+                        }
                     }
                 }
             }

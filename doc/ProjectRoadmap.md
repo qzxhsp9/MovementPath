@@ -64,11 +64,12 @@
 - 缓存 triangle influence range。
 - mark loop 按写入 bounds 裁剪，消除 lazy out-of-bounds voxel visit。
 - lazy VTK 导出补齐路径结果。
+- lazy 统计增强已记录距离未改善、状态未变化写入和 chunk candidate 分布。
 
 下一步：
 
-- 继续分析有效 chunk 内的 `distanceCalculationCount`、`distanceImprovedCount` 和 `stateWriteCount` 比例。
-- 判断是否需要更细粒度的 voxel/triangle 重复计算统计。
+- 基于新增统计评估 chunk-local 二次过滤。
+- 继续细分状态未变化写入来源。
 - 评估更适合 lazy 的 triangle-to-voxel 或 voxel-to-triangle 查询方式。
 - benchmark 多轮运行与输出格式增强。
 
