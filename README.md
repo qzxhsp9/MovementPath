@@ -1,6 +1,6 @@
 # MovementPath
 
-MovementPath is a C++17 / Open CASCADE based voxel path planning prototype.
+MovementPath is a C++17 / Open CASCADE based path planning prototype.
 
 The project triangulates an OCCT `TopoDS_Shape`, builds a voxel search space
 around the mesh, searches a path in the clearance band with A*, optionally
@@ -12,23 +12,22 @@ optimizes the path, and exports VTK files for inspection.
 - Support experimental `StartGoalBox` and `LazyChunks` build modes.
 - Measure performance with stable benchmark scenarios before enabling lazy by
   default.
-- Keep planner logic inside `src/MovementPathCore`; examples and tests should
-  call public interfaces instead of duplicating workflow code.
+- Keep the voxel implementation as the baseline module.
+- Develop the long-term geometry-query planner in an isolated module.
 
 ## Documentation
 
-The `doc/` directory is the source of truth for project status and planning:
+The `doc/` directory separates module documentation:
 
-- `doc/ProjectImplementationStatus.md` describes the current implementation.
-- `doc/ProjectRoadmap.md` tracks current and final progress plans.
-- `doc/VoxelPathPlanningOptimizationPlan.md` tracks performance optimization.
-- `doc/ChangeLog.md` records important changes.
-- `doc/voxel_planner_benchmark.csv` is the latest benchmark CSV output.
+- `doc/VoxelPathPlanningBaseline/` documents the current voxel baseline.
+- `doc/GeometryQueryPathPlanner/` documents the long-term geometry-query module.
+- `doc/ChangeLog.md` records important code changes across the whole project.
 
 ## Source Layout
 
 - `src/main.cpp`: sample executable.
-- `src/MovementPathCore/`: core planner library.
+- `src/VoxelPathPlanner/`: voxel baseline planner library.
+- `src/GeometryQueryPathPlanner/`: independent geometry-query planner module.
 - `tests/`: unit and planner integration tests.
 - `benchmarks/VoxelPlannerBenchmark.cpp`: benchmark executable.
 - `doc/`: documentation and benchmark CSV output.
@@ -46,7 +45,7 @@ out\build\x64-Debug\MovementPathBenchmark.exe
 The benchmark writes:
 
 ```text
-doc/voxel_planner_benchmark.csv
+doc/VoxelPathPlanningBaseline/voxel_planner_benchmark.csv
 ```
 
 ## Notes

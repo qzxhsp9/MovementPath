@@ -1,10 +1,10 @@
 # MovementPath 进度计划
 
-本文档维护项目从当前状态到最终目标的阶段计划。当前实现状态见 `ProjectImplementationStatus.md`，性能专项计划见 `VoxelPathPlanningOptimizationPlan.md`，逐次修改记录见 `ChangeLog.md`。
+本文档维护体素 baseline 从当前状态到阶段目标的计划。当前实现状态见 `ImplementationStatus.md`，性能专项计划见 `OptimizationPlan.md`，全项目逐次修改记录见 `../ChangeLog.md`。
 
 ## 最终目标
 
-- 提供稳定的 `MovementPathCore` 接口，调用方只需传入 Shape、起终点和规划选项即可得到路径、profile 和可选 VTK。
+- 提供稳定的 `VoxelPathPlanner` 接口，调用方只需传入 Shape、起终点和规划选项即可得到路径、profile 和可选 VTK。
 - 保持 `FullMeshBounds` 作为正确性基线，保证测试覆盖路径质量、fallback 和导出。
 - 在不牺牲路径质量的前提下，让 local/lazy 构建成为可按场景启用的性能优化路径。
 - benchmark 输出可复现、字段稳定、能支撑后续自动对比。
@@ -15,10 +15,10 @@
 
 已完成：
 
-- `MovementPathCore` 已从示例入口中拆出。
+- `VoxelPathPlanner` 已从示例入口中拆出。
 - full/local/lazy 三种构建模式可通过 planner 统一入口调用。
 - lazy chunk cache 已接入 planner，并具备失败 fallback 和统计字段。
-- benchmark 已覆盖球体和非球体场景，CSV 输出到 `doc/voxel_planner_benchmark.csv`。
+- benchmark 已覆盖球体和非球体场景，CSV 输出到 `doc/VoxelPathPlanningBaseline/voxel_planner_benchmark.csv`。
 - VTK 导出已覆盖 mesh、A* path、optimized path、lazy chunk bounds。
 - planner 的 `pointPath` 显示端点已对齐接口入参点。
 
@@ -98,5 +98,5 @@
 1. 保持 correctness baseline：full build 和现有 planner tests 必须稳定通过。
 2. lazy 继续默认关闭，直到 benchmark 数据证明默认开启是合理的。
 3. 新优化必须先增加统计或测试，避免为单一场景硬编码。
-4. `main.cpp` 只保留示例逻辑，核心行为继续下沉到 `MovementPathCore`。
-5. 文档与代码同步更新：状态写入本文档，性能实验写入 `VoxelPathPlanningOptimizationPlan.md`，逐次修改写入 `ChangeLog.md`。
+4. `main.cpp` 只保留示例逻辑，核心行为继续下沉到 `VoxelPathPlanner`。
+5. 文档与代码同步更新：状态写入本文档，性能实验写入 `OptimizationPlan.md`，逐次修改写入 `../ChangeLog.md`。

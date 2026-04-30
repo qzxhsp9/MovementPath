@@ -427,7 +427,8 @@ int main(
     const int runCount = ParseRunCount(argc, argv);
 
     // Keep generated benchmark data with the planning documents.
-    const std::string outputPath = "doc/voxel_planner_benchmark.csv";
+    const std::string outputPath =
+        "doc/VoxelPathPlanningBaseline/voxel_planner_benchmark.csv";
     std::ofstream ofs(outputPath.c_str(), std::ios::out);
     if (!ofs.is_open())
     {

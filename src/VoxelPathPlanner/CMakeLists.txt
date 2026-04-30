@@ -1,4 +1,4 @@
-set(MOVEMENT_PATH_CORE_HEADERS
+set(VOXEL_PATH_PLANNER_HEADERS
     MeshVtkExporter.h
     VoxelChunkCache.h
     VoxelAStar.h
@@ -10,7 +10,7 @@ set(MOVEMENT_PATH_CORE_HEADERS
     VoxelWalkability.h
 )
 
-set(MOVEMENT_PATH_CORE_SOURCES
+set(VOXEL_PATH_PLANNER_SOURCES
     MeshVtkExporter.cpp
     VoxelChunkCache.cpp
     VoxelAStar.cpp
@@ -20,17 +20,17 @@ set(MOVEMENT_PATH_CORE_SOURCES
     VoxelVtkExporter.cpp
 )
 
-add_library(MovementPathCore
-    ${MOVEMENT_PATH_CORE_HEADERS}
-    ${MOVEMENT_PATH_CORE_SOURCES}
+add_library(VoxelPathPlanner
+    ${VOXEL_PATH_PLANNER_HEADERS}
+    ${VOXEL_PATH_PLANNER_SOURCES}
 )
 
-target_include_directories(MovementPathCore
+target_include_directories(VoxelPathPlanner
     PUBLIC
         ${CMAKE_CURRENT_LIST_DIR}
 )
 
-target_link_libraries(MovementPathCore
+target_link_libraries(VoxelPathPlanner
     PUBLIC
         ${OCCT_LIBS}
         ${FREETYPE_LIBS}

@@ -67,6 +67,7 @@ int main()
     fullDebugOptions.runOptions.exportVtk = true;
     fullDebugOptions.runOptions.debugNeighborhood = true;
     fullDebugOptions.runOptions.verbose = true;
+    fullDebugOptions.lazyBuildOptions.enabled = true;
 
     RunScenario(
         MakePoleToPoleScenario(sphere),

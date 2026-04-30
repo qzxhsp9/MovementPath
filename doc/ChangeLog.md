@@ -1,6 +1,6 @@
 # MovementPath 修改日志
 
-本文档记录重要开发修改。当前实现状态见 `ProjectImplementationStatus.md`，总体计划见 `ProjectRoadmap.md`，性能优化计划见 `VoxelPathPlanningOptimizationPlan.md`。
+本文档记录 MovementPath 项目的所有重要代码修改。模块文档分别放在 `doc/VoxelPathPlanningBaseline/` 和 `doc/GeometryQueryPathPlanner/`。
 
 ## 2026-04-30
 
@@ -25,12 +25,12 @@
 
 ### 文档与文件结构整理
 
-- 将 `doc/` 下文档归纳为四份固定文档：
-- `ProjectImplementationStatus.md`：当前实现状态。
-- `ProjectRoadmap.md`：当前与最终进度计划。
-- `VoxelPathPlanningOptimizationPlan.md`：性能优化计划。
-- `ChangeLog.md`：每次重要修改后的日志。
-- benchmark CSV 默认输出从仓库根目录改为 `doc/voxel_planner_benchmark.csv`。
+- 将 `doc/` 下文档归纳为固定文档：
+- `doc/VoxelPathPlanningBaseline/ImplementationStatus.md`：体素 baseline 当前实现状态。
+- `doc/VoxelPathPlanningBaseline/Roadmap.md`：体素 baseline 进度计划。
+- `doc/VoxelPathPlanningBaseline/OptimizationPlan.md`：体素 baseline 性能优化计划。
+- `doc/ChangeLog.md`：全项目每次重要修改后的日志。
+- benchmark CSV 默认输出从仓库根目录改为 `doc/VoxelPathPlanningBaseline/voxel_planner_benchmark.csv`。
 
 ### 路径显示端点对齐接口入参
 
@@ -80,11 +80,11 @@
 - `buildPadding` 只扩展候选查询，不扩展写入范围。
 - 修复 chunk max corner 半开区间问题，避免写入相邻 chunk。
 
-### MovementPathCore 拆分
+### VoxelPathPlanner 模块拆分
 
-- 将核心规划逻辑整理到 `src/MovementPathCore/`。
+- 将核心规划逻辑整理到 `src/VoxelPathPlanner/`。
 - `main.cpp` 逐步简化为示例调用入口。
-- 新增/调整 `src/MovementPathCore/CMakeLists.txt`，由核心库统一管理 planner、builder、A*、optimizer、exporter 等文件。
+- 新增/调整 `src/VoxelPathPlanner/CMakeLists.txt`，由体素 baseline 库统一管理 planner、builder、A*、optimizer、exporter 等文件。
 
 ## 2026-04-28
 
@@ -110,3 +110,36 @@ cmd.exe /c "call ""D:\software\ide\vs\Microsoft Visual Studio2022\Community\VC\A
 ctest --test-dir out\build\x64-Debug --output-on-failure
 out\build\x64-Debug\MovementPathBenchmark.exe
 ```
+
+### 新长期规划模块
+
+- 将现有 `VoxelPathPlanner` 体素路径规划定位为 baseline。
+- 新增 `src/GeometryQueryPathPlanner/` 独立目录。
+- 新增独立 library target `GeometryQueryPathPlanner`。
+- 新模块当前不链接 `main.cpp`、benchmark 或既有 voxel 测试，避免影响 baseline。
+- 新增 `GeometryPrimitives.h`、`GeometryQueryPathPlanner.h/.cpp` 和模块 README，作为后续 BVH/按需几何查询/连续路径优化的实现边界。
+
+### 模块命名与文档拆分
+
+- 将新模块源码目录从 `src/MovementPathGeometryPlanner/` 调整为 `src/GeometryQueryPathPlanner/`。
+- 将新模块 planner 文件从 `GeometryQueryPlanner.*` 调整为 `GeometryQueryPathPlanner.*`。
+- 将新模块 CMake target 调整为 `GeometryQueryPathPlanner`。
+- 将体素 baseline 文档移动到 `doc/VoxelPathPlanningBaseline/`。
+- 新增 `doc/GeometryQueryPathPlanner/Roadmap.md` 管理长期几何查询规划器计划。
+- `doc/ChangeLog.md` 保持为全项目唯一变更日志。
+
+### 体素 baseline 模块重命名
+
+- 将源码目录从 `src/MovementPathCore/` 重命名为 `src/VoxelPathPlanner/`。
+- 将 CMake library target 从 `MovementPathCore` 重命名为 `VoxelPathPlanner`。
+- 更新 `main.cpp`、benchmark 和测试 target 的链接依赖。
+- 更新文档和模块 README 中的 baseline 模块名称。
+
+### 模块 README 归位
+
+- 删除 `doc/VoxelPathPlanningBaseline/README.md`。
+- 删除 `doc/GeometryQueryPathPlanner/README.md`。
+- 模块说明统一放在各自源码目录下的 README：
+- `src/VoxelPathPlanner/README.md`
+- `src/GeometryQueryPathPlanner/README.md`
+- `doc/` 仅保留模块设计/计划/状态文档和全项目 `ChangeLog.md`。

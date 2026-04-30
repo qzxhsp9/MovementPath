@@ -6,25 +6,29 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/occt_setup_install.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/occt_3rdpart_setup_install.cmake)
 
 add_subdirectory(
-    ${CMAKE_CURRENT_LIST_DIR}/MovementPathCore
-    ${CMAKE_CURRENT_BINARY_DIR}/MovementPathCore)
+    ${CMAKE_CURRENT_LIST_DIR}/VoxelPathPlanner
+    ${CMAKE_CURRENT_BINARY_DIR}/VoxelPathPlanner)
+
+add_subdirectory(
+    ${CMAKE_CURRENT_LIST_DIR}/GeometryQueryPathPlanner
+    ${CMAKE_CURRENT_BINARY_DIR}/GeometryQueryPathPlanner)
 
 add_executable (${PROJECT_NAME} ${CMAKE_CURRENT_LIST_DIR}/main.cpp)
 
-target_link_libraries(${PROJECT_NAME} PRIVATE MovementPathCore)
+target_link_libraries(${PROJECT_NAME} PRIVATE VoxelPathPlanner)
 
 add_executable(
     MovementPathBenchmark
     ${CMAKE_SOURCE_DIR}/benchmarks/VoxelPlannerBenchmark.cpp)
 
-target_link_libraries(MovementPathBenchmark PRIVATE MovementPathCore)
+target_link_libraries(MovementPathBenchmark PRIVATE VoxelPathPlanner)
 
 include(CTest)
 
 if(BUILD_TESTING)
     function(add_movement_path_test target source)
         add_executable(${target} ${source})
-        target_link_libraries(${target} PRIVATE MovementPathCore)
+        target_link_libraries(${target} PRIVATE VoxelPathPlanner)
         add_test(NAME ${target} COMMAND ${target})
     endfunction()
 

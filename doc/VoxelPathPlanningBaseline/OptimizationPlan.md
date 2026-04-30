@@ -1,6 +1,6 @@
 # Voxel Path Planning 性能优化计划
 
-本文档只记录性能优化相关的设计、数据和下一步实验。项目实现状态见 `ProjectImplementationStatus.md`，总体阶段计划见 `ProjectRoadmap.md`，逐次修改记录见 `ChangeLog.md`。
+本文档只记录体素 baseline 性能优化相关的设计、数据和下一步实验。实现状态见 `ImplementationStatus.md`，阶段计划见 `Roadmap.md`，全项目逐次修改记录见 `../ChangeLog.md`。
 
 ## 优化原则
 
@@ -16,7 +16,7 @@
 CSV 输出：
 
 ```text
-doc/voxel_planner_benchmark.csv
+doc/VoxelPathPlanningBaseline/voxel_planner_benchmark.csv
 ```
 
 当前 benchmark 场景：
@@ -319,3 +319,13 @@ box_long_face_to_face / lazy:
 - 不建议立即实现 chunk-local 整 triangle 二次过滤，因为 dry-run 显示 inactive candidate 为 0。
 - 若继续优化，应评估更细粒度的 block/voxel 级候选组织，但要先统计构建成本和潜在 pair 数变化，避免引入比距离计算更贵的局部索引。
 - 更务实的下一步是拆分 `ClearanceBand -> ClearanceBand` 重复写来源，并评估是否存在安全的“状态不变但距离也未改善”的跳过策略；该策略仍需先 dry-run 统计，不应直接改变行为。
+
+## 2026-04-30 baseline 定位调整
+
+当前 voxel/full/local/lazy 方案继续作为性能与正确性 baseline。后续 voxel 侧优化只做保守推进：
+
+- 保留 `FullMeshBounds` 作为 correctness 和路径质量基线。
+- `LazyChunks` 继续默认关闭，除非 benchmark 证明其收益稳定。
+- 不再把 lazy chunk 当作长期性能唯一主线。
+- 新的长期方向放入 `src/GeometryQueryPathPlanner/`，重点研究空间索引、按需几何查询、局部缓存和连续路径优化。
+- 两个模块在源码和 CMake 层面保持隔离；新模块成熟前不接入 baseline 主流程。

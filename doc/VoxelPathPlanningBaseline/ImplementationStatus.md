@@ -1,6 +1,6 @@
 # MovementPath 当前实现状态
 
-本文档描述项目当前已经落地的能力、源码结构和运行产物。进度计划见 `ProjectRoadmap.md`，性能优化细节见 `VoxelPathPlanningOptimizationPlan.md`，逐次变更记录见 `ChangeLog.md`。
+本文档描述体素 baseline 当前已经落地的能力、源码结构和运行产物。进度计划见 `Roadmap.md`，性能优化细节见 `OptimizationPlan.md`，全项目逐次变更记录见 `../ChangeLog.md`。
 
 ## 项目目标
 
@@ -15,14 +15,14 @@ MovementPath 当前核心目标是：基于 OCCT Shape 三角化结果构建体�
 ## 源码结构
 
 - `src/main.cpp`：示例入口，负责组织场景、调用 planner、输出 profile 和 VTK。
-- `src/MovementPathCore/`：核心库目录，主流程应尽量沉淀到这里，测试和示例只调用接口。
-- `src/MovementPathCore/VoxelPathPlanner.*`：规划总入口，负责三角化、空间索引、体素构建、A*、优化、fallback、profile 和 VTK 导出协调。
-- `src/MovementPathCore/VoxelMeshBuilder.*`：Shape/triangle 到 `VoxelSpace` 的体素化逻辑，包含 full/local/append 构建、候选三角形过滤和标记统计。
-- `src/MovementPathCore/VoxelChunkCache.*`：lazy chunk 按需构建缓存，负责 chunk index、构建去重、triangle influence range cache 和 chunk 统计。
-- `src/MovementPathCore/VoxelAStar.*`：体素 A* 搜索，支持起终点吸附、lazy ensure hook、不同邻接方式和路径标记。
-- `src/MovementPathCore/VoxelPathOptimizer.*`：路径后处理，包括共线点删除和 line-of-sight shortcut。
-- `src/MovementPathCore/TriangleSpatialHash.*`：三角形空间哈希，用于减少 local/lazy 候选三角形查询成本。
-- `src/MovementPathCore/VoxelVtkExporter.*` / `MeshVtkExporter.*`：体素、路径、chunk bounds 和 mesh 的 VTK 导出。
+- `src/VoxelPathPlanner/`：体素 baseline 库目录，主流程应尽量沉淀到这里，测试和示例只调用接口。
+- `src/VoxelPathPlanner/VoxelPathPlanner.*`：规划总入口，负责三角化、空间索引、体素构建、A*、优化、fallback、profile 和 VTK 导出协调。
+- `src/VoxelPathPlanner/VoxelMeshBuilder.*`：Shape/triangle 到 `VoxelSpace` 的体素化逻辑，包含 full/local/append 构建、候选三角形过滤和标记统计。
+- `src/VoxelPathPlanner/VoxelChunkCache.*`：lazy chunk 按需构建缓存，负责 chunk index、构建去重、triangle influence range cache 和 chunk 统计。
+- `src/VoxelPathPlanner/VoxelAStar.*`：体素 A* 搜索，支持起终点吸附、lazy ensure hook、不同邻接方式和路径标记。
+- `src/VoxelPathPlanner/VoxelPathOptimizer.*`：路径后处理，包括共线点删除和 line-of-sight shortcut。
+- `src/VoxelPathPlanner/TriangleSpatialHash.*`：三角形空间哈希，用于减少 local/lazy 候选三角形查询成本。
+- `src/VoxelPathPlanner/VoxelVtkExporter.*` / `MeshVtkExporter.*`：体素、路径、chunk bounds 和 mesh 的 VTK 导出。
 - `tests/`：单元/集成测试，覆盖空间哈希、chunk cache、planner 行为、lazy fallback 和导出。
 - `benchmarks/VoxelPlannerBenchmark.cpp`：稳定 benchmark 场景，输出 full/local/lazy 对比 CSV。
 - `doc/`：项目文档和 benchmark CSV 输出目录。
@@ -42,7 +42,7 @@ MovementPath 当前核心目标是：基于 OCCT Shape 三角化结果构建体�
 Benchmark 默认输出：
 
 ```text
-doc/voxel_planner_benchmark.csv
+doc/VoxelPathPlanningBaseline/voxel_planner_benchmark.csv
 ```
 
 CSV 记录 full/local/lazy 在同一场景下的耗时、候选三角形、chunk 数、路径 cost、lazy 标记统计等字段。当前稳定场景：
@@ -74,3 +74,14 @@ out\build\x64-Debug\MovementPathBenchmark.exe
 - lazy chunk 当前减少了全局预体素化范围，但仍可能在有效 chunk 内重复执行大量点到三角形距离计算。
 - benchmark 仍是单次运行，耗时受本机状态影响；后续需要多轮统计或 JSON 输出以支持趋势分析。
 - 部分中文源码注释在当前 Windows 代码页下会触发 C4819 编译警告；警告不影响构建，但后续应统一文件编码。
+
+## 2026-04-30 新模块定位
+
+当前体素方案正式定位为 baseline：继续用于 correctness、路径质量对照、VTK 可视化和 benchmark 对比，但不再作为长期性能与路径质量的唯一主线。
+
+新增 `src/GeometryQueryPathPlanner/` 作为长期方向的新模块：
+
+- `GeometryQueryPathPlanner` 是独立 CMake library，当前不链接到 `main.cpp`、benchmark 或既有测试。
+- 新模块不包含 `VoxelPathPlanner` 头文件，避免 baseline 体素实现向新方案泄漏。
+- 初始 API 只定义独立几何 primitive、planner request/options/result/profile 和 `GeometryQueryPathPlanner` 边界。
+- 后续应在新模块内推进 BVH/AABB tree、按需 closest-point/clearance 查询、局部缓存和连续路径优化。
