@@ -543,6 +543,13 @@ VoxelAStarResult VoxelAStar::Search(
 
     while (!openQueue.empty())
     {
+        if (options.shouldCancel && options.shouldCancel())
+        {
+            result.visitedCount = visitedCount;
+            result.failReason = VoxelAStarFailReason::Cancelled;
+            return result;
+        }
+
         VoxelAStarOpenNode openNode = openQueue.top();
         openQueue.pop();
 

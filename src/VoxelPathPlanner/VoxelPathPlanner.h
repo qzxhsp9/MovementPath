@@ -10,6 +10,7 @@
 #include <gp_Vec.hxx>
 
 #include <cstddef>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -93,6 +94,7 @@ struct VoxelPlanningScenario
 {
     std::string name;
     TopoDS_Shape shape;
+    std::vector<MeshTriangle> triangles;
     gp_Pnt startPoint;
     gp_Vec startDir;
     gp_Pnt goalPoint;
@@ -121,6 +123,8 @@ struct VoxelPlanningRunOptions
     std::string optimizedPathVoxelsVtkPath = "D:/optimized_path_voxels.vtk";
     std::string optimizedPathPolylineVtkPath = "D:/optimized_path_polyline.vtk";
     std::string lazyChunkBoundsVtkPath = "D:/lazy_chunk_bounds.vtk";
+
+    std::function<bool()> shouldCancel;
 };
 
 enum class VoxelBuildRegionMode

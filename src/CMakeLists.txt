@@ -13,6 +13,10 @@ add_subdirectory(
     ${CMAKE_CURRENT_LIST_DIR}/GeometryQueryPathPlanner
     ${CMAKE_CURRENT_BINARY_DIR}/GeometryQueryPathPlanner)
 
+add_subdirectory(
+    ${CMAKE_CURRENT_LIST_DIR}/PathPlanningWorkbench
+    ${CMAKE_CURRENT_BINARY_DIR}/PathPlanningWorkbench)
+
 add_executable (${PROJECT_NAME} ${CMAKE_CURRENT_LIST_DIR}/main.cpp)
 
 target_link_libraries(${PROJECT_NAME} PRIVATE VoxelPathPlanner)

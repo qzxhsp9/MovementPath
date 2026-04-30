@@ -2,6 +2,7 @@
 
 #include "VoxelSpace.h"
 
+#include <functional>
 #include <vector>
 #include <cstddef>
 #include <unordered_map>
@@ -135,6 +136,8 @@ struct VoxelMeshBuildOptions
     // 是否显式存储 Free 体素。
     // 稀疏体素建议 false。
     bool storeFreeCells = false;
+
+    std::function<bool()> shouldCancel;
 };
 
 // ============================================================

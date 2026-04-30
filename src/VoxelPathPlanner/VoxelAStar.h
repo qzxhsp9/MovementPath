@@ -40,6 +40,8 @@ struct VoxelAStarOptions
 
     bool markPathToVoxelSpace = true;
 
+    std::function<bool()> shouldCancel;
+
     // Optional hook for lazy voxelization. The default empty hook preserves
     // the current behavior where A* only consumes an already-built VoxelSpace.
     std::function<void(VoxelSpace&, const VoxelIndex&)> ensureCellBuilt;
@@ -59,7 +61,8 @@ enum class VoxelAStarFailReason
     StartNotWalkable,
     GoalNotWalkable,
     MaxVisitedExceeded,
-    OpenSetEmpty
+    OpenSetEmpty,
+    Cancelled
 };
 
 // ============================================================

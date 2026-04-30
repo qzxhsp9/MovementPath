@@ -59,6 +59,12 @@ VoxelPlannerExecutionMode ToExecutionMode(
     return VoxelPlannerExecutionMode::FullMeshBounds;
 }
 
+bool IsCancelled(const VoxelPathPlannerOptions& options)
+{
+    return options.runOptions.shouldCancel &&
+        options.runOptions.shouldCancel();
+}
+
 void ReplacePathEndpoints(
     std::vector<Vec>& points,
     const Vec& startPoint,
@@ -645,16 +651,29 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
     profile.lazyBuildEnabled = options.lazyBuildOptions.enabled;
     result.executionMode = ToExecutionMode(options.localBuildOptions.regionMode);
 
+    VoxelMeshBuildOptions meshBuildOptions = options.meshBuildOptions;
+    meshBuildOptions.shouldCancel = options.runOptions.shouldCancel;
+
     std::vector<MeshTriangle> triangles;
 
+    if (IsCancelled(options))
+    {
+        return result;
+    }
+
+    if (!scenario.triangles.empty())
+    {
+        triangles = scenario.triangles;
+    }
+    else
     {
         ScopedTimer timer(profile.triangulationMs);
 
         if (!VoxelMeshBuilder::BuildShapeTriangulation(
-            scenario.shape,
-            options.meshBuildOptions.meshDeflection,
-            options.meshBuildOptions.angularDeflection,
-            triangles))
+                scenario.shape,
+                meshBuildOptions.meshDeflection,
+                meshBuildOptions.angularDeflection,
+                triangles))
         {
             if (options.runOptions.verbose)
             {
@@ -665,6 +684,11 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
     }
 
     profile.triangleCount = triangles.size();
+
+    if (IsCancelled(options))
+    {
+        return result;
+    }
 
     if (options.runOptions.exportVtk)
     {
@@ -690,7 +714,7 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
     TriangleSpatialHash spatialHash;
     TriangleSpatialHashOptions spatialHashOptions;
     spatialHashOptions.cellSize =
-        std::max(10.0, options.meshBuildOptions.voxelSize * 10.0);
+        std::max(10.0, meshBuildOptions.voxelSize * 10.0);
 
     {
         ScopedTimer timer(profile.spatialIndexBuildMs);
@@ -722,6 +746,7 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
     };
 
     VoxelAStarOptions astarOptions = options.astarOptions;
+    astarOptions.shouldCancel = options.runOptions.shouldCancel;
     astarOptions.startSnapDirection = {
         scenario.startDir.X(),
         scenario.startDir.Y(),
@@ -735,6 +760,11 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
 
     if (options.lazyBuildOptions.enabled)
     {
+        if (IsCancelled(options))
+        {
+            return result;
+        }
+
         profile.buildRegionMode = "LazyChunks";
         result.executionMode = VoxelPlannerExecutionMode::LazyChunks;
 
@@ -743,7 +773,7 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
 
         if (!InitializeLazyVoxelSpace(
             triangles,
-            options.meshBuildOptions,
+            meshBuildOptions,
             lazyVoxelSpace,
             lazyBounds))
         {
@@ -764,7 +794,7 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
             if (!chunkCache.Configure(
                 &triangles,
                 &spatialHash,
-                options.meshBuildOptions,
+                meshBuildOptions,
                 options.lazyBuildOptions.chunkCacheOptions))
             {
                 profile.lazyFallbackTriggered = true;
@@ -808,6 +838,11 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                             goalPoint3D,
                             astarOptions
                         );
+                }
+
+                if (IsCancelled(options))
+                {
+                    return result;
                 }
 
                 CopyLazyStatsToProfile(chunkCache.GetStats(), profile);
@@ -881,6 +916,11 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                                 lazyAStarResult.voxelPath,
                                 optOptions
                             );
+                    }
+
+                    if (IsCancelled(options))
+                    {
+                        return result;
                     }
 
                     profile.optimizedPathCount = optResult.outputCount;
@@ -1005,6 +1045,11 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
 
     for (int attempt = 0; attempt < maxAttemptCount; ++attempt)
     {
+        if (IsCancelled(options))
+        {
+            return result;
+        }
+
         const double searchPadding =
             options.localBuildOptions.regionMode ==
                 VoxelBuildRegionMode::FullMeshBounds ?
@@ -1026,13 +1071,18 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                 BuildVoxelSpaceForAttempt(
                     triangles,
                     spatialHash,
-                    options.meshBuildOptions,
+                    meshBuildOptions,
                     options.localBuildOptions,
                     startPoint3D,
                     goalPoint3D,
                     searchPadding,
                     voxelSpace
                 );
+        }
+
+        if (IsCancelled(options))
+        {
+            return result;
         }
 
         profile.buildAttemptCount = attempt + 1;
@@ -1083,6 +1133,11 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                     goalPoint3D,
                     astarOptions
                 );
+        }
+
+        if (IsCancelled(options))
+        {
+            return result;
         }
 
         profile.astarVisitedCount = astarResult.visitedCount;

@@ -4,6 +4,26 @@
 
 ## 2026-04-30
 
+### PathPlanningWorkbench 交互平台骨架
+
+- 新增可选 Qt + OCCT target `PathPlanningWorkbench`，Qt Widgets 不存在时自动跳过，不影响现有命令行 target 和测试。
+- `PathPlanningWorkbench` CMake 支持自动探测 `C:/Qt/6.11.0/msvc2022_64`，也可通过 `PATH_PLANNING_WORKBENCH_QT_ROOT` 指定 Qt 安装根目录。
+- 新增 `src/PathPlanningWorkbench/`，包含模型导入、OCCT 视图、交互面板和 workbench 入口。
+- 支持导入 STEP/STP、BREP 和 legacy ASCII VTK polygon mesh；STEP/BREP 可通过 linear/angular deflection 调整离散参数。
+- 支持 shaded/wireframe 显示、手动输入起终点与方向、双击拾取起终点与方向、主动计算路径和输入变更后实时计算路径。
+- 改进视图交互：滚轮以鼠标位置为缩放中心；双击拾取改为对当前模型三角网格做射线命中，拾取点落在模型表面。
+- 显示模式新增 mesh，基于 OCCT triangulation 叠加显示离散网格边；VTK 导入后也会补三角化用于拾取和网格显示。
+- 离散参数改为显式 Apply Discretization 后生效，更新后同步影响显示网格和后续路径计算。
+- 起终点方向取消拾取设置，默认使用 +X；快捷键 `Q` 循环起点方向，快捷键 `E` 循环终点方向，顺序为 +X、+Y、+Z、-X、-Y、-Z。
+- 起终点方向刷新时合并 spinbox 信号并只重绘 endpoint overlay，减少方向图标闪烁。
+- OCCT 视图新增世界坐标轴显示。
+- 路径计算前增加 planner、voxel size、离散参数和开始/结束日志，并主动刷新 UI 日志区域。
+- 路径计算改为后台任务执行，新增 Stop Computation 按钮；`VoxelPathPlanner`/`VoxelAStar` 增加协作式取消回调，停止后可调整参数并重新计算。
+- mesh 显示模式只显示离散网格边，不再显示实体；网格边按模型缓存，避免 VTK 网格导入后切换显示模式反复重建导致卡顿。
+- VTK 导入不再转换为 `TopoDS_Shape`；workbench 直接保留 `TriangleMeshData` 并用 `AIS_Triangulation` 显示和拾取。当前 voxel planner 对 VTK mesh 会提示需要 triangle-input adapter。
+- 交互面板提供 voxel full-bounds、voxel lazy 和 geometry-query 规划方法入口；当前 geometry-query 在 UI 中保留入口但尚未接入 OCCT 导入。
+- voxel 规划结果可在 OCCT 视图中叠加显示路径和关键路径体素。
+
 ### Voxel baseline BREP 场景入口
 
 - `VoxelPathPlanner` 新增 `VoxelBrepScenarioRequest`、`ReadBrepShape()`、`MakeScenarioFromBrepFile()` 和 `MakeBrepBaselineOptions()`，沉淀通过 BREP 文件构造 baseline 测例的公共方式。

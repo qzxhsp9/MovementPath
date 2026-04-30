@@ -70,6 +70,11 @@ static double ElapsedMs(
         end - start).count();
 }
 
+static bool IsCancelled(const VoxelMeshBuildOptions& options)
+{
+    return options.shouldCancel && options.shouldCancel();
+}
+
 static void AddMarkStats(
     VoxelMeshBuildResult& result,
     const VoxelTriangleMarkStats& stats)
@@ -653,6 +658,11 @@ VoxelTriangleMarkStats VoxelMeshBuilder::MarkTriangleToVoxelSpace(
         ix <= maxIndex.x;
         ++ix)
     {
+        if (IsCancelled(options))
+        {
+            return stats;
+        }
+
         for (int iy = minIndex.y;
             iy <= maxIndex.y;
             ++iy)
@@ -782,6 +792,11 @@ VoxelMeshBuildResult VoxelMeshBuilder::BuildVoxelSpaceFromTriangles(
 
     outSpace.Clear();
 
+    if (IsCancelled(options))
+    {
+        return result;
+    }
+
     if (options.voxelSize <= 0.0)
     {
         return result;
@@ -816,9 +831,20 @@ VoxelMeshBuildResult VoxelMeshBuilder::BuildVoxelSpaceFromTriangles(
         StoreFreeCellsInBounds(bounds, outSpace);
     }
 
+    if (IsCancelled(options))
+    {
+        return result;
+    }
+
     const auto markStart = Now();
     for (const MeshTriangle& tri : triangles)
     {
+        if (IsCancelled(options))
+        {
+            result.voxelMarkMs = ElapsedMs(markStart, Now());
+            return result;
+        }
+
         const VoxelTriangleInfluenceRange range =
             ComputeTriangleInfluenceRange(tri, options, outSpace);
         AddMarkStats(
@@ -837,6 +863,11 @@ VoxelMeshBuildResult VoxelMeshBuilder::BuildVoxelSpaceFromTriangles(
 
     for (const auto& kv : outSpace.Cells())
     {
+        if (IsCancelled(options))
+        {
+            return result;
+        }
+
         if (kv.second.state == VoxelState::Occupied)
         {
             ++occupiedCount;
@@ -918,6 +949,11 @@ VoxelMeshBuildResult VoxelMeshBuilder::BuildVoxelSpaceFromTrianglesInBox(
 
     outSpace.Clear();
 
+    if (IsCancelled(options))
+    {
+        return result;
+    }
+
     if (options.voxelSize <= 0.0)
     {
         return result;
@@ -948,6 +984,11 @@ VoxelMeshBuildResult VoxelMeshBuilder::BuildVoxelSpaceFromTrianglesInBox(
     if (options.storeFreeCells)
     {
         StoreFreeCellsInBounds(bounds, outSpace);
+    }
+
+    if (IsCancelled(options))
+    {
+        return result;
     }
 
     const double halfDiag = outSpace.GetHalfDiagonal();
@@ -991,6 +1032,14 @@ VoxelMeshBuildResult VoxelMeshBuilder::BuildVoxelSpaceFromTrianglesInBox(
     const auto candidateFilterStart = Now();
     for (int triangleId : candidateTriangleIds)
     {
+        if (IsCancelled(options))
+        {
+            result.candidateFilterMs = ElapsedMs(
+                candidateFilterStart,
+                Now());
+            return result;
+        }
+
         if (triangleId < 0 ||
             static_cast<std::size_t>(triangleId) >= triangles.size())
         {
@@ -1016,6 +1065,12 @@ VoxelMeshBuildResult VoxelMeshBuilder::BuildVoxelSpaceFromTrianglesInBox(
     const auto markStart = Now();
     for (std::size_t i = 0; i < filteredTriangleIds.size(); ++i)
     {
+        if (IsCancelled(options))
+        {
+            result.voxelMarkMs = ElapsedMs(markStart, Now());
+            return result;
+        }
+
         const int triangleId = filteredTriangleIds[i];
         AddMarkStats(
             result,
@@ -1034,6 +1089,12 @@ VoxelMeshBuildResult VoxelMeshBuilder::BuildVoxelSpaceFromTrianglesInBox(
     const auto stateCountStart = Now();
     for (const auto& kv : outSpace.Cells())
     {
+        if (IsCancelled(options))
+        {
+            result.stateCountMs = ElapsedMs(stateCountStart, Now());
+            return result;
+        }
+
         if (kv.second.state == VoxelState::Occupied)
         {
             ++occupiedCount;
@@ -1068,6 +1129,11 @@ VoxelMeshBuildResult VoxelMeshBuilder::AppendVoxelSpaceFromTrianglesInBox(
 {
     VoxelMeshBuildResult result;
     const auto totalStart = Now();
+
+    if (IsCancelled(options))
+    {
+        return result;
+    }
 
     if (options.voxelSize <= 0.0 || !outSpace.IsValid())
     {
@@ -1108,6 +1174,12 @@ VoxelMeshBuildResult VoxelMeshBuilder::AppendVoxelSpaceFromTrianglesInBox(
     if (options.storeFreeCells)
     {
         StoreFreeCellsInBounds(appendBounds, outSpace);
+    }
+
+    if (IsCancelled(options))
+    {
+        outSpace.SetSearchBounds(combinedBounds);
+        return result;
     }
 
     const double halfDiag = outSpace.GetHalfDiagonal();
@@ -1153,6 +1225,15 @@ VoxelMeshBuildResult VoxelMeshBuilder::AppendVoxelSpaceFromTrianglesInBox(
     const auto candidateFilterStart = Now();
     for (int triangleId : candidateTriangleIds)
     {
+        if (IsCancelled(options))
+        {
+            result.candidateFilterMs = ElapsedMs(
+                candidateFilterStart,
+                Now());
+            outSpace.SetSearchBounds(combinedBounds);
+            return result;
+        }
+
         if (triangleId < 0 ||
             static_cast<std::size_t>(triangleId) >= triangles.size())
         {
@@ -1212,6 +1293,12 @@ VoxelMeshBuildResult VoxelMeshBuilder::AppendVoxelSpaceFromTrianglesInBox(
     for (const VoxelTriangleInfluenceRange& influenceRange :
         filteredInfluenceRanges)
     {
+        if (IsCancelled(options))
+        {
+            outSpace.SetSearchBounds(combinedBounds);
+            return result;
+        }
+
         VoxelIndex clippedMin;
         VoxelIndex clippedMax;
 
@@ -1236,6 +1323,13 @@ VoxelMeshBuildResult VoxelMeshBuilder::AppendVoxelSpaceFromTrianglesInBox(
     const auto markStart = Now();
     for (std::size_t i = 0; i < filteredTriangleIds.size(); ++i)
     {
+        if (IsCancelled(options))
+        {
+            result.voxelMarkMs = ElapsedMs(markStart, Now());
+            outSpace.SetSearchBounds(combinedBounds);
+            return result;
+        }
+
         const int triangleId = filteredTriangleIds[i];
         AddMarkStats(
             result,
