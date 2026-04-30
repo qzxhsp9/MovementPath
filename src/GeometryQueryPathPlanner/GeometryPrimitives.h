@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 
 namespace movement_path::geometry
@@ -20,6 +21,44 @@ struct Vec3
     Vec3(double ix, double iy, double iz)
         : x(ix), y(iy), z(iz)
     {
+    }
+
+    Vec3 operator+(const Vec3& other) const
+    {
+        return Vec3(x + other.x, y + other.y, z + other.z);
+    }
+
+    Vec3 operator-(const Vec3& other) const
+    {
+        return Vec3(x - other.x, y - other.y, z - other.z);
+    }
+
+    Vec3 operator*(double scalar) const
+    {
+        return Vec3(x * scalar, y * scalar, z * scalar);
+    }
+
+    double Dot(const Vec3& other) const
+    {
+        return x * other.x + y * other.y + z * other.z;
+    }
+
+    Vec3 Cross(const Vec3& other) const
+    {
+        return Vec3(
+            y * other.z - z * other.y,
+            z * other.x - x * other.z,
+            x * other.y - y * other.x);
+    }
+
+    double SquaredLength() const
+    {
+        return Dot(*this);
+    }
+
+    double Distance(const Vec3& other) const
+    {
+        return std::sqrt((*this - other).SquaredLength());
     }
 };
 
@@ -54,6 +93,25 @@ struct Aabb
         max.x = std::max(max.x, p.x);
         max.y = std::max(max.y, p.y);
         max.z = std::max(max.z, p.z);
+    }
+
+    void Expand(const Aabb& other)
+    {
+        if (!other.IsValid())
+        {
+            return;
+        }
+
+        Expand(other.min);
+        Expand(other.max);
+    }
+
+    bool Intersects(const Aabb& other) const
+    {
+        return IsValid() && other.IsValid() &&
+            min.x <= other.max.x && max.x >= other.min.x &&
+            min.y <= other.max.y && max.y >= other.min.y &&
+            min.z <= other.max.z && max.z >= other.min.z;
     }
 };
 

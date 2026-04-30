@@ -1,4 +1,5 @@
 #include "GeometryQueryPathPlanner.h"
+#include "GeometryQueryContext.h"
 
 namespace movement_path::geometry
 {
@@ -7,8 +8,6 @@ GeometryPathResult GeometryQueryPathPlanner::Plan(
     const GeometryPathRequest& request,
     const GeometryPathOptions& options) const
 {
-    (void)options;
-
     GeometryPathResult result;
     result.profile.triangleCount = request.triangles.size();
 
@@ -18,6 +17,19 @@ GeometryPathResult GeometryQueryPathPlanner::Plan(
         result.message = "GeometryQueryPathPlanner requires mesh triangles.";
         return result;
     }
+
+    GeometryQueryContext queryContext;
+
+    if (!queryContext.Build(request.triangles))
+    {
+        result.status = GeometryPathStatus::Failed;
+        result.message = "GeometryQueryPathPlanner failed to build query context.";
+        result.profile = queryContext.Profile();
+        return result;
+    }
+
+    result.profile = queryContext.Profile();
+    (void)options;
 
     result.status = GeometryPathStatus::NotImplemented;
     result.message =

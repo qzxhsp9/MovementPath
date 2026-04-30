@@ -40,6 +40,12 @@ struct GeometryPathProfile
     std::size_t triangleCount = 0;
     std::size_t geometryQueryCount = 0;
     std::size_t collisionQueryCount = 0;
+    std::size_t geometryCandidateTriangleCount = 0;
+    std::size_t maxCandidateTriangleCount = 0;
+    std::size_t spatialIndexNodeCount = 0;
+    std::size_t spatialIndexVisitedNodeCount = 0;
+    std::size_t spatialIndexDryRunPrunableNodeCount = 0;
+    std::size_t spatialIndexDryRunClearanceSafeNodeCount = 0;
     double spatialIndexBuildMs = 0.0;
     double searchMs = 0.0;
     double optimizeMs = 0.0;

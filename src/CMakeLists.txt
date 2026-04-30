@@ -32,6 +32,12 @@ if(BUILD_TESTING)
         add_test(NAME ${target} COMMAND ${target})
     endfunction()
 
+    function(add_geometry_query_path_planner_test target source)
+        add_executable(${target} ${source})
+        target_link_libraries(${target} PRIVATE GeometryQueryPathPlanner)
+        add_test(NAME ${target} COMMAND ${target})
+    endfunction()
+
     add_movement_path_test(
         TriangleSpatialHashTests
         ${CMAKE_SOURCE_DIR}/tests/TriangleSpatialHashTests.cpp)
@@ -41,6 +47,9 @@ if(BUILD_TESTING)
     add_movement_path_test(
         VoxelPathPlannerTests
         ${CMAKE_SOURCE_DIR}/tests/VoxelPathPlannerTests.cpp)
+    add_geometry_query_path_planner_test(
+        GeometryQueryPathPlannerTests
+        ${CMAKE_SOURCE_DIR}/tests/GeometryQueryPathPlannerTests.cpp)
 endif()
 
 file(COPY ${OCCT_DLLS} DESTINATION "${CMAKE_BINARY_DIR}/")

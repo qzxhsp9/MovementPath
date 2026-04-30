@@ -1,10 +1,18 @@
 set(GEOMETRY_QUERY_PATH_PLANNER_HEADERS
     GeometryPrimitives.h
+    GeometryQueries.h
+    GeometryQueryContext.h
     GeometryQueryPathPlanner.h
+    TriangleMesh.h
+    TriangleAabbTree.h
 )
 
 set(GEOMETRY_QUERY_PATH_PLANNER_SOURCES
+    GeometryQueries.cpp
+    GeometryQueryContext.cpp
     GeometryQueryPathPlanner.cpp
+    TriangleMesh.cpp
+    TriangleAabbTree.cpp
 )
 
 add_library(GeometryQueryPathPlanner

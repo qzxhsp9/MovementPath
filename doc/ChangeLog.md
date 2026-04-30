@@ -143,3 +143,23 @@ out\build\x64-Debug\MovementPathBenchmark.exe
 - `src/VoxelPathPlanner/README.md`
 - `src/GeometryQueryPathPlanner/README.md`
 - `doc/` 仅保留模块设计/计划/状态文档和全项目 `ChangeLog.md`。
+
+### GeometryQueryPathPlanner 几何查询基础
+
+- 新增 `GeometryQueryPathPlannerTests` 测试 target。
+- 补充 planner scaffold 行为测试：空 mesh 返回 `InvalidInput`，非空 mesh 当前返回 `NotImplemented`。
+- 新增 `GeometryQueries.h/.cpp`，实现点到三角形最近点、点到三角形距离、三角形 AABB、点到 AABB 距离。
+- 新增暴力 `ClosestPointToMeshBruteForce()`，作为后续空间索引 correctness oracle。
+- 新增 `TriangleAabbTree.h/.cpp`，实现第一版三角形 AABB tree、AABB 查询和 closest-point 查询。
+- 单测覆盖点到三角形面内、边、顶点、退化三角形，AABB tree 查询与暴力结果对照。
+- 新增 `TriangleMesh.h/.cpp`，统一三角形集合和 mesh AABB 管理。
+- 新增 segment-to-triangle 距离和 segment clearance 暴力查询。
+- `TriangleAabbTree` 新增 segment clearance 查询，当前采用保守全遍历，保证与暴力 oracle 一致。
+- 扩展几何测试，覆盖空树、单三角形、多层树、边界相交和 segment clearance 对照。
+- 新增 `GeometryQueryContext.h/.cpp`，组合 `TriangleMesh`、`TriangleAabbTree` 和 query profile。
+- `GeometryQueryPathPlanner::Plan()` 当前会构建 query context 并记录 `spatialIndexBuildMs`、`spatialIndexNodeCount`，但仍返回 `NotImplemented`。
+- `GeometryPathProfile` 增加候选三角形、最大候选数、空间索引节点数和访问节点数统计字段。
+- `SegmentClearance` 增加 `radius` 参数，支持线段安全半径/capsule clearance 语义。
+- `SegmentClearanceResult` 增加 `clearance`、`radius` 和 `requiredDistance` 字段。
+- `TriangleAabbTreeStats` 与 `GeometryPathProfile` 增加 segment clearance dry-run 剪枝统计字段，当前只统计不改变遍历行为。
+- 补充 radius 与 dry-run 统计单测。
