@@ -11,6 +11,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -32,6 +33,8 @@ struct BenchmarkRow
     // so benchmark schema changes remain obvious in code review.
     std::string sceneName;
     std::string modeName;
+    int runIndex = 0;
+    int runCount = 0;
     bool success = false;
     std::string buildRegionMode;
     bool lazyFallbackTriggered = false;
@@ -69,6 +72,8 @@ struct BenchmarkRow
     std::size_t lazyDistanceNotImprovedCount = 0;
     std::size_t lazyStateWriteCount = 0;
     std::size_t lazyStateUnchangedWriteCount = 0;
+    std::size_t lazyOccupiedUnchangedWriteCount = 0;
+    std::size_t lazyClearanceUnchangedWriteCount = 0;
     std::size_t lazyOccupiedWriteCount = 0;
     std::size_t lazyClearanceWriteCount = 0;
     std::size_t lazyInfluenceCacheHitCount = 0;
@@ -185,13 +190,17 @@ std::vector<BenchmarkCase> MakeBenchmarkCases()
 
 BenchmarkRow MakeRow(
     const BenchmarkCase& benchmarkCase,
-    const VoxelPathPlannerResult& result)
+    const VoxelPathPlannerResult& result,
+    int runIndex,
+    int runCount)
 {
     const VoxelPlanningProfile& profile = result.profile;
 
     BenchmarkRow row;
     row.sceneName = benchmarkCase.sceneName;
     row.modeName = benchmarkCase.modeName;
+    row.runIndex = runIndex;
+    row.runCount = runCount;
     row.success = result.success;
     row.buildRegionMode = profile.buildRegionMode;
     row.lazyFallbackTriggered = profile.lazyFallbackTriggered;
@@ -243,6 +252,10 @@ BenchmarkRow MakeRow(
     row.lazyStateWriteCount = profile.lazyStateWriteCount;
     row.lazyStateUnchangedWriteCount =
         profile.lazyStateUnchangedWriteCount;
+    row.lazyOccupiedUnchangedWriteCount =
+        profile.lazyOccupiedUnchangedWriteCount;
+    row.lazyClearanceUnchangedWriteCount =
+        profile.lazyClearanceUnchangedWriteCount;
     row.lazyOccupiedWriteCount = profile.lazyOccupiedWriteCount;
     row.lazyClearanceWriteCount = profile.lazyClearanceWriteCount;
     row.lazyInfluenceCacheHitCount =
@@ -270,7 +283,8 @@ BenchmarkRow MakeRow(
 void WriteCsvHeader(std::ostream& os)
 {
     os
-        << "scene,mode,success,buildRegionMode,lazyFallbackTriggered,"
+        << "scene,mode,runIndex,runCount,success,buildRegionMode,"
+        << "lazyFallbackTriggered,"
         << "lazyFallbackReason,triangulationMs,spatialIndexBuildMs,"
         << "voxelBuildMs,astarMs,lazyChunkBuildMs,"
         << "lazyCandidateQueryMs,lazyCandidateFilterMs,"
@@ -285,6 +299,8 @@ void WriteCsvHeader(std::ostream& os)
         << "lazyDistanceCalculationCount,lazyDistanceImprovedCount,"
         << "lazyDistanceNotImprovedCount,"
         << "lazyStateWriteCount,lazyStateUnchangedWriteCount,"
+        << "lazyOccupiedUnchangedWriteCount,"
+        << "lazyClearanceUnchangedWriteCount,"
         << "lazyOccupiedWriteCount,lazyClearanceWriteCount,"
         << "lazyInfluenceCacheHitCount,lazyInfluenceCacheMissCount,"
         << "lazyMinCandidateTriangleCount,"
@@ -302,6 +318,8 @@ void WriteCsvRow(
     os
         << row.sceneName << ","
         << row.modeName << ","
+        << row.runIndex << ","
+        << row.runCount << ","
         << (row.success ? "true" : "false") << ","
         << row.buildRegionMode << ","
         << (row.lazyFallbackTriggered ? "true" : "false") << ","
@@ -337,6 +355,8 @@ void WriteCsvRow(
         << row.lazyDistanceNotImprovedCount << ","
         << row.lazyStateWriteCount << ","
         << row.lazyStateUnchangedWriteCount << ","
+        << row.lazyOccupiedUnchangedWriteCount << ","
+        << row.lazyClearanceUnchangedWriteCount << ","
         << row.lazyOccupiedWriteCount << ","
         << row.lazyClearanceWriteCount << ","
         << row.lazyInfluenceCacheHitCount << ","
@@ -352,10 +372,40 @@ void WriteCsvRow(
         << row.lazyAttemptCost << ","
         << row.fallbackCost << "\n";
 }
+
+int ParseRunCount(
+    int argc,
+    char** argv)
+{
+    int runCount = 3;
+
+    for (int i = 1; i < argc; ++i)
+    {
+        const std::string arg = argv[i];
+
+        if (arg == "--runs" && i + 1 < argc)
+        {
+            std::istringstream iss(argv[i + 1]);
+            iss >> runCount;
+            ++i;
+        }
+    }
+
+    if (runCount < 1)
+    {
+        runCount = 1;
+    }
+
+    return runCount;
+}
 }
 
-int main()
+int main(
+    int argc,
+    char** argv)
 {
+    const int runCount = ParseRunCount(argc, argv);
+
     // Keep generated benchmark data with the planning documents.
     const std::string outputPath = "doc/voxel_planner_benchmark.csv";
     std::ofstream ofs(outputPath.c_str(), std::ios::out);
@@ -370,24 +420,32 @@ int main()
     WriteCsvHeader(ofs);
 
     std::cout << "Writing benchmark CSV: " << outputPath << std::endl;
+    std::cout << "Benchmark runs: " << runCount << std::endl;
 
-    for (const BenchmarkCase& benchmarkCase : MakeBenchmarkCases())
+    const std::vector<BenchmarkCase> benchmarkCases = MakeBenchmarkCases();
+
+    for (int runIndex = 1; runIndex <= runCount; ++runIndex)
     {
-        const VoxelPathPlannerResult result =
-            VoxelPathPlanner::Plan(
-                benchmarkCase.scenario,
-                benchmarkCase.options);
+        for (const BenchmarkCase& benchmarkCase : benchmarkCases)
+        {
+            const VoxelPathPlannerResult result =
+                VoxelPathPlanner::Plan(
+                    benchmarkCase.scenario,
+                    benchmarkCase.options);
 
-        const BenchmarkRow row = MakeRow(benchmarkCase, result);
-        WriteCsvRow(ofs, row);
+            const BenchmarkRow row =
+                MakeRow(benchmarkCase, result, runIndex, runCount);
+            WriteCsvRow(ofs, row);
 
-        std::cout
-            << row.sceneName << " / " << row.modeName
-            << " success=" << (row.success ? "true" : "false")
-            << " cost=" << row.totalCost
-            << " chunks=" << row.lazyChunkBuildCount
-            << " measuredMs=" << row.totalMeasuredMs
-            << std::endl;
+            std::cout
+                << "run=" << runIndex << "/" << runCount << " "
+                << row.sceneName << " / " << row.modeName
+                << " success=" << (row.success ? "true" : "false")
+                << " cost=" << row.totalCost
+                << " chunks=" << row.lazyChunkBuildCount
+                << " measuredMs=" << row.totalMeasuredMs
+                << std::endl;
+        }
     }
 
     return EXIT_SUCCESS;

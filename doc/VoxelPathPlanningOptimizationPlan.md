@@ -201,6 +201,8 @@ box_long_face_to_face / lazy:
 
 ### Step 3：改进有效范围内候选过滤
 
+状态：已完成第一轮评估，尚未改变算法行为。
+
 候选方向：
 
 - 按 chunk-local influence intersection 进一步过滤 triangle。
@@ -209,7 +211,7 @@ box_long_face_to_face / lazy:
 
 ### Step 4：benchmark 稳定化
 
-- 支持多轮运行并输出均值/最小值/最大值。
+- 支持多轮运行，CSV 增加 `runIndex` / `runCount`。
 - 可选 JSON 输出，方便后续自动对比。
 - 增加短路径、小局部范围的非球体 benchmark。
 
@@ -219,3 +221,58 @@ box_long_face_to_face / lazy:
 - 不为 `sphere_pole_to_pole` 写专用逻辑。
 - 不因为某次 benchmark 波动调整算法参数。
 - 不移除 full build correctness baseline。
+
+## 2026-04-30 下一步评估执行结果
+
+本轮继续保持“不改变体素判定行为”，只增强统计、benchmark 和方案评估。
+
+新增统计：
+
+- `lazyOccupiedUnchangedWriteCount`
+- `lazyClearanceUnchangedWriteCount`
+- benchmark CSV 增加 `runIndex` / `runCount`，支持 `MovementPathBenchmark.exe --runs N` 多轮输出。
+
+三轮 benchmark lazy 均值摘录：
+
+```text
+sphere_pole_to_pole / lazy:
+  totalMeasuredMs avg≈2854.8
+  lazyVoxelMarkMs avg≈2393.2
+  distanceCalculationCount=5141175
+  distanceNotImprovedCount=3691886
+  stateWriteCount=1533215
+  stateUnchangedWriteCount=1259536
+  occupiedUnchangedWriteCount=64618
+  clearanceUnchangedWriteCount=1194918
+  candidateTriangleCount min/max=5/157
+
+box_long_face_to_face / lazy:
+  totalMeasuredMs avg≈126.8
+  lazyVoxelMarkMs avg≈77.9
+  distanceCalculationCount=135204
+  distanceNotImprovedCount=71318
+  stateWriteCount=72808
+  stateUnchangedWriteCount=31381
+  occupiedUnchangedWriteCount=3074
+  clearanceUnchangedWriteCount=28307
+  candidateTriangleCount min/max=4/10
+```
+
+评估结论：
+
+- 状态未变化写入主要来自 `ClearanceBand -> ClearanceBand`，不是 `Occupied -> Occupied`。
+- `sphere_pole_to_pole` 的候选三角形分布很宽，单个 chunk 的 filtered candidate 可到 157，raw candidate 可更高；chunk-local 二次过滤有继续评估价值。
+- `box_long_face_to_face` 的 candidate 分布很窄，继续做复杂二次过滤收益可能有限。
+- 当前数据更支持“按场景/按分布启用更细过滤”，而不是全局替换成更复杂的查询结构。
+
+对三种方向的反思：
+
+- chunk-local 二次过滤：最贴近现有架构，风险最低。可以先在 chunk 内进一步按 influence range 与 chunk 子块交集统计潜在减少量，再决定是否真正跳过计算。
+- triangle-to-voxel：当前实现就是 triangle 主导扫描；继续优化应围绕减少 triangle 覆盖的 voxel 和候选 triangle，而不是简单缓存更多结果。
+- voxel-to-triangle：理论上能减少无效 triangle 距离计算，但需要 chunk 内 BVH/空间索引，构建成本和内存成本不确定。应作为后续实验，不宜直接替换当前路径。
+
+下一步建议：
+
+- 先新增“chunk-local 二次过滤可节省量”的 dry-run 统计，例如估算每个 chunk 内按子块过滤后 candidate 数变化，不改变 `MarkTriangleToVoxelSpace()` 行为。
+- 继续拆分 ClearanceBand 重复写入来源：相同 triangle 重复覆盖、相邻 triangle 覆盖、相邻 chunk 影响。
+- benchmark 后续再补 summary row 或 JSON；当前 `runIndex/runCount` 已能支持外部聚合。

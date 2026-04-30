@@ -2,6 +2,16 @@
 
 本文档记录重要开发修改。当前实现状态见 `ProjectImplementationStatus.md`，总体计划见 `ProjectRoadmap.md`，性能优化计划见 `VoxelPathPlanningOptimizationPlan.md`。
 
+## 2026-04-30
+
+### Lazy 统计与 benchmark 增强
+
+- 细分状态未变化写入来源，新增 `lazyOccupiedUnchangedWriteCount` 和 `lazyClearanceUnchangedWriteCount`。
+- `MovementPathBenchmark.exe` 支持 `--runs N` 多轮运行。
+- benchmark CSV 增加 `runIndex` / `runCount`。
+- 三轮数据表明状态未变化写入主要来自 `ClearanceBand -> ClearanceBand` 重复写入。
+- 对 chunk-local 二次过滤、triangle-to-voxel 和 voxel-to-triangle 查询方式完成第一轮评估，暂不改变算法行为。
+
 ## 2026-04-29
 
 ### Lazy 统计增强

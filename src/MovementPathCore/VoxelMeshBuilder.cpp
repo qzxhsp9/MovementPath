@@ -81,6 +81,10 @@ static void AddMarkStats(
     result.distanceNotImprovedCount += stats.distanceNotImprovedCount;
     result.stateWriteCount += stats.stateWriteCount;
     result.stateUnchangedWriteCount += stats.stateUnchangedWriteCount;
+    result.occupiedUnchangedWriteCount +=
+        stats.occupiedUnchangedWriteCount;
+    result.clearanceUnchangedWriteCount +=
+        stats.clearanceUnchangedWriteCount;
     result.occupiedWriteCount += stats.occupiedWriteCount;
     result.clearanceWriteCount += stats.clearanceWriteCount;
 }
@@ -660,6 +664,7 @@ VoxelTriangleMarkStats VoxelMeshBuilder::MarkTriangleToVoxelSpace(
                     if (oldState == VoxelState::Occupied)
                     {
                         ++stats.stateUnchangedWriteCount;
+                        ++stats.occupiedUnchangedWriteCount;
                     }
                     continue;
                 }
@@ -681,6 +686,7 @@ VoxelTriangleMarkStats VoxelMeshBuilder::MarkTriangleToVoxelSpace(
                         if (oldState == VoxelState::ClearanceBand)
                         {
                             ++stats.stateUnchangedWriteCount;
+                            ++stats.clearanceUnchangedWriteCount;
                         }
                     }
                 }

@@ -118,6 +118,10 @@ void PreserveLazyAttemptOnFallback(
         lazyProfile.lazyStateWriteCount;
     fallbackResult.profile.lazyStateUnchangedWriteCount =
         lazyProfile.lazyStateUnchangedWriteCount;
+    fallbackResult.profile.lazyOccupiedUnchangedWriteCount =
+        lazyProfile.lazyOccupiedUnchangedWriteCount;
+    fallbackResult.profile.lazyClearanceUnchangedWriteCount =
+        lazyProfile.lazyClearanceUnchangedWriteCount;
     fallbackResult.profile.lazyOccupiedWriteCount =
         lazyProfile.lazyOccupiedWriteCount;
     fallbackResult.profile.lazyClearanceWriteCount =
@@ -339,6 +343,10 @@ void CopyLazyStatsToProfile(
     profile.lazyStateWriteCount = stats.totalStateWriteCount;
     profile.lazyStateUnchangedWriteCount =
         stats.totalStateUnchangedWriteCount;
+    profile.lazyOccupiedUnchangedWriteCount =
+        stats.totalOccupiedUnchangedWriteCount;
+    profile.lazyClearanceUnchangedWriteCount =
+        stats.totalClearanceUnchangedWriteCount;
     profile.lazyOccupiedWriteCount = stats.totalOccupiedWriteCount;
     profile.lazyClearanceWriteCount = stats.totalClearanceWriteCount;
     profile.lazyInfluenceCacheHitCount =
@@ -1235,6 +1243,10 @@ void VoxelPathPlanner::PrintProfile(
         << profile.lazyStateWriteCount << std::endl;
     std::cout << "Lazy state unchanged write count: "
         << profile.lazyStateUnchangedWriteCount << std::endl;
+    std::cout << "Lazy occupied unchanged write count: "
+        << profile.lazyOccupiedUnchangedWriteCount << std::endl;
+    std::cout << "Lazy clearance unchanged write count: "
+        << profile.lazyClearanceUnchangedWriteCount << std::endl;
     std::cout << "Lazy occupied write count: "
         << profile.lazyOccupiedWriteCount << std::endl;
     std::cout << "Lazy clearance write count: "

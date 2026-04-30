@@ -33,6 +33,8 @@ struct VoxelChunkCacheStats
     std::size_t totalDistanceNotImprovedCount = 0;
     std::size_t totalStateWriteCount = 0;
     std::size_t totalStateUnchangedWriteCount = 0;
+    std::size_t totalOccupiedUnchangedWriteCount = 0;
+    std::size_t totalClearanceUnchangedWriteCount = 0;
     std::size_t totalOccupiedWriteCount = 0;
     std::size_t totalClearanceWriteCount = 0;
     std::size_t totalInfluenceCacheHitCount = 0;

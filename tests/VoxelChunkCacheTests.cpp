@@ -433,6 +433,11 @@ bool TestVoxelChunkCacheReusesTriangleInfluenceRanges()
             stats.totalStateWriteCount,
         "unchanged state writes should not exceed total state writes");
     ok &= Expect(
+        stats.totalStateUnchangedWriteCount ==
+            stats.totalOccupiedUnchangedWriteCount +
+            stats.totalClearanceUnchangedWriteCount,
+        "unchanged state writes should be split by target state");
+    ok &= Expect(
         stats.minCandidateTriangleCount <=
             stats.maxCandidateTriangleCount,
         "chunk cache should record candidate triangle range");

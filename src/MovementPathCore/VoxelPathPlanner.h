@@ -53,6 +53,8 @@ struct VoxelPlanningProfile
     std::size_t lazyDistanceNotImprovedCount = 0;
     std::size_t lazyStateWriteCount = 0;
     std::size_t lazyStateUnchangedWriteCount = 0;
+    std::size_t lazyOccupiedUnchangedWriteCount = 0;
+    std::size_t lazyClearanceUnchangedWriteCount = 0;
     std::size_t lazyOccupiedWriteCount = 0;
     std::size_t lazyClearanceWriteCount = 0;
     std::size_t lazyInfluenceCacheHitCount = 0;

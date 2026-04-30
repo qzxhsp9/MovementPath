@@ -215,6 +215,11 @@ bool TestPlannerLazySuccessWithoutFallback(
             lazyResult.profile.lazyStateWriteCount,
         "lazy unchanged state writes should not exceed total writes");
     ok &= Expect(
+        lazyResult.profile.lazyStateUnchangedWriteCount ==
+            lazyResult.profile.lazyOccupiedUnchangedWriteCount +
+            lazyResult.profile.lazyClearanceUnchangedWriteCount,
+        "lazy unchanged state writes should be split by target state");
+    ok &= Expect(
         lazyResult.profile.lazyMinCandidateTriangleCount <=
             lazyResult.profile.lazyMaxCandidateTriangleCount,
         "lazy profile should expose candidate count distribution");

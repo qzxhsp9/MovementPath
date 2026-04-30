@@ -166,6 +166,8 @@ struct VoxelMeshBuildResult
     std::size_t distanceNotImprovedCount = 0;
     std::size_t stateWriteCount = 0;
     std::size_t stateUnchangedWriteCount = 0;
+    std::size_t occupiedUnchangedWriteCount = 0;
+    std::size_t clearanceUnchangedWriteCount = 0;
     std::size_t occupiedWriteCount = 0;
     std::size_t clearanceWriteCount = 0;
     std::size_t influenceCacheHitCount = 0;
@@ -191,6 +193,8 @@ struct VoxelTriangleMarkStats
     std::size_t distanceNotImprovedCount = 0;
     std::size_t stateWriteCount = 0;
     std::size_t stateUnchangedWriteCount = 0;
+    std::size_t occupiedUnchangedWriteCount = 0;
+    std::size_t clearanceUnchangedWriteCount = 0;
     std::size_t occupiedWriteCount = 0;
     std::size_t clearanceWriteCount = 0;
 };

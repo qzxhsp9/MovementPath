@@ -65,13 +65,14 @@
 - mark loop 按写入 bounds 裁剪，消除 lazy out-of-bounds voxel visit。
 - lazy VTK 导出补齐路径结果。
 - lazy 统计增强已记录距离未改善、状态未变化写入和 chunk candidate 分布。
+- benchmark 支持 `--runs N` 多轮输出，CSV 增加 `runIndex` / `runCount`。
 
 下一步：
 
-- 基于新增统计评估 chunk-local 二次过滤。
-- 继续细分状态未变化写入来源。
-- 评估更适合 lazy 的 triangle-to-voxel 或 voxel-to-triangle 查询方式。
-- benchmark 多轮运行与输出格式增强。
+- 增加 chunk-local 二次过滤 dry-run 统计，先估算收益再改变行为。
+- 继续分析 ClearanceBand 重复写入来源。
+- 暂不全局替换为 voxel-to-triangle 查询，先评估局部索引构建成本。
+- benchmark 后续补 summary row 或 JSON 输出。
 
 ### Phase 4：质量保护与产品化接口
 

@@ -129,6 +129,10 @@ bool VoxelChunkCache::EnsureChunkForIndex(
     m_stats.totalStateWriteCount += result.stateWriteCount;
     m_stats.totalStateUnchangedWriteCount +=
         result.stateUnchangedWriteCount;
+    m_stats.totalOccupiedUnchangedWriteCount +=
+        result.occupiedUnchangedWriteCount;
+    m_stats.totalClearanceUnchangedWriteCount +=
+        result.clearanceUnchangedWriteCount;
     m_stats.totalOccupiedWriteCount += result.occupiedWriteCount;
     m_stats.totalClearanceWriteCount += result.clearanceWriteCount;
     m_stats.totalInfluenceCacheHitCount += result.influenceCacheHitCount;
