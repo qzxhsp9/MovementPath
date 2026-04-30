@@ -4,6 +4,19 @@
 
 ## 2026-04-30
 
+### Voxel baseline BREP 场景入口
+
+- `VoxelPathPlanner` 新增 `VoxelBrepScenarioRequest`、`ReadBrepShape()`、`MakeScenarioFromBrepFile()` 和 `MakeBrepBaselineOptions()`，沉淀通过 BREP 文件构造 baseline 测例的公共方式。
+- `main.cpp` 的 `user_brep` 示例改为只填写 BREP 文件路径、起点、终点和端点 snap 方向，再调用 `VoxelPathPlanner` 模块 API。
+- BREP baseline options 默认使用 `FullMeshBounds`，关闭 lazy build，避免调试外部 BREP 文件时混入 lazy fallback 行为。
+- 补充缺失 BREP 文件的 helper 单测，验证失败原因和 baseline options。
+
+### GeometryQueryPathPlanner Phase 1 边界测试
+
+- 扩展 `GeometryQueryPathPlannerTests`，覆盖 segment-triangle 共面穿越、端点接触、边重叠、近平行、退化线段和退化三角形。
+- 修正并行/近并行 segment-triangle 相交判定中的点在三角形上容差，避免近平行但未接触的线段被误判为碰撞。
+- 保持 segment clearance AABB tree 当前保守遍历行为不变，继续与暴力 oracle 对齐。
+
 ### Lazy 统计与 benchmark 增强
 
 - 细分状态未变化写入来源，新增 `lazyOccupiedUnchangedWriteCount` 和 `lazyClearanceUnchangedWriteCount`。

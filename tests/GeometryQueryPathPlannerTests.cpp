@@ -463,6 +463,99 @@ bool TestSegmentClearanceMatchesBruteForce()
     return ok;
 }
 
+bool TestSegmentTriangleBoundaryCases()
+{
+    const Triangle tri = MakeUnitRightTriangle();
+    bool ok = true;
+
+    ok &= Expect(
+        Near(
+            DistanceSegmentToTriangle(
+                Vec3(-0.25, 0.25, 0.0),
+                Vec3(0.75, 0.25, 0.0),
+                tri),
+            0.0),
+        "coplanar segment crossing triangle interior should touch");
+
+    ok &= Expect(
+        Near(
+            DistanceSegmentToTriangle(
+                Vec3(0.0, 0.0, 1.0),
+                Vec3(0.0, 0.0, 0.0),
+                tri),
+            0.0),
+        "segment endpoint touching triangle vertex should touch");
+
+    ok &= Expect(
+        Near(
+            DistanceSegmentToTriangle(
+                Vec3(-1.0, 0.0, 0.0),
+                Vec3(0.5, 0.0, 0.0),
+                tri),
+            0.0),
+        "collinear segment overlapping triangle edge should touch");
+
+    ok &= Expect(
+        Near(
+            DistanceSegmentToTriangle(
+                Vec3(0.25, 0.25, 1.0e-6),
+                Vec3(0.75, 0.25, 1.0e-6),
+                tri),
+            1.0e-6,
+            1.0e-12),
+        "near-parallel segment above triangle face should report height");
+
+    ok &= Expect(
+        Near(
+            DistanceSegmentToTriangle(
+                Vec3(0.25, 0.25, 2.0),
+                Vec3(0.25, 0.25, 2.0),
+                tri),
+            2.0),
+        "degenerate segment should behave like point-to-triangle distance");
+
+    const Triangle degenerateEdge{
+        Vec3(0.0, 0.0, 0.0),
+        Vec3(1.0, 0.0, 0.0),
+        Vec3(1.0, 0.0, 0.0)
+    };
+
+    ok &= Expect(
+        Near(
+            DistanceSegmentToTriangle(
+                Vec3(0.5, 1.0, 0.0),
+                Vec3(0.5, 2.0, 0.0),
+                degenerateEdge),
+            1.0),
+        "degenerate triangle edge should behave like closest segment");
+
+    const std::vector<Triangle> triangles = { tri };
+    const SegmentClearanceResult touching =
+        SegmentClearanceToMeshBruteForce(
+            Vec3(-0.25, 0.25, 0.0),
+            Vec3(0.75, 0.25, 0.0),
+            0.0,
+            triangles);
+    ok &= Expect(touching.hit, "boundary clearance query should hit mesh");
+    ok &= Expect(touching.pass, "zero-clearance touching segment should pass");
+    ok &= Expect(
+        Near(touching.minDistance, 0.0),
+        "boundary clearance query should report zero min distance");
+
+    const SegmentClearanceResult radiusBlocked =
+        SegmentClearanceToMeshBruteForce(
+            Vec3(0.25, 0.25, 1.0e-6),
+            Vec3(0.75, 0.25, 1.0e-6),
+            0.0,
+            triangles,
+            2.0e-6);
+    ok &= Expect(
+        !radiusBlocked.pass,
+        "capsule radius should block near-parallel segment inside radius");
+
+    return ok;
+}
+
 bool TestSegmentClearanceRadiusAndDryRunStats()
 {
     const std::vector<Triangle> triangles = MakeSeparatedTriangles();
@@ -533,6 +626,7 @@ int main()
     ok &= TestTriangleAabbTreeBoundaryCases();
     ok &= TestTriangleAabbTreeClosestPointMatchesBruteForce();
     ok &= TestSegmentClearanceMatchesBruteForce();
+    ok &= TestSegmentTriangleBoundaryCases();
     ok &= TestSegmentClearanceRadiusAndDryRunStats();
     return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }

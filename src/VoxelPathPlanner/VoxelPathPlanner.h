@@ -99,6 +99,16 @@ struct VoxelPlanningScenario
     gp_Vec goalDir;
 };
 
+struct VoxelBrepScenarioRequest
+{
+    std::string name = "user_brep";
+    std::string brepPath;
+    gp_Pnt startPoint;
+    gp_Vec startDir;
+    gp_Pnt goalPoint;
+    gp_Vec goalDir;
+};
+
 struct VoxelPlanningRunOptions
 {
     bool exportVtk = true;
@@ -213,6 +223,18 @@ class VoxelPathPlanner
 {
 public:
     static VoxelPathPlannerOptions MakeDefaultOptions();
+
+    static VoxelPathPlannerOptions MakeBrepBaselineOptions(
+        const std::string& vtkPathPrefix);
+
+    static bool ReadBrepShape(
+        const std::string& path,
+        TopoDS_Shape& shape);
+
+    static bool MakeScenarioFromBrepFile(
+        const VoxelBrepScenarioRequest& request,
+        VoxelPlanningScenario& scenario,
+        std::string* errorMessage = nullptr);
 
     static VoxelPathPlannerResult Plan(
         const VoxelPlanningScenario& scenario,

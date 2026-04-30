@@ -4,6 +4,9 @@
 #include "VoxelPathOptimizer.h"
 #include "VoxelVtkExporter.h"
 
+#include <BRep_Builder.hxx>
+#include <BRepTools.hxx>
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -559,6 +562,76 @@ VoxelPathPlannerOptions VoxelPathPlanner::MakeDefaultOptions()
     options.astarOptions.markPathToVoxelSpace = true;
 
     return options;
+}
+
+VoxelPathPlannerOptions VoxelPathPlanner::MakeBrepBaselineOptions(
+    const std::string& vtkPathPrefix)
+{
+    VoxelPathPlannerOptions options = MakeDefaultOptions();
+    options.runOptions.exportVtk = true;
+    options.runOptions.debugNeighborhood = true;
+    options.runOptions.verbose = true;
+
+    options.runOptions.shapeMeshVtkPath =
+        vtkPathPrefix + "_shape_mesh.vtk";
+    options.runOptions.astarFailedVtkPath =
+        vtkPathPrefix + "_astar_failed.vtk";
+    options.runOptions.astarPathVtkPath =
+        vtkPathPrefix + "_astar_path.vtk";
+    options.runOptions.optimizedPathVoxelsVtkPath =
+        vtkPathPrefix + "_optimized_path_voxels.vtk";
+    options.runOptions.optimizedPathPolylineVtkPath =
+        vtkPathPrefix + "_optimized_path_polyline.vtk";
+    options.runOptions.lazyChunkBoundsVtkPath =
+        vtkPathPrefix + "_lazy_chunk_bounds.vtk";
+
+    options.localBuildOptions.regionMode = VoxelBuildRegionMode::FullMeshBounds;
+    options.lazyBuildOptions.enabled = false;
+    return options;
+}
+
+bool VoxelPathPlanner::ReadBrepShape(
+    const std::string& path,
+    TopoDS_Shape& shape)
+{
+    BRep_Builder builder;
+
+    if (!BRepTools::Read(shape, path.c_str(), builder))
+    {
+        return false;
+    }
+
+    return !shape.IsNull();
+}
+
+bool VoxelPathPlanner::MakeScenarioFromBrepFile(
+    const VoxelBrepScenarioRequest& request,
+    VoxelPlanningScenario& scenario,
+    std::string* errorMessage)
+{
+    TopoDS_Shape shape;
+
+    if (!ReadBrepShape(request.brepPath, shape))
+    {
+        if (errorMessage != nullptr)
+        {
+            *errorMessage = "Failed to read BREP file: " + request.brepPath;
+        }
+        return false;
+    }
+
+    scenario.name = request.name.empty() ? "user_brep" : request.name;
+    scenario.shape = shape;
+    scenario.startPoint = request.startPoint;
+    scenario.startDir = request.startDir;
+    scenario.goalPoint = request.goalPoint;
+    scenario.goalDir = request.goalDir;
+
+    if (errorMessage != nullptr)
+    {
+        errorMessage->clear();
+    }
+    return true;
 }
 
 VoxelPathPlannerResult VoxelPathPlanner::Plan(

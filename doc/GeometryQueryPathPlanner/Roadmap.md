@@ -97,6 +97,7 @@ struct SegmentClearanceResult
 - 线段 clearance 查询结果与暴力全量扫描一致。已完成基础测试。
 - 线段 radius/capsule clearance 语义已完成基础测试。
 - segment clearance dry-run 剪枝统计已接入 profile，但尚未改变遍历行为。
+- segment-triangle 边界测试已覆盖共面穿越、端点接触、边重叠、近平行、退化线段和退化三角形。
 - profile 能输出查询次数、候选数、耗时。已完成 `GeometryQueryContext` 基础统计。
 
 ## Phase 2：按需搜索图
@@ -226,4 +227,4 @@ struct SegmentClearanceResult
 2. 给 `GeometryQueryPathPlanner::Plan()` 增加 start/goal 基础合法性检查和失败原因。
 3. 设计 geometry benchmark 输出字段，与 voxel baseline 对齐。
 4. 基于 dry-run 统计评估 segment clearance 是否值得启用 AABB tree 剪枝。
-5. 增加更多 segment-triangle 边界测试，例如共面、端点接触、近平行。
+5. 增加更多 segment-triangle 边界测试，例如共面、端点接触、近平行。已完成。

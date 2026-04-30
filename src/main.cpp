@@ -7,9 +7,18 @@
 
 #include <cmath>
 #include <iostream>
+#include <string>
 
 namespace
 {
+constexpr bool kRunUserBrepScenario = true;
+constexpr const char* kUserBrepPath = R"(D:\primitives.brep)";
+
+const gp_Pnt kUserStartPoint(6.0, 0.0, -9.0);
+const gp_Pnt kUserGoalPoint(3, 0, 17);
+const gp_Vec kUserStartSnapDirection(0.0, 0.0, -1.0);
+const gp_Vec kUserGoalSnapDirection(0.0, 0.0, 1.0);
+
 VoxelPlanningScenario MakePoleToPoleScenario(
     const TopoDS_Shape& sphere)
 {
@@ -54,10 +63,44 @@ void RunScenario(
 
     VoxelPathPlanner::PrintProfile(result.profile);
 }
+
+bool RunUserBrepScenario()
+{
+    VoxelBrepScenarioRequest request;
+    request.name = "user_brep";
+    request.brepPath = kUserBrepPath;
+    request.startPoint = kUserStartPoint;
+    request.startDir = kUserStartSnapDirection;
+    request.goalPoint = kUserGoalPoint;
+    request.goalDir = kUserGoalSnapDirection;
+
+    VoxelPlanningScenario scenario;
+    std::string errorMessage;
+
+    if (!VoxelPathPlanner::MakeScenarioFromBrepFile(
+            request,
+            scenario,
+            &errorMessage))
+    {
+        std::cerr << errorMessage << std::endl;
+        return false;
+    }
+
+    const VoxelPathPlannerOptions options =
+        VoxelPathPlanner::MakeBrepBaselineOptions("D:/user_brep");
+
+    RunScenario(scenario, options);
+    return true;
+}
 }
 
 int main()
 {
+    if (kRunUserBrepScenario)
+    {
+        return RunUserBrepScenario() ? 0 : 1;
+    }
+
     const double radius = 50.0;
     TopoDS_Shape sphere =
         BRepPrimAPI_MakeSphere(gp_Pnt(0, 0, 0), radius).Shape();

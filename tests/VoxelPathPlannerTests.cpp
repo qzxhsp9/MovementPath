@@ -383,6 +383,47 @@ bool TestPlannerLazyChunkBoundsExport(
 
     return ok;
 }
+
+bool TestBrepScenarioHelpersHandleMissingFile()
+{
+    VoxelBrepScenarioRequest request;
+    request.name = "missing_brep";
+    request.brepPath = "D:/this_file_should_not_exist_for_voxel_test.brep";
+    request.startPoint = gp_Pnt(1.0, 2.0, 3.0);
+    request.startDir = gp_Vec(1.0, 0.0, 0.0);
+    request.goalPoint = gp_Pnt(4.0, 5.0, 6.0);
+    request.goalDir = gp_Vec(0.0, 1.0, 0.0);
+
+    VoxelPlanningScenario scenario;
+    std::string errorMessage;
+
+    bool ok = true;
+    ok &= Expect(
+        !VoxelPathPlanner::MakeScenarioFromBrepFile(
+            request,
+            scenario,
+            &errorMessage),
+        "missing BREP file should fail scenario construction");
+    ok &= Expect(
+        errorMessage.find(request.brepPath) != std::string::npos,
+        "missing BREP error should include file path");
+
+    const VoxelPathPlannerOptions options =
+        VoxelPathPlanner::MakeBrepBaselineOptions("D:/brep_helper_test");
+    ok &= Expect(
+        options.localBuildOptions.regionMode ==
+            VoxelBuildRegionMode::FullMeshBounds,
+        "BREP helper options should use full-bounds baseline");
+    ok &= Expect(
+        !options.lazyBuildOptions.enabled,
+        "BREP helper options should disable lazy build");
+    ok &= Expect(
+        options.runOptions.shapeMeshVtkPath ==
+            "D:/brep_helper_test_shape_mesh.vtk",
+        "BREP helper options should derive VTK paths from prefix");
+
+    return ok;
+}
 }
 
 int main()
@@ -403,6 +444,7 @@ int main()
     ok &= TestPlannerLazySuccessWithoutFallback(localScenario);
     ok &= TestPlannerLazyCostRegressionFallback(localScenario);
     ok &= TestPlannerLazyChunkBoundsExport(localScenario);
+    ok &= TestBrepScenarioHelpersHandleMissingFile();
 
     return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }

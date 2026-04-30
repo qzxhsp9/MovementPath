@@ -9,6 +9,7 @@ namespace movement_path::geometry
 namespace
 {
 constexpr double kDegenerateEpsilon = 1.0e-12;
+constexpr double kPointOnTriangleEpsilonSquared = 1.0e-24;
 
 Vec3 ClosestPointOnSegment(
     const Vec3& point,
@@ -32,7 +33,7 @@ bool PointInsideTriangle(
     const Triangle& tri)
 {
     const Vec3 closest = ClosestPointOnTriangle(point, tri);
-    return (point - closest).SquaredLength() <= kDegenerateEpsilon;
+    return (point - closest).SquaredLength() <= kPointOnTriangleEpsilonSquared;
 }
 
 bool SegmentIntersectsTriangle(

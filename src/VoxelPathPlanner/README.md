@@ -4,6 +4,7 @@ This module is the current voxel path-planning baseline.
 
 It keeps the existing full/local/lazy voxel implementations, A* search,
 path optimization, VTK export, benchmark support, and planner-facing API.
+It also owns helper APIs for constructing baseline scenarios from BREP files.
 
 Rules for this module:
 
