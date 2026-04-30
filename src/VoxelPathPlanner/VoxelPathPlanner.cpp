@@ -12,6 +12,7 @@
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <utility>
 #include <vector>
 
 namespace
@@ -63,6 +64,187 @@ bool IsCancelled(const VoxelPathPlannerOptions& options)
 {
     return options.runOptions.shouldCancel &&
         options.runOptions.shouldCancel();
+}
+
+bool IsBroaderNeighborType(
+    VoxelNeighborType candidate,
+    VoxelNeighborType current)
+{
+    return static_cast<int>(candidate) > static_cast<int>(current);
+}
+
+bool ShouldRetryWithBroaderConnectivity(
+    const VoxelAStarResult& result,
+    const VoxelAStarOptions& options)
+{
+    return !result.success &&
+        result.failReason == VoxelAStarFailReason::OpenSetEmpty &&
+        options.searchMode == VoxelAStarSearchMode::ClearanceBand &&
+        options.neighborType != VoxelNeighborType::FaceEdgeVertex26;
+}
+
+std::vector<std::pair<VoxelIndex, VoxelState>> CaptureVoxelStates(
+    const VoxelSpace& voxelSpace)
+{
+    std::vector<std::pair<VoxelIndex, VoxelState>> states;
+    states.reserve(voxelSpace.CellCount());
+
+    for (const auto& kv : voxelSpace.Cells())
+    {
+        states.push_back({ kv.first, kv.second.state });
+    }
+
+    return states;
+}
+
+void RestoreVoxelStates(
+    VoxelSpace& voxelSpace,
+    const std::vector<std::pair<VoxelIndex, VoxelState>>& states)
+{
+    for (const auto& state : states)
+    {
+        voxelSpace.SetCellState(state.first, state.second);
+    }
+}
+
+VoxelAStarResult SearchRestoringStateOnFailure(
+    VoxelSpace& voxelSpace,
+    const Vec& startPoint,
+    const Vec& goalPoint,
+    const VoxelAStarOptions& astarOptions)
+{
+    const std::vector<std::pair<VoxelIndex, VoxelState>> states =
+        CaptureVoxelStates(voxelSpace);
+
+    VoxelAStarResult result =
+        VoxelAStar::Search(
+            voxelSpace,
+            startPoint,
+            goalPoint,
+            astarOptions
+        );
+
+    if (!result.success)
+    {
+        RestoreVoxelStates(voxelSpace, states);
+    }
+
+    return result;
+}
+
+VoxelAStarResult SearchWithConnectivityFallback(
+    VoxelSpace& voxelSpace,
+    const Vec& startPoint,
+    const Vec& goalPoint,
+    const VoxelAStarOptions& astarOptions,
+    bool verbose,
+    bool allowEndpointRaySnapRetry)
+{
+    VoxelAStarResult result =
+        SearchRestoringStateOnFailure(
+            voxelSpace,
+            startPoint,
+            goalPoint,
+            astarOptions
+        );
+
+    if (result.success ||
+        astarOptions.searchMode != VoxelAStarSearchMode::ClearanceBand)
+    {
+        return result;
+    }
+
+    if (ShouldRetryWithBroaderConnectivity(result, astarOptions))
+    {
+        const VoxelNeighborType fallbackTypes[] = {
+            VoxelNeighborType::FaceEdge18,
+            VoxelNeighborType::FaceEdgeVertex26
+        };
+
+        for (VoxelNeighborType fallbackType : fallbackTypes)
+        {
+            if (!IsBroaderNeighborType(fallbackType, astarOptions.neighborType))
+            {
+                continue;
+            }
+
+            VoxelAStarOptions retryOptions = astarOptions;
+            retryOptions.neighborType = fallbackType;
+
+            if (verbose)
+            {
+                std::cout
+                    << "A* open set exhausted; retrying clearance-band search "
+                    << "with broader neighbor connectivity."
+                    << std::endl;
+            }
+
+            result =
+                SearchRestoringStateOnFailure(
+                    voxelSpace,
+                    startPoint,
+                    goalPoint,
+                    retryOptions
+                );
+
+            if (result.success)
+            {
+                return result;
+            }
+
+            if (!ShouldRetryWithBroaderConnectivity(result, retryOptions))
+            {
+                break;
+            }
+        }
+    }
+
+    if (allowEndpointRaySnapRetry &&
+        result.failReason == VoxelAStarFailReason::OpenSetEmpty)
+    {
+        VoxelAStarOptions raySnapOptions = astarOptions;
+        raySnapOptions.neighborType = VoxelNeighborType::FaceEdgeVertex26;
+
+        const bool canRaySnapStart =
+            astarOptions.useStartSnapDirection &&
+            voxelSpace.GetCellState(result.inputStartIndex) ==
+                VoxelState::Occupied;
+        const bool canRaySnapGoal =
+            astarOptions.useGoalSnapDirection &&
+            voxelSpace.GetCellState(result.inputGoalIndex) ==
+                VoxelState::Occupied;
+
+        raySnapOptions.forceStartSnapAlongDirection = canRaySnapStart;
+        raySnapOptions.forceGoalSnapAlongDirection = canRaySnapGoal;
+
+        if (!canRaySnapStart && !canRaySnapGoal)
+        {
+            return result;
+        }
+
+        if (verbose)
+        {
+            std::cout
+                << "Clearance-band A* failed from an occupied endpoint; "
+                << "retrying with ray-based directional endpoint snapping."
+                << std::endl;
+        }
+
+        VoxelAStarResult raySnapResult =
+            SearchRestoringStateOnFailure(
+                voxelSpace,
+                startPoint,
+                goalPoint,
+                raySnapOptions
+            );
+
+        if (raySnapResult.success)
+        {
+            return raySnapResult;
+        }
+    }
+
+    return result;
 }
 
 void ReplacePathEndpoints(
@@ -832,11 +1014,13 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                 {
                     ScopedTimer timer(profile.astarMs);
                     lazyAStarResult =
-                        VoxelAStar::Search(
+                        SearchWithConnectivityFallback(
                             lazyVoxelSpace,
                             startPoint3D,
                             goalPoint3D,
-                            astarOptions
+                            astarOptions,
+                            options.runOptions.verbose,
+                            false
                         );
                 }
 
@@ -1127,11 +1311,14 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
         {
             ScopedTimer timer(profile.astarMs);
             astarResult =
-                VoxelAStar::Search(
+                SearchWithConnectivityFallback(
                     voxelSpace,
                     startPoint3D,
                     goalPoint3D,
-                    astarOptions
+                    astarOptions,
+                    options.runOptions.verbose,
+                    options.localBuildOptions.regionMode ==
+                        VoxelBuildRegionMode::FullMeshBounds
                 );
         }
 

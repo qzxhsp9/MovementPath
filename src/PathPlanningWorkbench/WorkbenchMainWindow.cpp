@@ -334,6 +334,7 @@ void WorkbenchMainWindow::BuildUi()
     m_neighborTypeCombo->addItem("6-face");
     m_neighborTypeCombo->addItem("18-face-edge");
     m_neighborTypeCombo->addItem("26-face-edge-vertex");
+    m_neighborTypeCombo->setCurrentIndex(2);
     m_realtimeCheck = new QCheckBox("Realtime after input changes");
     plannerLayout->addRow("Method", m_plannerCombo);
     plannerLayout->addRow("Search", m_searchModeCombo);
@@ -505,9 +506,13 @@ void WorkbenchMainWindow::ComputePath()
     const PlannerMethod method = ReadPlannerMethod();
 
     AppendLog("Preparing path computation...");
-    AppendLog(QString("Planner: %1, voxelSize=%2, linearDeflection=%3, angularDeflection=%4")
+    AppendLog(QString("Planner: %1, search=%2, neighbors=%3, voxelSize=%4, clearance=%5, snapRadius=%6, linearDeflection=%7, angularDeflection=%8")
         .arg(m_plannerCombo->currentText())
+        .arg(m_searchModeCombo->currentText())
+        .arg(m_neighborTypeCombo->currentText())
         .arg(m_voxelSizeSpin->value())
+        .arg(m_clearanceSpin->value())
+        .arg(m_snapRadiusSpin->value())
         .arg(m_linearDeflectionSpin->value())
         .arg(m_angularDeflectionSpin->value()));
     QApplication::processEvents();
@@ -895,6 +900,27 @@ VoxelPathPlannerOptions WorkbenchMainWindow::MakeVoxelOptions(
     options.meshBuildOptions.meshDeflection = m_linearDeflectionSpin->value();
     options.meshBuildOptions.angularDeflection =
         m_angularDeflectionSpin->value();
+    options.meshBuildOptions.clearance = m_clearanceSpin->value();
+    options.astarOptions.snapMaxRadius = m_snapRadiusSpin->value();
+    options.astarOptions.searchMode =
+        m_searchModeCombo->currentIndex() == 1 ?
+            VoxelAStarSearchMode::FreeSpace :
+            VoxelAStarSearchMode::ClearanceBand;
+
+    if (m_neighborTypeCombo->currentIndex() == 1)
+    {
+        options.astarOptions.neighborType = VoxelNeighborType::FaceEdge18;
+    }
+    else if (m_neighborTypeCombo->currentIndex() == 2)
+    {
+        options.astarOptions.neighborType =
+            VoxelNeighborType::FaceEdgeVertex26;
+    }
+    else
+    {
+        options.astarOptions.neighborType = VoxelNeighborType::Face6;
+    }
+
     options.runOptions.exportVtk = m_vtkExportSettings.exportEnabled;
     options.runOptions.shapeMeshVtkPath =
         m_vtkExportSettings.shapeMeshPath.toStdString();

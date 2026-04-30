@@ -33,6 +33,12 @@ struct VoxelAStarOptions
     bool useStartSnapDirection = false;
     bool useGoalSnapDirection = false;
 
+    // Force directional snapping to march along the supplied direction and
+    // pick the first walkable voxel on that ray. This is intended for retrying
+    // endpoints that started inside an occupied/intersecting voxel.
+    bool forceStartSnapAlongDirection = false;
+    bool forceGoalSnapAlongDirection = false;
+
     Vec startSnapDirection;
     Vec goalSnapDirection;
 
@@ -138,6 +144,14 @@ private:
         const VoxelIndex& goalIndex);
 
     static bool FindNearestWalkableIndexWithDirection(
+        VoxelSpace& space,
+        const VoxelIndex& seed,
+        const Vec& seedPoint,
+        const Vec& preferredDirection,
+        const VoxelAStarOptions& options,
+        VoxelIndex& outIndex);
+
+    static bool FindFirstWalkableIndexAlongDirection(
         VoxelSpace& space,
         const VoxelIndex& seed,
         const Vec& seedPoint,

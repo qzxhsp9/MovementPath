@@ -376,6 +376,79 @@ bool VoxelAStar::FindNearestWalkableIndexWithDirection(
 // A* 主入口
 // ============================================================
 
+bool VoxelAStar::FindFirstWalkableIndexAlongDirection(
+    VoxelSpace& space,
+    const VoxelIndex& seed,
+    const Vec& seedPoint,
+    const Vec& preferredDirection,
+    const VoxelAStarOptions& options,
+    VoxelIndex& outIndex)
+{
+    const int maxRadius = options.snapMaxRadius;
+
+    if (maxRadius < 0)
+    {
+        return false;
+    }
+
+    Vec dir = preferredDirection;
+
+    if (dir.SquareMagnitude() <= 1.0e-20)
+    {
+        return FindNearestWalkableIndex(
+            space,
+            seed,
+            options,
+            outIndex
+        );
+    }
+
+    dir.Normalize();
+
+    const double voxelSize = space.GetVoxelSize();
+    const double maxDistance =
+        static_cast<double>(maxRadius) * voxelSize;
+    const double step = std::max(voxelSize * 0.25, 1.0e-6);
+
+    VoxelIndex lastIndex(
+        std::numeric_limits<int>::min(),
+        std::numeric_limits<int>::min(),
+        std::numeric_limits<int>::min()
+    );
+
+    for (double distance = 0.0;
+        distance <= maxDistance + 1.0e-9;
+        distance += step)
+    {
+        Vec samplePoint = seedPoint + dir * distance;
+        VoxelIndex index = space.WorldToIndex(samplePoint);
+
+        if (index == lastIndex)
+        {
+            continue;
+        }
+
+        lastIndex = index;
+
+        if (!space.IsInsideSearchBounds(index))
+        {
+            continue;
+        }
+
+        EnsureCellBuilt(space, index, options);
+
+        if (VoxelWalkability::IsStateWalkable(
+            space.GetCellState(index),
+            options.searchMode))
+        {
+            outIndex = index;
+            return true;
+        }
+    }
+
+    return false;
+}
+
 VoxelAStarResult VoxelAStar::Search(
     VoxelSpace& space,
     const Vec& startPoint,
@@ -417,14 +490,28 @@ VoxelAStarResult VoxelAStar::Search(
 
         if (options.useStartSnapDirection)
         {
-            startOk = FindNearestWalkableIndexWithDirection(
-                space,
-                startIndex,
-                startPoint,
-                options.startSnapDirection,
-                options,
-                snappedStart
-            );
+            if (options.forceStartSnapAlongDirection)
+            {
+                startOk = FindFirstWalkableIndexAlongDirection(
+                    space,
+                    startIndex,
+                    startPoint,
+                    options.startSnapDirection,
+                    options,
+                    snappedStart
+                );
+            }
+            else
+            {
+                startOk = FindNearestWalkableIndexWithDirection(
+                    space,
+                    startIndex,
+                    startPoint,
+                    options.startSnapDirection,
+                    options,
+                    snappedStart
+                );
+            }
         }
         else
         {
@@ -447,14 +534,28 @@ VoxelAStarResult VoxelAStar::Search(
 
         if (options.useGoalSnapDirection)
         {
-            goalOk = FindNearestWalkableIndexWithDirection(
-                space,
-                goalIndex,
-                goalPoint,
-                options.goalSnapDirection,
-                options,
-                snappedGoal
-            );
+            if (options.forceGoalSnapAlongDirection)
+            {
+                goalOk = FindFirstWalkableIndexAlongDirection(
+                    space,
+                    goalIndex,
+                    goalPoint,
+                    options.goalSnapDirection,
+                    options,
+                    snappedGoal
+                );
+            }
+            else
+            {
+                goalOk = FindNearestWalkableIndexWithDirection(
+                    space,
+                    goalIndex,
+                    goalPoint,
+                    options.goalSnapDirection,
+                    options,
+                    snappedGoal
+                );
+            }
         }
         else
         {
