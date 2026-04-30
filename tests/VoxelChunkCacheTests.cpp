@@ -445,6 +445,19 @@ bool TestVoxelChunkCacheReusesTriangleInfluenceRanges()
         stats.minRawCandidateTriangleCount <=
             stats.maxRawCandidateTriangleCount,
         "chunk cache should record raw candidate triangle range");
+    ok &= Expect(
+        stats.totalDryRunActiveCandidateTriangleCount +
+            stats.totalDryRunInactiveCandidateTriangleCount ==
+            stats.totalCandidateTriangleCount,
+        "dry-run active/inactive candidates should partition candidates");
+    ok &= Expect(
+        stats.totalDryRunClippedVoxelPairCount ==
+            stats.totalDistanceCalculationCount,
+        "dry-run clipped voxel pairs should match distance calculations");
+    ok &= Expect(
+        stats.totalDryRunClippedVoxelPairCount <=
+            stats.totalDryRunCandidateVoxelPairUpperBound,
+        "dry-run clipped pairs should not exceed chunk-wide upper bound");
 
     return ok;
 }

@@ -82,6 +82,10 @@ struct BenchmarkRow
     std::size_t lazyMaxCandidateTriangleCount = 0;
     std::size_t lazyMinRawCandidateTriangleCount = 0;
     std::size_t lazyMaxRawCandidateTriangleCount = 0;
+    std::size_t lazyDryRunActiveCandidateTriangleCount = 0;
+    std::size_t lazyDryRunInactiveCandidateTriangleCount = 0;
+    std::size_t lazyDryRunCandidateVoxelPairUpperBound = 0;
+    std::size_t lazyDryRunClippedVoxelPairCount = 0;
 
     int astarVisitedCount = 0;
     std::size_t rawPathCount = 0;
@@ -270,6 +274,14 @@ BenchmarkRow MakeRow(
         profile.lazyMinRawCandidateTriangleCount;
     row.lazyMaxRawCandidateTriangleCount =
         profile.lazyMaxRawCandidateTriangleCount;
+    row.lazyDryRunActiveCandidateTriangleCount =
+        profile.lazyDryRunActiveCandidateTriangleCount;
+    row.lazyDryRunInactiveCandidateTriangleCount =
+        profile.lazyDryRunInactiveCandidateTriangleCount;
+    row.lazyDryRunCandidateVoxelPairUpperBound =
+        profile.lazyDryRunCandidateVoxelPairUpperBound;
+    row.lazyDryRunClippedVoxelPairCount =
+        profile.lazyDryRunClippedVoxelPairCount;
     row.astarVisitedCount = profile.astarVisitedCount;
     row.rawPathCount = profile.rawPathCount;
     row.optimizedPathCount = profile.optimizedPathCount;
@@ -307,6 +319,10 @@ void WriteCsvHeader(std::ostream& os)
         << "lazyMaxCandidateTriangleCount,"
         << "lazyMinRawCandidateTriangleCount,"
         << "lazyMaxRawCandidateTriangleCount,"
+        << "lazyDryRunActiveCandidateTriangleCount,"
+        << "lazyDryRunInactiveCandidateTriangleCount,"
+        << "lazyDryRunCandidateVoxelPairUpperBound,"
+        << "lazyDryRunClippedVoxelPairCount,"
         << "astarVisitedCount,rawPathCount,optimizedPathCount,totalCost,"
         << "lazyAttemptCost,fallbackCost\n";
 }
@@ -365,6 +381,10 @@ void WriteCsvRow(
         << row.lazyMaxCandidateTriangleCount << ","
         << row.lazyMinRawCandidateTriangleCount << ","
         << row.lazyMaxRawCandidateTriangleCount << ","
+        << row.lazyDryRunActiveCandidateTriangleCount << ","
+        << row.lazyDryRunInactiveCandidateTriangleCount << ","
+        << row.lazyDryRunCandidateVoxelPairUpperBound << ","
+        << row.lazyDryRunClippedVoxelPairCount << ","
         << row.astarVisitedCount << ","
         << row.rawPathCount << ","
         << row.optimizedPathCount << ","

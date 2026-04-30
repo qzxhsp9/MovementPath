@@ -11,6 +11,7 @@
 - benchmark CSV 增加 `runIndex` / `runCount`。
 - 三轮数据表明状态未变化写入主要来自 `ClearanceBand -> ClearanceBand` 重复写入。
 - 对 chunk-local 二次过滤、triangle-to-voxel 和 voxel-to-triangle 查询方式完成第一轮评估，暂不改变算法行为。
+- 增加 chunk-local 二次过滤 dry-run 字段，验证 filtered candidate 基本全部 active，整 triangle 级二次过滤收益有限。
 
 ## 2026-04-29
 

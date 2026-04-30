@@ -224,6 +224,19 @@ bool TestPlannerLazySuccessWithoutFallback(
             lazyResult.profile.lazyMaxCandidateTriangleCount,
         "lazy profile should expose candidate count distribution");
     ok &= Expect(
+        lazyResult.profile.lazyDryRunActiveCandidateTriangleCount +
+            lazyResult.profile.lazyDryRunInactiveCandidateTriangleCount ==
+            lazyResult.profile.lazyCandidateTriangleCount,
+        "lazy dry-run active/inactive candidates should partition candidates");
+    ok &= Expect(
+        lazyResult.profile.lazyDryRunClippedVoxelPairCount ==
+            lazyResult.profile.lazyDistanceCalculationCount,
+        "lazy dry-run clipped voxel pairs should match distance calculations");
+    ok &= Expect(
+        lazyResult.profile.lazyDryRunClippedVoxelPairCount <=
+            lazyResult.profile.lazyDryRunCandidateVoxelPairUpperBound,
+        "lazy dry-run clipped pairs should not exceed upper bound");
+    ok &= Expect(
         lazyResult.profile.lazyFailedBuildCount == 0,
         "lazy planner should not report failed chunk builds");
     ok &= Expect(

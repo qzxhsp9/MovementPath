@@ -63,6 +63,10 @@ struct VoxelPlanningProfile
     std::size_t lazyMaxCandidateTriangleCount = 0;
     std::size_t lazyMinRawCandidateTriangleCount = 0;
     std::size_t lazyMaxRawCandidateTriangleCount = 0;
+    std::size_t lazyDryRunActiveCandidateTriangleCount = 0;
+    std::size_t lazyDryRunInactiveCandidateTriangleCount = 0;
+    std::size_t lazyDryRunCandidateVoxelPairUpperBound = 0;
+    std::size_t lazyDryRunClippedVoxelPairCount = 0;
     std::size_t storedCellCount = 0;
     std::size_t occupiedCount = 0;
     std::size_t clearanceBandCount = 0;

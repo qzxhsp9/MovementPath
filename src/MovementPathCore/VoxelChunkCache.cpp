@@ -137,6 +137,14 @@ bool VoxelChunkCache::EnsureChunkForIndex(
     m_stats.totalClearanceWriteCount += result.clearanceWriteCount;
     m_stats.totalInfluenceCacheHitCount += result.influenceCacheHitCount;
     m_stats.totalInfluenceCacheMissCount += result.influenceCacheMissCount;
+    m_stats.totalDryRunActiveCandidateTriangleCount +=
+        result.dryRunActiveCandidateTriangleCount;
+    m_stats.totalDryRunInactiveCandidateTriangleCount +=
+        result.dryRunInactiveCandidateTriangleCount;
+    m_stats.totalDryRunCandidateVoxelPairUpperBound +=
+        result.dryRunCandidateVoxelPairUpperBound;
+    m_stats.totalDryRunClippedVoxelPairCount +=
+        result.dryRunClippedVoxelPairCount;
     m_stats.totalCandidateQueryMs += result.candidateQueryMs;
     m_stats.totalCandidateFilterMs += result.candidateFilterMs;
     m_stats.totalVoxelMarkMs += result.voxelMarkMs;

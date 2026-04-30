@@ -43,6 +43,10 @@ struct VoxelChunkCacheStats
     std::size_t maxCandidateTriangleCount = 0;
     std::size_t minRawCandidateTriangleCount = 0;
     std::size_t maxRawCandidateTriangleCount = 0;
+    std::size_t totalDryRunActiveCandidateTriangleCount = 0;
+    std::size_t totalDryRunInactiveCandidateTriangleCount = 0;
+    std::size_t totalDryRunCandidateVoxelPairUpperBound = 0;
+    std::size_t totalDryRunClippedVoxelPairCount = 0;
 
     double totalCandidateQueryMs = 0.0;
     double totalCandidateFilterMs = 0.0;

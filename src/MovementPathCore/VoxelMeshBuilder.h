@@ -172,6 +172,10 @@ struct VoxelMeshBuildResult
     std::size_t clearanceWriteCount = 0;
     std::size_t influenceCacheHitCount = 0;
     std::size_t influenceCacheMissCount = 0;
+    std::size_t dryRunActiveCandidateTriangleCount = 0;
+    std::size_t dryRunInactiveCandidateTriangleCount = 0;
+    std::size_t dryRunCandidateVoxelPairUpperBound = 0;
+    std::size_t dryRunClippedVoxelPairCount = 0;
 
     // Full/local builders report current VoxelSpace totals. Append builds do
     // not scan the whole existing space per chunk; callers should perform one

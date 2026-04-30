@@ -276,3 +276,46 @@ box_long_face_to_face / lazy:
 - 先新增“chunk-local 二次过滤可节省量”的 dry-run 统计，例如估算每个 chunk 内按子块过滤后 candidate 数变化，不改变 `MarkTriangleToVoxelSpace()` 行为。
 - 继续拆分 ClearanceBand 重复写入来源：相同 triangle 重复覆盖、相邻 triangle 覆盖、相邻 chunk 影响。
 - benchmark 后续再补 summary row 或 JSON；当前 `runIndex/runCount` 已能支持外部聚合。
+
+## 2026-04-30 chunk-local 二次过滤 dry-run
+
+本轮继续不改变 marking 行为，只增加 dry-run 统计，用于评估“在 chunk 内进一步过滤 candidate triangle”是否值得推进。
+
+dry-run 口径：
+
+- `lazyDryRunActiveCandidateTriangleCount`：filtered candidate 中，triangle influence index range 与当前 chunk write bounds 有交集的数量。
+- `lazyDryRunInactiveCandidateTriangleCount`：filtered candidate 中，与当前 chunk write bounds 无 voxel index 交集的数量。
+- `lazyDryRunCandidateVoxelPairUpperBound`：如果每个 filtered candidate 都扫描整个 chunk，会产生的 triangle-voxel pair 上界。
+- `lazyDryRunClippedVoxelPairCount`：按 triangle influence range 与 chunk bounds 交集裁剪后的 pair 数；该值应等于当前 `distanceCalculationCount`。
+
+三轮 benchmark lazy 均值：
+
+```text
+sphere_pole_to_pole / lazy:
+  candidateTriangleCount=11378
+  activeCandidateTriangleCount=11378
+  inactiveCandidateTriangleCount=0
+  candidateVoxelPairUpperBound=53888266
+  clippedVoxelPairCount=5141175
+  clipped/upper≈9.5%
+
+box_long_face_to_face / lazy:
+  candidateTriangleCount=238
+  activeCandidateTriangleCount=238
+  inactiveCandidateTriangleCount=0
+  candidateVoxelPairUpperBound=1109618
+  clippedVoxelPairCount=135204
+  clipped/upper≈12.2%
+```
+
+结论：
+
+- 当前 filtered candidate 基本都能触达当前 chunk 的至少一个 voxel，单纯“再过滤掉整 triangle”的空间很小。
+- 现有 influence range 与 chunk bounds 裁剪已经把 pair 数降到 chunk-wide 上界的约 10% 左右，这是当前已实现优化的主要收益。
+- 剩余瓶颈不在“整 triangle 是否参与 chunk”，而在 active triangle 的 clipped range 内仍有大量距离计算未改善和 ClearanceBand 重复覆盖。
+
+后续更优方向：
+
+- 不建议立即实现 chunk-local 整 triangle 二次过滤，因为 dry-run 显示 inactive candidate 为 0。
+- 若继续优化，应评估更细粒度的 block/voxel 级候选组织，但要先统计构建成本和潜在 pair 数变化，避免引入比距离计算更贵的局部索引。
+- 更务实的下一步是拆分 `ClearanceBand -> ClearanceBand` 重复写来源，并评估是否存在安全的“状态不变但距离也未改善”的跳过策略；该策略仍需先 dry-run 统计，不应直接改变行为。

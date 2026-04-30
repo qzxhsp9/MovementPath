@@ -66,11 +66,12 @@
 - lazy VTK 导出补齐路径结果。
 - lazy 统计增强已记录距离未改善、状态未变化写入和 chunk candidate 分布。
 - benchmark 支持 `--runs N` 多轮输出，CSV 增加 `runIndex` / `runCount`。
+- chunk-local 二次过滤 dry-run 已完成，整 triangle 级 inactive candidate 为 0。
 
 下一步：
 
-- 增加 chunk-local 二次过滤 dry-run 统计，先估算收益再改变行为。
-- 继续分析 ClearanceBand 重复写入来源。
+- 继续分析 `ClearanceBand -> ClearanceBand` 重复写入来源。
+- 评估“状态不变且距离未改善”跳过策略的 dry-run 收益。
 - 暂不全局替换为 voxel-to-triangle 查询，先评估局部索引构建成本。
 - benchmark 后续补 summary row 或 JSON 输出。
 

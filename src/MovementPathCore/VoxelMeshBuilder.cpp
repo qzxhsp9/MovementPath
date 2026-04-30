@@ -89,6 +89,48 @@ static void AddMarkStats(
     result.clearanceWriteCount += stats.clearanceWriteCount;
 }
 
+static bool IntersectIndexRanges(
+    const VoxelIndex& aMin,
+    const VoxelIndex& aMax,
+    const VoxelIndex& bMin,
+    const VoxelIndex& bMax,
+    VoxelIndex& outMin,
+    VoxelIndex& outMax)
+{
+    outMin.x = std::max(aMin.x, bMin.x);
+    outMin.y = std::max(aMin.y, bMin.y);
+    outMin.z = std::max(aMin.z, bMin.z);
+
+    outMax.x = std::min(aMax.x, bMax.x);
+    outMax.y = std::min(aMax.y, bMax.y);
+    outMax.z = std::min(aMax.z, bMax.z);
+
+    return outMin.x <= outMax.x &&
+        outMin.y <= outMax.y &&
+        outMin.z <= outMax.z;
+}
+
+static std::size_t CountVoxelsInRange(
+    const VoxelIndex& minIndex,
+    const VoxelIndex& maxIndex)
+{
+    if (minIndex.x > maxIndex.x ||
+        minIndex.y > maxIndex.y ||
+        minIndex.z > maxIndex.z)
+    {
+        return 0;
+    }
+
+    const std::size_t nx =
+        static_cast<std::size_t>(maxIndex.x - minIndex.x + 1);
+    const std::size_t ny =
+        static_cast<std::size_t>(maxIndex.y - minIndex.y + 1);
+    const std::size_t nz =
+        static_cast<std::size_t>(maxIndex.z - minIndex.z + 1);
+
+    return nx * ny * nz;
+}
+
 static bool ComputeTrianglesAABBLocal(
     const std::vector<MeshTriangle>& triangles,
     MeshAABB& outBox)
@@ -595,20 +637,16 @@ VoxelTriangleMarkStats VoxelMeshBuilder::MarkTriangleToVoxelSpace(
 
     if (markBounds.IsValid())
     {
-        minIndex.x = std::max(minIndex.x, markBounds.minIndex.x);
-        minIndex.y = std::max(minIndex.y, markBounds.minIndex.y);
-        minIndex.z = std::max(minIndex.z, markBounds.minIndex.z);
-
-        maxIndex.x = std::min(maxIndex.x, markBounds.maxIndex.x);
-        maxIndex.y = std::min(maxIndex.y, markBounds.maxIndex.y);
-        maxIndex.z = std::min(maxIndex.z, markBounds.maxIndex.z);
-    }
-
-    if (minIndex.x > maxIndex.x ||
-        minIndex.y > maxIndex.y ||
-        minIndex.z > maxIndex.z)
-    {
-        return stats;
+        if (!IntersectIndexRanges(
+            minIndex,
+            maxIndex,
+            markBounds.minIndex,
+            markBounds.maxIndex,
+            minIndex,
+            maxIndex))
+        {
+            return stats;
+        }
     }
 
     for (int ix = minIndex.x;
@@ -1164,6 +1202,36 @@ VoxelMeshBuildResult VoxelMeshBuilder::AppendVoxelSpaceFromTrianglesInBox(
         filteredInfluenceRanges.push_back(influenceRange);
     }
     result.candidateFilterMs = ElapsedMs(candidateFilterStart, Now());
+
+    const std::size_t appendVoxelCount = CountVoxelsInRange(
+        appendBounds.minIndex,
+        appendBounds.maxIndex);
+    result.dryRunCandidateVoxelPairUpperBound =
+        filteredTriangleIds.size() * appendVoxelCount;
+
+    for (const VoxelTriangleInfluenceRange& influenceRange :
+        filteredInfluenceRanges)
+    {
+        VoxelIndex clippedMin;
+        VoxelIndex clippedMax;
+
+        if (IntersectIndexRanges(
+            influenceRange.minIndex,
+            influenceRange.maxIndex,
+            appendBounds.minIndex,
+            appendBounds.maxIndex,
+            clippedMin,
+            clippedMax))
+        {
+            ++result.dryRunActiveCandidateTriangleCount;
+            result.dryRunClippedVoxelPairCount +=
+                CountVoxelsInRange(clippedMin, clippedMax);
+        }
+        else
+        {
+            ++result.dryRunInactiveCandidateTriangleCount;
+        }
+    }
 
     const auto markStart = Now();
     for (std::size_t i = 0; i < filteredTriangleIds.size(); ++i)

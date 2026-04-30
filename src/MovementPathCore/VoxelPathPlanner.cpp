@@ -138,6 +138,14 @@ void PreserveLazyAttemptOnFallback(
         lazyProfile.lazyMinRawCandidateTriangleCount;
     fallbackResult.profile.lazyMaxRawCandidateTriangleCount =
         lazyProfile.lazyMaxRawCandidateTriangleCount;
+    fallbackResult.profile.lazyDryRunActiveCandidateTriangleCount =
+        lazyProfile.lazyDryRunActiveCandidateTriangleCount;
+    fallbackResult.profile.lazyDryRunInactiveCandidateTriangleCount =
+        lazyProfile.lazyDryRunInactiveCandidateTriangleCount;
+    fallbackResult.profile.lazyDryRunCandidateVoxelPairUpperBound =
+        lazyProfile.lazyDryRunCandidateVoxelPairUpperBound;
+    fallbackResult.profile.lazyDryRunClippedVoxelPairCount =
+        lazyProfile.lazyDryRunClippedVoxelPairCount;
 }
 
 MeshAABB MakeStartGoalBuildBox(
@@ -361,6 +369,14 @@ void CopyLazyStatsToProfile(
         stats.minRawCandidateTriangleCount;
     profile.lazyMaxRawCandidateTriangleCount =
         stats.maxRawCandidateTriangleCount;
+    profile.lazyDryRunActiveCandidateTriangleCount =
+        stats.totalDryRunActiveCandidateTriangleCount;
+    profile.lazyDryRunInactiveCandidateTriangleCount =
+        stats.totalDryRunInactiveCandidateTriangleCount;
+    profile.lazyDryRunCandidateVoxelPairUpperBound =
+        stats.totalDryRunCandidateVoxelPairUpperBound;
+    profile.lazyDryRunClippedVoxelPairCount =
+        stats.totalDryRunClippedVoxelPairCount;
 }
 
 bool ComputeTrianglesAABBForPlanner(
@@ -1263,6 +1279,14 @@ void VoxelPathPlanner::PrintProfile(
         << profile.lazyMinRawCandidateTriangleCount << std::endl;
     std::cout << "Lazy max raw candidate triangle count: "
         << profile.lazyMaxRawCandidateTriangleCount << std::endl;
+    std::cout << "Lazy dry-run active candidate triangle count: "
+        << profile.lazyDryRunActiveCandidateTriangleCount << std::endl;
+    std::cout << "Lazy dry-run inactive candidate triangle count: "
+        << profile.lazyDryRunInactiveCandidateTriangleCount << std::endl;
+    std::cout << "Lazy dry-run candidate voxel pair upper bound: "
+        << profile.lazyDryRunCandidateVoxelPairUpperBound << std::endl;
+    std::cout << "Lazy dry-run clipped voxel pair count: "
+        << profile.lazyDryRunClippedVoxelPairCount << std::endl;
     std::cout << "Stored cell count: "
         << profile.storedCellCount << std::endl;
     std::cout << "Occupied count: "
