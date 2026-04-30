@@ -2,6 +2,8 @@
 
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QFormLayout>
@@ -10,16 +12,19 @@
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QLineEdit>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSignalBlocker>
 #include <QSplitter>
+#include <QSpinBox>
 #include <QVBoxLayout>
 #include <QApplication>
 #include <QtConcurrent/QtConcurrentRun>
 
 #include <iomanip>
 #include <sstream>
+#include <utility>
 
 namespace path_planning_workbench
 {
@@ -66,6 +71,55 @@ std::vector<Vec> ToVoxelCenters(
     const std::vector<Vec>& pathPoints)
 {
     return pathPoints;
+}
+
+QString ToText(VoxelAStarFailReason reason)
+{
+    switch (reason)
+    {
+    case VoxelAStarFailReason::None:
+        return "None";
+    case VoxelAStarFailReason::InvalidVoxelSpace:
+        return "InvalidVoxelSpace";
+    case VoxelAStarFailReason::StartOrGoalOutsideBounds:
+        return "StartOrGoalOutsideBounds";
+    case VoxelAStarFailReason::SnapStartFailed:
+        return "SnapStartFailed";
+    case VoxelAStarFailReason::SnapGoalFailed:
+        return "SnapGoalFailed";
+    case VoxelAStarFailReason::StartNotWalkable:
+        return "StartNotWalkable";
+    case VoxelAStarFailReason::GoalNotWalkable:
+        return "GoalNotWalkable";
+    case VoxelAStarFailReason::MaxVisitedExceeded:
+        return "MaxVisitedExceeded";
+    case VoxelAStarFailReason::OpenSetEmpty:
+        return "OpenSetEmpty";
+    case VoxelAStarFailReason::Cancelled:
+        return "Cancelled";
+    }
+
+    return "Unknown";
+}
+
+QString ToText(const VoxelIndex& index)
+{
+    return QString("(%1, %2, %3)")
+        .arg(index.x)
+        .arg(index.y)
+        .arg(index.z);
+}
+
+QString ToText(const VoxelBounds& bounds)
+{
+    if (!bounds.IsValid())
+    {
+        return "invalid";
+    }
+
+    return QString("%1 -> %2")
+        .arg(ToText(bounds.minIndex))
+        .arg(ToText(bounds.maxIndex));
 }
 
 std::vector<MeshTriangle> ToPlannerTriangles(
@@ -135,6 +189,37 @@ gp_Vec NextAxisDirection(const gp_Vec& current)
 
     return directions[(bestIndex + 1) % 6];
 }
+
+void AddPathEditorRow(
+    QWidget* parent,
+    QFormLayout* layout,
+    const QString& label,
+    QLineEdit*& lineEdit,
+    const QString& initialPath)
+{
+    QWidget* row = new QWidget(parent);
+    QHBoxLayout* rowLayout = new QHBoxLayout(row);
+    rowLayout->setContentsMargins(0, 0, 0, 0);
+
+    lineEdit = new QLineEdit(initialPath, row);
+    QPushButton* browseButton = new QPushButton("Browse", row);
+    rowLayout->addWidget(lineEdit, 1);
+    rowLayout->addWidget(browseButton);
+
+    QObject::connect(browseButton, &QPushButton::clicked, row, [lineEdit]() {
+        const QString path = QFileDialog::getSaveFileName(
+            lineEdit,
+            "Select VTK output",
+            lineEdit->text(),
+            "VTK files (*.vtk)");
+        if (!path.isEmpty())
+        {
+            lineEdit->setText(path);
+        }
+    });
+
+    layout->addRow(label, row);
+}
 }
 
 WorkbenchMainWindow::WorkbenchMainWindow(QWidget* parent)
@@ -165,6 +250,8 @@ void WorkbenchMainWindow::BuildUi()
         new QPushButton("Apply Discretization");
     m_computeButton = new QPushButton("Compute Path");
     m_stopButton = new QPushButton("Stop Computation");
+    QPushButton* vtkExportSettingsButton =
+        new QPushButton("VTK Export Settings");
     m_stopButton->setEnabled(false);
     m_modelLabel = new QLabel("No model loaded");
 
@@ -232,10 +319,30 @@ void WorkbenchMainWindow::BuildUi()
     m_voxelSizeSpin->setRange(0.01, 1000.0);
     m_voxelSizeSpin->setDecimals(4);
     m_voxelSizeSpin->setValue(1.0);
+    m_clearanceSpin = new QDoubleSpinBox();
+    m_clearanceSpin->setRange(0.0, 1000000.0);
+    m_clearanceSpin->setDecimals(4);
+    m_clearanceSpin->setSingleStep(1.0);
+    m_clearanceSpin->setValue(3.0);
+    m_snapRadiusSpin = new QSpinBox();
+    m_snapRadiusSpin->setRange(0, 1000000);
+    m_snapRadiusSpin->setValue(20);
+    m_searchModeCombo = new QComboBox();
+    m_searchModeCombo->addItem("Clearance band");
+    m_searchModeCombo->addItem("Free space");
+    m_neighborTypeCombo = new QComboBox();
+    m_neighborTypeCombo->addItem("6-face");
+    m_neighborTypeCombo->addItem("18-face-edge");
+    m_neighborTypeCombo->addItem("26-face-edge-vertex");
     m_realtimeCheck = new QCheckBox("Realtime after input changes");
     plannerLayout->addRow("Method", m_plannerCombo);
+    plannerLayout->addRow("Search", m_searchModeCombo);
+    plannerLayout->addRow("Neighbors", m_neighborTypeCombo);
     plannerLayout->addRow("Voxel size", m_voxelSizeSpin);
+    plannerLayout->addRow("Clearance", m_clearanceSpin);
+    plannerLayout->addRow("Snap radius", m_snapRadiusSpin);
     plannerLayout->addRow(m_realtimeCheck);
+    plannerLayout->addRow(vtkExportSettingsButton);
     plannerLayout->addRow(m_computeButton);
     plannerLayout->addRow(m_stopButton);
     panelLayout->addWidget(plannerGroup);
@@ -261,6 +368,9 @@ void WorkbenchMainWindow::BuildUi()
     });
     connect(m_stopButton, &QPushButton::clicked, this, [this]() {
         StopPathComputation();
+    });
+    connect(vtkExportSettingsButton, &QPushButton::clicked, this, [this]() {
+        OpenVtkExportSettings();
     });
     connect(m_displayModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
         this, [this]() {
@@ -462,6 +572,92 @@ void WorkbenchMainWindow::StopPathComputation()
     }
 }
 
+void WorkbenchMainWindow::OpenVtkExportSettings()
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle("VTK Export Settings");
+
+    QVBoxLayout* dialogLayout = new QVBoxLayout(&dialog);
+    QCheckBox* exportCheck = new QCheckBox("Export VTK during path computation");
+    exportCheck->setChecked(m_vtkExportSettings.exportEnabled);
+    dialogLayout->addWidget(exportCheck);
+
+    QGroupBox* pathGroup = new QGroupBox("Output paths", &dialog);
+    QFormLayout* pathLayout = new QFormLayout(pathGroup);
+
+    QLineEdit* shapeMeshPath = nullptr;
+    QLineEdit* astarFailedPath = nullptr;
+    QLineEdit* astarPath = nullptr;
+    QLineEdit* optimizedPathVoxelsPath = nullptr;
+    QLineEdit* optimizedPathPolylinePath = nullptr;
+    QLineEdit* lazyChunkBoundsPath = nullptr;
+
+    AddPathEditorRow(
+        pathGroup,
+        pathLayout,
+        "Shape mesh",
+        shapeMeshPath,
+        m_vtkExportSettings.shapeMeshPath);
+    AddPathEditorRow(
+        pathGroup,
+        pathLayout,
+        "A* failed voxels",
+        astarFailedPath,
+        m_vtkExportSettings.astarFailedPath);
+    AddPathEditorRow(
+        pathGroup,
+        pathLayout,
+        "A* path voxels",
+        astarPath,
+        m_vtkExportSettings.astarPath);
+    AddPathEditorRow(
+        pathGroup,
+        pathLayout,
+        "Optimized voxels",
+        optimizedPathVoxelsPath,
+        m_vtkExportSettings.optimizedPathVoxelsPath);
+    AddPathEditorRow(
+        pathGroup,
+        pathLayout,
+        "Optimized polyline",
+        optimizedPathPolylinePath,
+        m_vtkExportSettings.optimizedPathPolylinePath);
+    AddPathEditorRow(
+        pathGroup,
+        pathLayout,
+        "Lazy chunk bounds",
+        lazyChunkBoundsPath,
+        m_vtkExportSettings.lazyChunkBoundsPath);
+
+    dialogLayout->addWidget(pathGroup);
+
+    QDialogButtonBox* buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
+        &dialog);
+    dialogLayout->addWidget(buttons);
+
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+    if (dialog.exec() != QDialog::Accepted)
+    {
+        return;
+    }
+
+    m_vtkExportSettings.exportEnabled = exportCheck->isChecked();
+    m_vtkExportSettings.shapeMeshPath = shapeMeshPath->text();
+    m_vtkExportSettings.astarFailedPath = astarFailedPath->text();
+    m_vtkExportSettings.astarPath = astarPath->text();
+    m_vtkExportSettings.optimizedPathVoxelsPath =
+        optimizedPathVoxelsPath->text();
+    m_vtkExportSettings.optimizedPathPolylinePath =
+        optimizedPathPolylinePath->text();
+    m_vtkExportSettings.lazyChunkBoundsPath = lazyChunkBoundsPath->text();
+
+    AppendLog(QString("VTK export %1.")
+        .arg(m_vtkExportSettings.exportEnabled ? "enabled" : "disabled"));
+}
+
 void WorkbenchMainWindow::OnPathComputationFinished()
 {
     SetPlanningUiBusy(false);
@@ -490,6 +686,30 @@ void WorkbenchMainWindow::OnPathComputationFinished()
         << ", cost=" << std::fixed << std::setprecision(3)
         << result.profile.totalCost;
     AppendLog(QString::fromStdString(ss.str()));
+
+    if (!result.success)
+    {
+        AppendLog(QString("A* failure reason: %1, visited=%2")
+            .arg(ToText(result.astarResult.failReason))
+            .arg(result.astarResult.visitedCount));
+        AppendLog(QString("Input voxel start=%1, goal=%2")
+            .arg(ToText(result.astarResult.inputStartIndex))
+            .arg(ToText(result.astarResult.inputGoalIndex)));
+        AppendLog(QString("Search voxel start=%1%2, goal=%3%4")
+            .arg(ToText(result.astarResult.startIndex))
+            .arg(result.astarResult.startSnapped ? " snapped" : "")
+            .arg(ToText(result.astarResult.goalIndex))
+            .arg(result.astarResult.goalSnapped ? " snapped" : ""));
+        AppendLog(QString("Voxel states: stored=%1, occupied=%2, clearanceBand=%3")
+            .arg(result.profile.storedCellCount)
+            .arg(result.profile.occupiedCount)
+            .arg(result.profile.clearanceBandCount));
+        AppendLog(QString("Build/search: buildSucceeded=%1, astarSucceeded=%2, attempts=%3, bounds=%4")
+            .arg(result.profile.buildSucceeded ? "true" : "false")
+            .arg(result.profile.astarSucceeded ? "true" : "false")
+            .arg(result.profile.buildAttemptCount)
+            .arg(ToText(result.finalSearchBounds)));
+    }
 
     const std::vector<Vec> pathPoints =
         result.optimizeResult.pointPath.empty() ?
@@ -675,7 +895,19 @@ VoxelPathPlannerOptions WorkbenchMainWindow::MakeVoxelOptions(
     options.meshBuildOptions.meshDeflection = m_linearDeflectionSpin->value();
     options.meshBuildOptions.angularDeflection =
         m_angularDeflectionSpin->value();
-    options.runOptions.exportVtk = false;
+    options.runOptions.exportVtk = m_vtkExportSettings.exportEnabled;
+    options.runOptions.shapeMeshVtkPath =
+        m_vtkExportSettings.shapeMeshPath.toStdString();
+    options.runOptions.astarFailedVtkPath =
+        m_vtkExportSettings.astarFailedPath.toStdString();
+    options.runOptions.astarPathVtkPath =
+        m_vtkExportSettings.astarPath.toStdString();
+    options.runOptions.optimizedPathVoxelsVtkPath =
+        m_vtkExportSettings.optimizedPathVoxelsPath.toStdString();
+    options.runOptions.optimizedPathPolylineVtkPath =
+        m_vtkExportSettings.optimizedPathPolylinePath.toStdString();
+    options.runOptions.lazyChunkBoundsVtkPath =
+        m_vtkExportSettings.lazyChunkBoundsPath.toStdString();
     options.runOptions.debugNeighborhood = false;
     options.runOptions.verbose = false;
 

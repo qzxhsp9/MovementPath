@@ -18,9 +18,21 @@ class QDoubleSpinBox;
 class QLabel;
 class QPushButton;
 class QPlainTextEdit;
+class QSpinBox;
 
 namespace path_planning_workbench
 {
+
+struct VtkExportSettings
+{
+    bool exportEnabled = false;
+    QString shapeMeshPath = "D:/shape_mesh.vtk";
+    QString astarFailedPath = "D:/astar_failed.vtk";
+    QString astarPath = "D:/astar_path.vtk";
+    QString optimizedPathVoxelsPath = "D:/optimized_path_voxels.vtk";
+    QString optimizedPathPolylinePath = "D:/optimized_path_polyline.vtk";
+    QString lazyChunkBoundsPath = "D:/lazy_chunk_bounds.vtk";
+};
 
 enum class PlannerMethod
 {
@@ -48,6 +60,7 @@ private:
     void RefreshModelDisplay();
     void ComputePath();
     void StopPathComputation();
+    void OpenVtkExportSettings();
     void OnPathComputationFinished();
     void SetPlanningUiBusy(bool busy);
     void UpdateEndpointOverlay();
@@ -91,10 +104,14 @@ protected:
     QComboBox* m_plannerCombo = nullptr;
     QCheckBox* m_showKeyVoxelsCheck = nullptr;
     QCheckBox* m_realtimeCheck = nullptr;
+    QComboBox* m_searchModeCombo = nullptr;
+    QComboBox* m_neighborTypeCombo = nullptr;
 
     QDoubleSpinBox* m_linearDeflectionSpin = nullptr;
     QDoubleSpinBox* m_angularDeflectionSpin = nullptr;
     QDoubleSpinBox* m_voxelSizeSpin = nullptr;
+    QDoubleSpinBox* m_clearanceSpin = nullptr;
+    QSpinBox* m_snapRadiusSpin = nullptr;
 
     QDoubleSpinBox* m_startX = nullptr;
     QDoubleSpinBox* m_startY = nullptr;
@@ -114,6 +131,7 @@ protected:
     PointPickMode m_pickMode = PointPickMode::None;
     QFutureWatcher<VoxelPathPlannerResult>* m_planWatcher = nullptr;
     std::shared_ptr<std::atomic_bool> m_cancelRequested;
+    VtkExportSettings m_vtkExportSettings;
     double m_runningVoxelSize = 1.0;
 };
 
