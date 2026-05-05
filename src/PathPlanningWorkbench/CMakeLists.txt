@@ -1,17 +1,24 @@
+set(_ppw_qt_user_defaults "${CMAKE_CURRENT_LIST_DIR}/QtWorkbenchDefaults.cmake")
+if(EXISTS "${_ppw_qt_user_defaults}")
+    include("${_ppw_qt_user_defaults}")
+endif()
+if(NOT MOVEMENTPATH_QT_WORKBENCH_DEFAULT_KIT)
+    set(MOVEMENTPATH_QT_WORKBENCH_DEFAULT_KIT "C:/Qt/6.11.0/msvc2022_64")
+endif()
+
 set(PATH_PLANNING_WORKBENCH_QT_ROOT
     ""
     CACHE PATH
-    "Optional Qt installation root for PathPlanningWorkbench, for example D:/Programming/Qt/6.11.0/msvc2022_64")
+    "Optional Qt kit root for PathPlanningWorkbench (MSVC kit with lib/cmake/Qt6). See QtWorkbenchDefaults.cmake.example.")
 
 if(NOT PATH_PLANNING_WORKBENCH_QT_ROOT AND
-    EXISTS "D:/Programming/Qt/6.11.0/msvc2022_64/lib/cmake/Qt6/Qt6Config.cmake")
+    EXISTS "${MOVEMENTPATH_QT_WORKBENCH_DEFAULT_KIT}/lib/cmake/Qt6/Qt6Config.cmake")
     set(PATH_PLANNING_WORKBENCH_QT_ROOT
-        "D:/Programming/Qt/6.11.0/msvc2022_64"
+        "${MOVEMENTPATH_QT_WORKBENCH_DEFAULT_KIT}"
         CACHE PATH
-        "Optional Qt installation root for PathPlanningWorkbench, for example D:/Programming/Qt/6.11.0/msvc2022_64"
+        "Optional Qt kit root for PathPlanningWorkbench (MSVC kit with lib/cmake/Qt6). See QtWorkbenchDefaults.cmake.example."
         FORCE)
 endif()
-
 if(PATH_PLANNING_WORKBENCH_QT_ROOT)
     list(PREPEND CMAKE_PREFIX_PATH "${PATH_PLANNING_WORKBENCH_QT_ROOT}")
 endif()
@@ -33,7 +40,8 @@ if(NOT PATH_PLANNING_WORKBENCH_QT_TARGET OR
     NOT PATH_PLANNING_WORKBENCH_QT_CONCURRENT_TARGET)
     message(STATUS
         "PathPlanningWorkbench skipped: Qt Widgets/Concurrent was not found. "
-        "Set PATH_PLANNING_WORKBENCH_QT_ROOT or CMAKE_PREFIX_PATH to a Qt install root.")
+        "Set PATH_PLANNING_WORKBENCH_QT_ROOT or CMAKE_PREFIX_PATH, or copy "
+        "QtWorkbenchDefaults.cmake.example to QtWorkbenchDefaults.cmake and set MOVEMENTPATH_QT_WORKBENCH_DEFAULT_KIT.")
     return()
 endif()
 

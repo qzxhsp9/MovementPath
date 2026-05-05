@@ -1,0 +1,9 @@
+# Optional local Qt path for PathPlanningWorkbench auto-detect.
+#
+# Usage: copy this file to QtWorkbenchDefaults.cmake (same directory).
+#        QtWorkbenchDefaults.cmake is gitignored — set your kit path there only.
+#
+# Kit root must contain: lib/cmake/Qt6/Qt6Config.cmake
+# Example (MSVC): C:/Qt/6.11.0/msvc2022_64
+
+set(MOVEMENTPATH_QT_WORKBENCH_DEFAULT_KIT "C:/Qt/6.11.0/msvc2022_64")
