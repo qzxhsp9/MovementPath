@@ -69,6 +69,11 @@ target_link_libraries(PathPlanningWorkbench
         ${PATH_PLANNING_WORKBENCH_QT_CONCURRENT_TARGET}
 )
 
+set(_ppw_repo_data_dir "${CMAKE_SOURCE_DIR}/data")
+file(TO_CMAKE_PATH "${_ppw_repo_data_dir}" _ppw_repo_data_dir)
+target_compile_definitions(PathPlanningWorkbench PRIVATE
+    "MOVEMENTPATH_WORKBENCH_DATA_DIR=\"${_ppw_repo_data_dir}\"")
+
 if(WIN32 AND PATH_PLANNING_WORKBENCH_QT_ROOT)
     find_program(PATH_PLANNING_WORKBENCH_WINDEPLOYQT
         NAMES windeployqt
