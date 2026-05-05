@@ -1,14 +1,14 @@
 set(PATH_PLANNING_WORKBENCH_QT_ROOT
     ""
     CACHE PATH
-    "Optional Qt installation root for PathPlanningWorkbench, for example C:/Qt/6.11.0/msvc2022_64")
+    "Optional Qt installation root for PathPlanningWorkbench, for example D:/Programming/Qt/6.11.0/msvc2022_64")
 
 if(NOT PATH_PLANNING_WORKBENCH_QT_ROOT AND
-    EXISTS "C:/Qt/6.11.0/msvc2022_64/lib/cmake/Qt6/Qt6Config.cmake")
+    EXISTS "D:/Programming/Qt/6.11.0/msvc2022_64/lib/cmake/Qt6/Qt6Config.cmake")
     set(PATH_PLANNING_WORKBENCH_QT_ROOT
-        "C:/Qt/6.11.0/msvc2022_64"
+        "D:/Programming/Qt/6.11.0/msvc2022_64"
         CACHE PATH
-        "Optional Qt installation root for PathPlanningWorkbench, for example C:/Qt/6.11.0/msvc2022_64"
+        "Optional Qt installation root for PathPlanningWorkbench, for example D:/Programming/Qt/6.11.0/msvc2022_64"
         FORCE)
 endif()
 
