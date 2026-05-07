@@ -6,3 +6,7 @@
 /out/
 /CMakeSettings.json
 .VSCodeCounter/
+_build_cmake_test/
+
+# Local Qt kit path for PathPlanningWorkbench (see QtWorkbenchDefaults.cmake.example)
+src/PathPlanningWorkbench/QtWorkbenchDefaults.cmake

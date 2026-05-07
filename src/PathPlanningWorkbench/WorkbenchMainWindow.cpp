@@ -5,7 +5,9 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
+#include <QDir>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QGroupBox>
@@ -411,10 +413,19 @@ void WorkbenchMainWindow::BuildUi()
 
 void WorkbenchMainWindow::ImportModel()
 {
+    QString startDir;
+#ifdef MOVEMENTPATH_WORKBENCH_DATA_DIR
+    const QString dataDir = QString::fromUtf8(MOVEMENTPATH_WORKBENCH_DATA_DIR);
+    if (QDir(dataDir).exists())
+    {
+        startDir = QFileInfo(dataDir).absoluteFilePath();
+    }
+#endif
+
     const QString path = QFileDialog::getOpenFileName(
         this,
         "Import model",
-        QString(),
+        startDir,
         "Models (*.step *.stp *.brep *.vtk)");
 
     if (path.isEmpty())

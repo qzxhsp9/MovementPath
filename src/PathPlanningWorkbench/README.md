@@ -16,7 +16,9 @@ Widgets is available; command-line planner builds and tests do not depend on Qt.
 
 Qt discovery:
 
-- The module auto-detects `C:/Qt/6.11.0/msvc2022_64` when present.
-- For a different Qt install, configure CMake with
-  `-DPATH_PLANNING_WORKBENCH_QT_ROOT=<Qt install root>` or set
-  `CMAKE_PREFIX_PATH`.
+- Default auto-detect uses `C:/Qt/6.11.0/msvc2022_64` when that kit exists.
+- For another kit path without CMake flags: copy `QtWorkbenchDefaults.cmake.example`
+  to `QtWorkbenchDefaults.cmake` (same folder; the copy is gitignored) and set
+  `MOVEMENTPATH_QT_WORKBENCH_DEFAULT_KIT` there — that is the only path to edit locally.
+- Alternatively configure with `-DPATH_PLANNING_WORKBENCH_QT_ROOT=<kit root>` or
+  set `CMAKE_PREFIX_PATH`.
