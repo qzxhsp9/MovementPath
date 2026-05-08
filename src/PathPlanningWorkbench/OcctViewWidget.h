@@ -8,6 +8,7 @@
 #include <AIS_Triangulation.hxx>
 #include <Aspect_DisplayConnection.hxx>
 #include <OpenGl_GraphicDriver.hxx>
+#include <Quantity_Color.hxx>
 #include <TopoDS_Shape.hxx>
 #include <V3d_View.hxx>
 #include <V3d_Viewer.hxx>
@@ -54,6 +55,11 @@ public:
     void DisplayKeyVoxels(
         const std::vector<Vec>& voxelCenters,
         double voxelSize);
+
+    void DisplayVoxelBoxes(
+        const std::vector<Vec>& voxelCenters,
+        double voxelSize,
+        const Quantity_Color& color);
 
     void ClearOverlays();
 

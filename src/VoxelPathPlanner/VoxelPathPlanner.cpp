@@ -66,6 +66,97 @@ bool IsCancelled(const VoxelPathPlannerOptions& options)
         options.runOptions.shouldCancel();
 }
 
+void CollectVoxelOverlayCenters(
+    const VoxelSpace& voxelSpace,
+    std::size_t maxPerState,
+    const VoxelBounds* filterBounds,
+    VoxelPathPlannerResult& result)
+{
+    result.occupiedVoxelCenters.clear();
+    result.clearanceVoxelCenters.clear();
+
+    for (const auto& kv : voxelSpace.Cells())
+    {
+        if (filterBounds != nullptr &&
+            filterBounds->IsValid() &&
+            !filterBounds->Contains(kv.first))
+        {
+            continue;
+        }
+
+        if (kv.second.state == VoxelState::Occupied &&
+            (maxPerState == 0 ||
+                result.occupiedVoxelCenters.size() < maxPerState))
+        {
+            result.occupiedVoxelCenters.push_back(
+                voxelSpace.IndexToCenter(kv.first));
+        }
+        else if (kv.second.state == VoxelState::ClearanceBand &&
+            (maxPerState == 0 ||
+                result.clearanceVoxelCenters.size() < maxPerState))
+        {
+            result.clearanceVoxelCenters.push_back(
+                voxelSpace.IndexToCenter(kv.first));
+        }
+
+        if (maxPerState > 0 &&
+            result.occupiedVoxelCenters.size() >= maxPerState &&
+            result.clearanceVoxelCenters.size() >= maxPerState)
+        {
+            break;
+        }
+    }
+}
+
+bool ComputePathBounds(
+    const std::vector<VoxelIndex>& path,
+    int padding,
+    VoxelBounds& outBounds)
+{
+    if (path.empty())
+    {
+        return false;
+    }
+
+    outBounds.minIndex = path.front();
+    outBounds.maxIndex = path.front();
+
+    for (const VoxelIndex& index : path)
+    {
+        ExpandBoundsToInclude(outBounds, index);
+    }
+
+    ExpandBoundsByVoxelRadius(outBounds, padding);
+    return outBounds.IsValid();
+}
+
+void CollectVoxelOverlayCentersIfRequested(
+    const VoxelSpace& voxelSpace,
+    const VoxelPathPlannerOptions& options,
+    const std::vector<VoxelIndex>* path,
+    VoxelPathPlannerResult& result)
+{
+    if (!options.runOptions.collectVoxelOverlayCenters)
+    {
+        return;
+    }
+
+    VoxelBounds pathBounds;
+    const VoxelBounds* filterBounds = nullptr;
+
+    if (path != nullptr &&
+        ComputePathBounds(*path, 1, pathBounds))
+    {
+        filterBounds = &pathBounds;
+    }
+
+    CollectVoxelOverlayCenters(
+        voxelSpace,
+        options.runOptions.maxVoxelOverlayCentersPerState,
+        filterBounds,
+        result);
+}
+
 bool IsBroaderNeighborType(
     VoxelNeighborType candidate,
     VoxelNeighborType current)
@@ -935,7 +1026,9 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
     VoxelAStarOptions astarOptions = options.astarOptions;
     astarOptions.shouldCancel = options.runOptions.shouldCancel;
     astarOptions.minTravelDistanceToSurface =
-        options.meshBuildOptions.clearance;
+        astarOptions.searchMode == VoxelAStarSearchMode::ClearanceBand ?
+            options.meshBuildOptions.clearance :
+            0.0;
     astarOptions.startSnapDirection = {
         scenario.startDir.X(),
         scenario.startDir.Y(),
@@ -1093,7 +1186,10 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                     VoxelPathOptimizeOptions optOptions;
                     optOptions.searchMode = astarOptions.searchMode;
                     optOptions.minTravelDistanceToSurface =
-                        options.meshBuildOptions.clearance;
+                        astarOptions.searchMode ==
+                            VoxelAStarSearchMode::ClearanceBand ?
+                            options.meshBuildOptions.clearance :
+                            0.0;
                     optOptions.removeCollinear = true;
                     optOptions.enableLineOfSightShortcut = true;
                     optOptions.maxShortcutLookAhead =
@@ -1146,6 +1242,11 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                         lazyVoxelSpace,
                         optResult.voxelPath
                     );
+                    CollectVoxelOverlayCentersIfRequested(
+                        lazyVoxelSpace,
+                        options,
+                        &optResult.voxelPath,
+                        result);
 
                     if (options.runOptions.exportVtk)
                     {
@@ -1405,6 +1506,11 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
         }
 
         profile.storedCellCount = voxelSpace.CellCount();
+        CollectVoxelOverlayCentersIfRequested(
+            voxelSpace,
+            options,
+            astarResult.voxelPath.empty() ? nullptr : &astarResult.voxelPath,
+            result);
         return result;
     }
 
@@ -1436,7 +1542,9 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
     VoxelPathOptimizeOptions optOptions;
     optOptions.searchMode = astarOptions.searchMode;
     optOptions.minTravelDistanceToSurface =
-        options.meshBuildOptions.clearance;
+        astarOptions.searchMode == VoxelAStarSearchMode::ClearanceBand ?
+            options.meshBuildOptions.clearance :
+            0.0;
     optOptions.removeCollinear = true;
     optOptions.enableLineOfSightShortcut = true;
     optOptions.maxShortcutLookAhead = options.optimizerMaxShortcutLookAhead;
@@ -1486,6 +1594,11 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
         voxelSpace,
         optResult.voxelPath
     );
+    CollectVoxelOverlayCentersIfRequested(
+        voxelSpace,
+        options,
+        &optResult.voxelPath,
+        result);
 
     if (options.runOptions.exportVtk)
     {
@@ -1515,7 +1628,6 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
         result.astarResult.pointPath,
         startPoint3D,
         goalPoint3D);
-
     return result;
 }
 

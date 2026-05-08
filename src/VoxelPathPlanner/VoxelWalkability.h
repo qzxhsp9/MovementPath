@@ -39,7 +39,7 @@ public:
 
         if (mode == VoxelAStarSearchMode::FreeSpace)
         {
-            return state == VoxelState::Free;
+            return state != VoxelState::Occupied;
         }
 
         if (mode == VoxelAStarSearchMode::ClearanceBand)
@@ -75,6 +75,11 @@ public:
         }
 
         if (minDistanceToSurface <= 0.0)
+        {
+            return true;
+        }
+
+        if (mode == VoxelAStarSearchMode::FreeSpace)
         {
             return true;
         }

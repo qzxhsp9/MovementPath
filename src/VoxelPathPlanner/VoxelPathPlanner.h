@@ -120,6 +120,10 @@ struct VoxelPlanningRunOptions
     bool exportVtk = true;
     bool debugNeighborhood = true;
     bool verbose = true;
+    bool collectVoxelOverlayCenters = false;
+    // 0 means unlimited. Workbench normally filters overlays to the final
+    // path bounds, so unlimited remains usable for local debugging.
+    std::size_t maxVoxelOverlayCentersPerState = 0;
 
     std::string shapeMeshVtkPath = "D:/shape_mesh.vtk";
     std::string astarFailedVtkPath = "D:/astar_failed.vtk";
@@ -227,6 +231,8 @@ struct VoxelPathPlannerResult
     VoxelPlanningProfile profile;
     VoxelAStarResult astarResult;
     VoxelPathOptimizeResult optimizeResult;
+    std::vector<Vec> occupiedVoxelCenters;
+    std::vector<Vec> clearanceVoxelCenters;
     VoxelBounds finalSearchBounds;
     bool hasFinalSearchBounds = false;
 };

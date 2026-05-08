@@ -331,6 +331,17 @@ void OcctViewWidget::DisplayKeyVoxels(
     const std::vector<Vec>& voxelCenters,
     double voxelSize)
 {
+    DisplayVoxelBoxes(
+        voxelCenters,
+        voxelSize,
+        Quantity_Color(0.05, 0.45, 1.0, Quantity_TOC_RGB));
+}
+
+void OcctViewWidget::DisplayVoxelBoxes(
+    const std::vector<Vec>& voxelCenters,
+    double voxelSize,
+    const Quantity_Color& color)
+{
     EnsureViewer();
 
     const std::size_t maxDisplayed = std::min<std::size_t>(
@@ -347,9 +358,7 @@ void OcctViewWidget::DisplayKeyVoxels(
             voxelSize,
             voxelSize,
             voxelSize);
-        DisplayTransientShape(
-            box.Shape(),
-            Quantity_Color(0.05, 0.45, 1.0, Quantity_TOC_RGB));
+        DisplayTransientShape(box.Shape(), color);
     }
 }
 

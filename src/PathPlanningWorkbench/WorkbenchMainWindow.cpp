@@ -273,8 +273,12 @@ void WorkbenchMainWindow::BuildUi()
     m_displayModeCombo->addItem("Wireframe");
     m_displayModeCombo->addItem("Mesh");
     m_showKeyVoxelsCheck = new QCheckBox("Show key voxels");
+    m_showOccupiedVoxelsCheck = new QCheckBox("Show occupied voxels");
+    m_showClearanceVoxelsCheck = new QCheckBox("Show safety voxels");
     displayLayout->addRow("Mode", m_displayModeCombo);
     displayLayout->addRow(m_showKeyVoxelsCheck);
+    displayLayout->addRow(m_showOccupiedVoxelsCheck);
+    displayLayout->addRow(m_showClearanceVoxelsCheck);
     panelLayout->addWidget(displayGroup);
 
     QGroupBox* importGroup = new QGroupBox("Discretization");
@@ -762,6 +766,22 @@ void WorkbenchMainWindow::OnPathComputationFinished()
             ToVoxelCenters(pathPoints),
             m_runningVoxelSize);
     }
+
+    if (m_showOccupiedVoxelsCheck->isChecked())
+    {
+        m_view->DisplayVoxelBoxes(
+            result.occupiedVoxelCenters,
+            m_runningVoxelSize,
+            Quantity_Color(0.95, 0.15, 0.05, Quantity_TOC_RGB));
+    }
+
+    if (m_showClearanceVoxelsCheck->isChecked())
+    {
+        m_view->DisplayVoxelBoxes(
+            result.clearanceVoxelCenters,
+            m_runningVoxelSize,
+            Quantity_Color(0.0, 0.85, 0.65, Quantity_TOC_RGB));
+    }
 }
 
 void WorkbenchMainWindow::SetPlanningUiBusy(bool busy)
@@ -976,6 +996,12 @@ VoxelPathPlannerOptions WorkbenchMainWindow::MakeVoxelOptions(
         m_vtkExportSettings.lazyChunkBoundsPath.toStdString();
     options.runOptions.debugNeighborhood = false;
     options.runOptions.verbose = false;
+    options.runOptions.collectVoxelOverlayCenters =
+        (m_showOccupiedVoxelsCheck != nullptr &&
+            m_showOccupiedVoxelsCheck->isChecked()) ||
+        (m_showClearanceVoxelsCheck != nullptr &&
+            m_showClearanceVoxelsCheck->isChecked());
+    options.runOptions.maxVoxelOverlayCentersPerState = 0;
 
     if (method == PlannerMethod::VoxelLazy)
     {
