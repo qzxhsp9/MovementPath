@@ -85,6 +85,16 @@ void GeometryQueryContext::AccumulateIndexStats(
         stats.dryRunPrunableNodeCount;
     m_profile.spatialIndexDryRunClearanceSafeNodeCount +=
         stats.dryRunClearanceSafeNodeCount;
+    m_profile.spatialIndexDryRunEstimatedVisitedNodeCount +=
+        stats.dryRunEstimatedVisitedNodeCount;
+    m_profile.spatialIndexDryRunEstimatedTestedTriangleCount +=
+        stats.dryRunEstimatedTestedTriangleCount;
+    m_profile.spatialIndexDryRunEstimatedSkippedTriangleCount +=
+        stats.dryRunEstimatedSkippedTriangleCount;
+    m_profile.spatialIndexDryRunEstimatedBestDistancePruneCount +=
+        stats.dryRunEstimatedBestDistancePruneCount;
+    m_profile.spatialIndexDryRunEstimatedClearanceSafePruneCount +=
+        stats.dryRunEstimatedClearanceSafePruneCount;
 }
 
 } // namespace movement_path::geometry

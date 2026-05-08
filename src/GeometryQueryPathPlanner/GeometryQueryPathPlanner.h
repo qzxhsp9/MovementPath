@@ -46,6 +46,15 @@ struct GeometryPathProfile
     std::size_t spatialIndexVisitedNodeCount = 0;
     std::size_t spatialIndexDryRunPrunableNodeCount = 0;
     std::size_t spatialIndexDryRunClearanceSafeNodeCount = 0;
+    std::size_t spatialIndexDryRunEstimatedVisitedNodeCount = 0;
+    std::size_t spatialIndexDryRunEstimatedTestedTriangleCount = 0;
+    std::size_t spatialIndexDryRunEstimatedSkippedTriangleCount = 0;
+    std::size_t spatialIndexDryRunEstimatedBestDistancePruneCount = 0;
+    std::size_t spatialIndexDryRunEstimatedClearanceSafePruneCount = 0;
+    std::size_t searchNodeCount = 0;
+    std::size_t searchEdgeCount = 0;
+    std::size_t feasibleSearchEdgeCount = 0;
+    std::size_t blockedSearchEdgeCount = 0;
     double spatialIndexBuildMs = 0.0;
     double searchMs = 0.0;
     double optimizeMs = 0.0;

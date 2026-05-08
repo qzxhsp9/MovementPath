@@ -60,6 +60,11 @@ struct Vec3
     {
         return std::sqrt((*this - other).SquaredLength());
     }
+
+    bool IsFinite() const
+    {
+        return std::isfinite(x) && std::isfinite(y) && std::isfinite(z);
+    }
 };
 
 struct Triangle

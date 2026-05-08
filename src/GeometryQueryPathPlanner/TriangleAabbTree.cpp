@@ -133,6 +133,26 @@ SegmentClearanceResult TriangleAabbTree::SegmentClearance(
         result,
         stats);
 
+    if (stats != nullptr)
+    {
+        TriangleAabbTreeStats estimate =
+            EstimateSegmentClearancePruning(
+                start,
+                end,
+                clearance,
+                radius);
+        stats->dryRunEstimatedVisitedNodeCount =
+            estimate.dryRunEstimatedVisitedNodeCount;
+        stats->dryRunEstimatedTestedTriangleCount =
+            estimate.dryRunEstimatedTestedTriangleCount;
+        stats->dryRunEstimatedSkippedTriangleCount =
+            estimate.dryRunEstimatedSkippedTriangleCount;
+        stats->dryRunEstimatedBestDistancePruneCount =
+            estimate.dryRunEstimatedBestDistancePruneCount;
+        stats->dryRunEstimatedClearanceSafePruneCount =
+            estimate.dryRunEstimatedClearanceSafePruneCount;
+    }
+
     if (result.hit)
     {
         result.minDistance = bestDistance;
@@ -145,6 +165,36 @@ SegmentClearanceResult TriangleAabbTree::SegmentClearance(
     }
 
     return result;
+}
+
+TriangleAabbTreeStats TriangleAabbTree::EstimateSegmentClearancePruning(
+    const Vec3& start,
+    const Vec3& end,
+    double clearance,
+    double radius) const
+{
+    TriangleAabbTreeStats stats;
+    stats.nodeCount = m_nodes.size();
+    stats.triangleCount = m_triangles.size();
+
+    if (!IsValid())
+    {
+        return stats;
+    }
+
+    const Aabb segmentBounds = ComputeSegmentAabb(start, end);
+    const double requiredDistance = clearance + radius;
+    double bestDistance = std::numeric_limits<double>::infinity();
+    EstimateSegmentClearancePruningNode(
+        0,
+        start,
+        end,
+        segmentBounds,
+        requiredDistance,
+        bestDistance,
+        stats);
+
+    return stats;
 }
 
 const TriangleAabbTreeStats& TriangleAabbTree::BuildStats() const
@@ -164,10 +214,10 @@ int TriangleAabbTree::BuildNode(
         node.bounds.Expand(ComputeTriangleAabb(m_triangles[triangleIds[i]]));
     }
 
-    const int nodeIndex = static_cast<int>(m_nodes.size());
-    m_nodes.push_back(node);
-
     const int count = end - begin;
+    const int nodeIndex = static_cast<int>(m_nodes.size());
+    node.subtreeTriangleCount = static_cast<std::size_t>(count);
+    m_nodes.push_back(node);
 
     if (count <= kLeafTriangleCount)
     {
@@ -375,6 +425,99 @@ void TriangleAabbTree::SegmentClearanceNode(
         bestDistance,
         result,
         stats);
+}
+
+void TriangleAabbTree::EstimateSegmentClearancePruningNode(
+    int nodeIndex,
+    const Vec3& start,
+    const Vec3& end,
+    const Aabb& segmentBounds,
+    double requiredDistance,
+    double& bestDistance,
+    TriangleAabbTreeStats& stats) const
+{
+    const Node& node = m_nodes[nodeIndex];
+    ++stats.dryRunEstimatedVisitedNodeCount;
+
+    const double nodeLowerBound =
+        std::sqrt(SquaredDistanceAabbToAabb(segmentBounds, node.bounds));
+
+    if (nodeLowerBound > bestDistance)
+    {
+        ++stats.dryRunEstimatedBestDistancePruneCount;
+        stats.dryRunEstimatedSkippedTriangleCount +=
+            node.subtreeTriangleCount;
+        return;
+    }
+
+    if (nodeLowerBound >= requiredDistance)
+    {
+        ++stats.dryRunEstimatedClearanceSafePruneCount;
+        stats.dryRunEstimatedSkippedTriangleCount +=
+            node.subtreeTriangleCount;
+        return;
+    }
+
+    if (node.IsLeaf())
+    {
+        stats.dryRunEstimatedTestedTriangleCount += node.triangleIds.size();
+
+        for (int id : node.triangleIds)
+        {
+            const double distance =
+                DistanceSegmentToTriangle(start, end, m_triangles[id]);
+
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+            }
+        }
+        return;
+    }
+
+    const double leftDistance =
+        SquaredDistanceAabbToAabb(segmentBounds, m_nodes[node.left].bounds);
+    const double rightDistance =
+        SquaredDistanceAabbToAabb(segmentBounds, m_nodes[node.right].bounds);
+
+    if (leftDistance <= rightDistance)
+    {
+        EstimateSegmentClearancePruningNode(
+            node.left,
+            start,
+            end,
+            segmentBounds,
+            requiredDistance,
+            bestDistance,
+            stats);
+        EstimateSegmentClearancePruningNode(
+            node.right,
+            start,
+            end,
+            segmentBounds,
+            requiredDistance,
+            bestDistance,
+            stats);
+    }
+    else
+    {
+        EstimateSegmentClearancePruningNode(
+            node.right,
+            start,
+            end,
+            segmentBounds,
+            requiredDistance,
+            bestDistance,
+            stats);
+        EstimateSegmentClearancePruningNode(
+            node.left,
+            start,
+            end,
+            segmentBounds,
+            requiredDistance,
+            bestDistance,
+            stats);
+    }
 }
 
 } // namespace movement_path::geometry

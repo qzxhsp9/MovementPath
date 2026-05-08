@@ -75,7 +75,11 @@ struct VoxelPlanningProfile
     int astarVisitedCount = 0;
     std::size_t rawPathCount = 0;
     std::size_t optimizedPathCount = 0;
+    std::size_t smoothedPathPointCount = 0;
     int lineCheckCount = 0;
+    int smoothingLineCheckCount = 0;
+    bool smoothingRequested = false;
+    bool smoothingSucceeded = false;
 
     double totalCost = 0.0;
 
@@ -205,6 +209,10 @@ struct VoxelPathPlannerOptions
     int searchBoundsExtraRadius = 10;
     int debugNeighborhoodRadius = 10;
     int optimizerMaxShortcutLookAhead = 200;
+    bool smoothOptimizedPath = false;
+    int smoothPathSamplesPerSegment = 8;
+    double smoothPathSampleSpacing = 0.0;
+    double smoothPathMaxDeviation = 0.0;
 };
 
 struct VoxelPathPlannerResult

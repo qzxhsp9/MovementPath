@@ -4,6 +4,109 @@
 #include <cmath>
 #include <limits>
 
+namespace
+{
+constexpr double kEpsilon = 1.0e-12;
+
+double DistancePointToSegment(
+    const Vec& point,
+    const Vec& start,
+    const Vec& end)
+{
+    const Vec segment = end - start;
+    const double segmentLengthSquared = segment.SquareMagnitude();
+
+    if (segmentLengthSquared <= kEpsilon)
+    {
+        return point.Distance(start);
+    }
+
+    const double t = std::clamp(
+        (point - start).Dot(segment) / segmentLengthSquared,
+        0.0,
+        1.0);
+    return point.Distance(start + segment * t);
+}
+
+double DistancePointToPolyline(
+    const Vec& point,
+    const std::vector<Vec>& polyline)
+{
+    double best = std::numeric_limits<double>::max();
+
+    for (std::size_t i = 1; i < polyline.size(); ++i)
+    {
+        best = std::min(
+            best,
+            DistancePointToSegment(point, polyline[i - 1], polyline[i]));
+    }
+
+    return best;
+}
+
+Vec CentripetalCatmullRom(
+    const Vec& p0,
+    const Vec& p1,
+    const Vec& p2,
+    const Vec& p3,
+    double t)
+{
+    auto Knot = [](double previous, const Vec& lhs, const Vec& rhs)
+        {
+            return previous +
+                std::sqrt(std::max(lhs.Distance(rhs), kEpsilon));
+        };
+
+    const double t0 = 0.0;
+    const double t1 = Knot(t0, p0, p1);
+    const double t2 = Knot(t1, p1, p2);
+    const double t3 = Knot(t2, p2, p3);
+    const double u = t1 + (t2 - t1) * t;
+
+    if (t2 - t1 <= kEpsilon)
+    {
+        return p1;
+    }
+
+    auto Blend = [](const Vec& lhs, const Vec& rhs, double lhsT, double rhsT, double value)
+        {
+            const double denominator = rhsT - lhsT;
+            if (denominator <= kEpsilon)
+            {
+                return lhs;
+            }
+            return lhs * ((rhsT - value) / denominator) +
+                rhs * ((value - lhsT) / denominator);
+        };
+
+    const Vec a1 = Blend(p0, p1, t0, t1, u);
+    const Vec a2 = Blend(p1, p2, t1, t2, u);
+    const Vec a3 = Blend(p2, p3, t2, t3, u);
+    const Vec b1 = Blend(a1, a2, t0, t2, u);
+    const Vec b2 = Blend(a2, a3, t1, t3, u);
+    return Blend(b1, b2, t1, t2, u);
+}
+
+std::size_t SmoothSegmentSampleCount(
+    const Vec& start,
+    const Vec& end,
+    const VoxelPathOptimizeOptions& options)
+{
+    std::size_t count = static_cast<std::size_t>(
+        std::max(1, options.curveSamplesPerSegment));
+
+    if (options.curveSampleSpacing > kEpsilon)
+    {
+        count = std::max<std::size_t>(
+            count,
+            static_cast<std::size_t>(
+                std::ceil(start.Distance(end) / options.curveSampleSpacing)));
+    }
+
+    return count;
+}
+}
+
 // ============================================================
 // 小工具
 // ============================================================
@@ -98,6 +201,73 @@ std::vector<Vec> VoxelPathOptimizer::ConvertToPoints(
     }
 
     return points;
+}
+
+std::vector<Vec> VoxelPathOptimizer::SmoothPointPath(
+    const VoxelSpace& space,
+    const std::vector<Vec>& controlPath,
+    const VoxelPathOptimizeOptions& options,
+    int& lineCheckCount)
+{
+    lineCheckCount = 0;
+
+    if (controlPath.size() <= 2 || options.curveSamplesPerSegment <= 0)
+    {
+        return controlPath;
+    }
+
+    std::vector<Vec> sampled;
+    sampled.push_back(controlPath.front());
+
+    for (std::size_t i = 0; i + 1 < controlPath.size(); ++i)
+    {
+        const Vec& p0 = controlPath[i == 0 ? i : i - 1];
+        const Vec& p1 = controlPath[i];
+        const Vec& p2 = controlPath[i + 1];
+        const Vec& p3 =
+            controlPath[i + 2 < controlPath.size() ? i + 2 : i + 1];
+        const std::size_t sampleCount =
+            SmoothSegmentSampleCount(p1, p2, options);
+
+        for (std::size_t sample = 1; sample <= sampleCount; ++sample)
+        {
+            const double t =
+                static_cast<double>(sample) / static_cast<double>(sampleCount);
+            sampled.push_back(CentripetalCatmullRom(p0, p1, p2, p3, t));
+        }
+    }
+
+    sampled.front() = controlPath.front();
+    sampled.back() = controlPath.back();
+
+    for (std::size_t i = 0; i < sampled.size(); ++i)
+    {
+        if (options.maxCurveDeviation > 0.0 &&
+            DistancePointToPolyline(sampled[i], controlPath) >
+                options.maxCurveDeviation)
+        {
+            return std::vector<Vec>();
+        }
+
+        const VoxelIndex index = space.WorldToIndex(sampled[i]);
+        if (!IsIndexWalkableForLine(space, index, options.searchMode))
+        {
+            return std::vector<Vec>();
+        }
+
+        if (i > 0)
+        {
+            ++lineCheckCount;
+
+            const VoxelIndex prevIndex = space.WorldToIndex(sampled[i - 1]);
+            if (!IsLineWalkable(space, prevIndex, index, options.searchMode))
+            {
+                return std::vector<Vec>();
+            }
+        }
+    }
+
+    return sampled;
 }
 
 // ============================================================
@@ -307,6 +477,7 @@ VoxelPathOptimizeResult VoxelPathOptimizer::Optimize(
         result.voxelPath = workingPath;
         result.pointPath = ConvertToPoints(space, result.voxelPath);
         result.outputCount = result.voxelPath.size();
+        result.smoothedPointCount = result.pointPath.size();
         return result;
     }
 
@@ -367,6 +538,26 @@ VoxelPathOptimizeResult VoxelPathOptimizer::Optimize(
     result.voxelPath = optimized;
     result.pointPath = ConvertToPoints(space, result.voxelPath);
     result.outputCount = result.voxelPath.size();
+    result.smoothedPointCount = result.pointPath.size();
+
+    if (options.enableCurveSmoothing && result.pointPath.size() > 2)
+    {
+        int smoothingLineCheckCount = 0;
+        std::vector<Vec> smoothed =
+            SmoothPointPath(
+                space,
+                result.pointPath,
+                options,
+                smoothingLineCheckCount);
+        result.smoothingLineCheckCount = smoothingLineCheckCount;
+
+        if (!smoothed.empty())
+        {
+            result.pointPath = smoothed;
+            result.smoothedPointCount = result.pointPath.size();
+            result.smoothingSucceeded = true;
+        }
+    }
 
     return result;
 }

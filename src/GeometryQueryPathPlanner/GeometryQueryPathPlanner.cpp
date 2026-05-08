@@ -1,8 +1,21 @@
 #include "GeometryQueryPathPlanner.h"
 #include "GeometryQueryContext.h"
 
+#include <cmath>
+#include <limits>
+
 namespace movement_path::geometry
 {
+namespace
+{
+bool IsValidOptions(const GeometryPathOptions& options)
+{
+    return std::isfinite(options.clearance) &&
+        options.clearance >= 0.0 &&
+        options.maxExpansionCount <=
+            static_cast<std::size_t>(std::numeric_limits<int>::max());
+}
+}
 
 GeometryPathResult GeometryQueryPathPlanner::Plan(
     const GeometryPathRequest& request,
@@ -18,6 +31,22 @@ GeometryPathResult GeometryQueryPathPlanner::Plan(
         return result;
     }
 
+    if (!request.startPoint.IsFinite() || !request.goalPoint.IsFinite())
+    {
+        result.status = GeometryPathStatus::InvalidInput;
+        result.message =
+            "GeometryQueryPathPlanner requires finite start and goal points.";
+        return result;
+    }
+
+    if (!IsValidOptions(options))
+    {
+        result.status = GeometryPathStatus::InvalidInput;
+        result.message =
+            "GeometryQueryPathPlanner received invalid options.";
+        return result;
+    }
+
     GeometryQueryContext queryContext;
 
     if (!queryContext.Build(request.triangles))
@@ -29,7 +58,6 @@ GeometryPathResult GeometryQueryPathPlanner::Plan(
     }
 
     result.profile = queryContext.Profile();
-    (void)options;
 
     result.status = GeometryPathStatus::NotImplemented;
     result.message =

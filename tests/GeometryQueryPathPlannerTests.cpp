@@ -1,12 +1,15 @@
 #include "GeometryQueryPathPlanner.h"
 #include "GeometryQueryContext.h"
+#include "GeometryPathSmoother.h"
 #include "GeometryQueries.h"
+#include "GeometrySearchGraph.h"
 #include "TriangleAabbTree.h"
 #include "TriangleMesh.h"
 
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <set>
 #include <vector>
 
@@ -127,6 +130,43 @@ bool TestPlannerScaffoldStatus()
     ok &= Expect(
         result.profile.spatialIndexBuildMs >= 0.0,
         "non-empty mesh should report spatial index build time");
+
+    return ok;
+}
+
+bool TestPlannerRejectsInvalidInputs()
+{
+    GeometryQueryPathPlanner planner;
+    GeometryPathOptions options;
+
+    GeometryPathRequest request;
+    request.triangles.push_back(MakeUnitRightTriangle());
+    request.startPoint = Vec3(
+        std::numeric_limits<double>::quiet_NaN(),
+        0.0,
+        0.0);
+    request.goalPoint = Vec3(1.0, 1.0, 1.0);
+
+    GeometryPathResult result = planner.Plan(request, options);
+
+    bool ok = Expect(
+        result.status == GeometryPathStatus::InvalidInput,
+        "planner should reject non-finite start point");
+
+    request.startPoint = Vec3(0.0, 0.0, 1.0);
+    options.clearance = -1.0;
+    result = planner.Plan(request, options);
+
+    ok &= Expect(
+        result.status == GeometryPathStatus::InvalidInput,
+        "planner should reject negative clearance");
+
+    options.clearance = std::numeric_limits<double>::infinity();
+    result = planner.Plan(request, options);
+
+    ok &= Expect(
+        result.status == GeometryPathStatus::InvalidInput,
+        "planner should reject non-finite clearance");
 
     return ok;
 }
@@ -281,6 +321,54 @@ bool TestGeometryQueryContextAccumulatesProfile()
     ok &= Expect(
         !emptyContext.IsValid(),
         "empty query context should be invalid");
+
+    return ok;
+}
+
+bool TestGeometrySearchGraphInterface()
+{
+    GeometrySearchGraph graph;
+
+    const int startId =
+        graph.AddNode(Vec3(0.0, 0.0, 0.0), GeometrySearchNodeKind::Start);
+    const int goalId =
+        graph.AddNode(Vec3(3.0, 4.0, 0.0), GeometrySearchNodeKind::Goal);
+
+    SegmentClearanceResult passClearance;
+    passClearance.hit = true;
+    passClearance.pass = true;
+    passClearance.minDistance = 2.0;
+
+    const int edgeId = graph.AddEdge(startId, goalId, passClearance);
+
+    bool ok = Expect(startId == 0, "start node id should be zero");
+    ok &= Expect(goalId == 1, "goal node id should be one");
+    ok &= Expect(edgeId == 0, "first edge id should be zero");
+    ok &= Expect(graph.Nodes().size() == 2, "graph should contain nodes");
+    ok &= Expect(graph.Edges().size() == 1, "graph should contain edge");
+    ok &= Expect(
+        Near(graph.Edges()[0].cost, 5.0),
+        "graph edge cost should be Euclidean distance");
+
+    GeometrySearchGraphProfile profile = graph.Profile();
+    ok &= Expect(profile.nodeCount == 2, "graph profile node count");
+    ok &= Expect(profile.edgeCount == 1, "graph profile edge count");
+    ok &= Expect(
+        profile.feasibleEdgeCount == 1,
+        "graph profile feasible edge count");
+    ok &= Expect(
+        profile.blockedEdgeCount == 0,
+        "graph profile blocked edge count");
+
+    SegmentClearanceResult blockedClearance;
+    blockedClearance.hit = true;
+    blockedClearance.pass = false;
+    graph.AddEdge(goalId, startId, blockedClearance);
+
+    profile = graph.Profile();
+    ok &= Expect(
+        profile.blockedEdgeCount == 1,
+        "graph profile blocked edge count should update");
 
     return ok;
 }
@@ -558,13 +646,13 @@ bool TestSegmentTriangleBoundaryCases()
 
 bool TestSegmentClearanceRadiusAndDryRunStats()
 {
-    const std::vector<Triangle> triangles = MakeSeparatedTriangles();
+    const std::vector<Triangle> triangles = MakeGridTriangles(16);
 
     TriangleAabbTree tree;
     bool ok = Expect(tree.Build(triangles), "tree should build for radius");
 
-    const Vec3 start(10.25, 0.25, 3.0);
-    const Vec3 end(10.25, 0.25, 2.0);
+    const Vec3 start(0.25, 0.25, 3.0);
+    const Vec3 end(0.25, 0.25, 2.0);
     const double clearance = 1.5;
     const double radius = 0.6;
 
@@ -597,6 +685,27 @@ bool TestSegmentClearanceRadiusAndDryRunStats()
     ok &= Expect(
         stats.dryRunPrunableNodeCount <= stats.visitedNodeCount,
         "dry-run prunable node count should not exceed visited nodes");
+    ok &= Expect(
+        stats.dryRunEstimatedVisitedNodeCount <= stats.visitedNodeCount,
+        "estimated pruning should not visit more nodes");
+    ok &= Expect(
+        stats.dryRunEstimatedTestedTriangleCount <= stats.testedTriangleCount,
+        "estimated pruning should not test more triangles");
+    ok &= Expect(
+        stats.dryRunEstimatedTestedTriangleCount +
+            stats.dryRunEstimatedSkippedTriangleCount <= triangles.size(),
+        "estimated tested and skipped triangles should stay bounded");
+
+    const TriangleAabbTreeStats estimate =
+        tree.EstimateSegmentClearancePruning(start, end, clearance, radius);
+    ok &= Expect(
+        estimate.dryRunEstimatedVisitedNodeCount ==
+            stats.dryRunEstimatedVisitedNodeCount,
+        "explicit estimate should match segment query estimate");
+    ok &= Expect(
+        estimate.dryRunEstimatedTestedTriangleCount ==
+            stats.dryRunEstimatedTestedTriangleCount,
+        "explicit estimate should match tested triangle estimate");
 
     GeometryQueryContext context;
     ok &= Expect(context.Build(triangles), "context should build for radius");
@@ -609,6 +718,107 @@ bool TestSegmentClearanceRadiusAndDryRunStats()
         context.Profile().spatialIndexDryRunClearanceSafeNodeCount <=
             context.Profile().spatialIndexVisitedNodeCount,
         "context dry-run safe count should not exceed visited nodes");
+    ok &= Expect(
+        context.Profile().spatialIndexDryRunEstimatedTestedTriangleCount <=
+            context.Profile().geometryCandidateTriangleCount,
+        "context estimated tested triangles should not exceed actual tests");
+
+    return ok;
+}
+
+bool TestCatmullRomSmootherPreservesEndpointsAndConstraints()
+{
+    const std::vector<Triangle> triangles = {
+        {
+            Vec3(-10.0, -10.0, 0.0),
+            Vec3(10.0, -10.0, 0.0),
+            Vec3(-10.0, 10.0, 0.0)
+        },
+        {
+            Vec3(10.0, -10.0, 0.0),
+            Vec3(10.0, 10.0, 0.0),
+            Vec3(-10.0, 10.0, 0.0)
+        }
+    };
+
+    GeometryQueryContext context;
+    bool ok = Expect(context.Build(triangles), "smoother context should build");
+
+    const std::vector<Vec3> rawPath = {
+        Vec3(0.0, 0.0, 2.0),
+        Vec3(1.0, 0.0, 2.0),
+        Vec3(1.0, 1.0, 2.0),
+        Vec3(2.0, 1.0, 2.0)
+    };
+
+    GeometryPathSmoothingOptions options;
+    options.clearance = 1.0;
+    options.maxDeviation = 0.25;
+    options.maxCurvature = 20.0;
+    options.samplesPerSegment = 6;
+
+    const GeometryPathSmoothingResult result =
+        SmoothPathCatmullRom(rawPath, context, options);
+
+    ok &= Expect(
+        result.status == GeometryPathSmoothStatus::Succeeded,
+        "Catmull-Rom smoother should pass conservative constraints");
+    ok &= Expect(
+        result.path.size() > rawPath.size(),
+        "smoother should densify the path for downstream speed planning");
+    ok &= Expect(
+        NearVec(result.path.front(), rawPath.front()),
+        "smoother should preserve start point");
+    ok &= Expect(
+        NearVec(result.path.back(), rawPath.back()),
+        "smoother should preserve goal point");
+    ok &= Expect(
+        result.profile.minClearance >= options.clearance,
+        "smoothed samples should satisfy minimum clearance");
+    ok &= Expect(
+        result.profile.maxDeviation <= options.maxDeviation,
+        "smoothed path should stay within max deviation");
+    ok &= Expect(
+        result.profile.maxCurvature <= options.maxCurvature,
+        "smoothed path should stay within max curvature");
+    ok &= Expect(
+        result.profile.collisionCheckCount + 1 == result.path.size(),
+        "smoother should collision-check every sampled segment");
+
+    return ok;
+}
+
+bool TestCatmullRomSmootherRejectsConstraintViolation()
+{
+    const std::vector<Triangle> triangles = { MakeUnitRightTriangle() };
+
+    GeometryQueryContext context;
+    bool ok = Expect(context.Build(triangles), "reject context should build");
+
+    const std::vector<Vec3> rawPath = {
+        Vec3(0.0, 0.0, 2.0),
+        Vec3(1.0, 0.0, 2.0),
+        Vec3(1.0, 1.0, 2.0)
+    };
+
+    GeometryPathSmoothingOptions options;
+    options.clearance = 0.1;
+    options.maxDeviation = 1.0e-6;
+    options.samplesPerSegment = 8;
+
+    const GeometryPathSmoothingResult result =
+        SmoothPathCatmullRom(rawPath, context, options);
+
+    ok &= Expect(
+        result.status == GeometryPathSmoothStatus::FailedConstraint,
+        "smoother should reject paths exceeding deviation bound");
+
+    const GeometryPathSmoothingResult invalid =
+        SmoothPathCatmullRom({ Vec3(0.0, 0.0, 0.0) }, context, options);
+
+    ok &= Expect(
+        invalid.status == GeometryPathSmoothStatus::InvalidInput,
+        "smoother should reject paths with fewer than two points");
 
     return ok;
 }
@@ -618,15 +828,19 @@ int main()
 {
     bool ok = true;
     ok &= TestPlannerScaffoldStatus();
+    ok &= TestPlannerRejectsInvalidInputs();
     ok &= TestPointToTriangleDistance();
     ok &= TestBruteForceClosestPointToMesh();
     ok &= TestTriangleMeshBuildsBounds();
     ok &= TestGeometryQueryContextAccumulatesProfile();
+    ok &= TestGeometrySearchGraphInterface();
     ok &= TestTriangleAabbTreeQueryMatchesBruteForceAabb();
     ok &= TestTriangleAabbTreeBoundaryCases();
     ok &= TestTriangleAabbTreeClosestPointMatchesBruteForce();
     ok &= TestSegmentClearanceMatchesBruteForce();
     ok &= TestSegmentTriangleBoundaryCases();
     ok &= TestSegmentClearanceRadiusAndDryRunStats();
+    ok &= TestCatmullRomSmootherPreservesEndpointsAndConstraints();
+    ok &= TestCatmullRomSmootherRejectsConstraintViolation();
     return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }

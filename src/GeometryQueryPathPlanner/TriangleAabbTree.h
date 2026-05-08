@@ -16,6 +16,11 @@ struct TriangleAabbTreeStats
     std::size_t testedTriangleCount = 0;
     std::size_t dryRunPrunableNodeCount = 0;
     std::size_t dryRunClearanceSafeNodeCount = 0;
+    std::size_t dryRunEstimatedVisitedNodeCount = 0;
+    std::size_t dryRunEstimatedTestedTriangleCount = 0;
+    std::size_t dryRunEstimatedSkippedTriangleCount = 0;
+    std::size_t dryRunEstimatedBestDistancePruneCount = 0;
+    std::size_t dryRunEstimatedClearanceSafePruneCount = 0;
 };
 
 class TriangleAabbTree
@@ -40,6 +45,12 @@ public:
         double radius = 0.0,
         TriangleAabbTreeStats* stats = nullptr) const;
 
+    TriangleAabbTreeStats EstimateSegmentClearancePruning(
+        const Vec3& start,
+        const Vec3& end,
+        double clearance,
+        double radius = 0.0) const;
+
     const TriangleAabbTreeStats& BuildStats() const;
 
 private:
@@ -48,6 +59,7 @@ private:
         Aabb bounds;
         int left = -1;
         int right = -1;
+        std::size_t subtreeTriangleCount = 0;
         std::vector<int> triangleIds;
 
         bool IsLeaf() const
@@ -82,6 +94,15 @@ private:
         double& bestDistance,
         SegmentClearanceResult& result,
         TriangleAabbTreeStats* stats) const;
+
+    void EstimateSegmentClearancePruningNode(
+        int nodeIndex,
+        const Vec3& start,
+        const Vec3& end,
+        const Aabb& segmentBounds,
+        double requiredDistance,
+        double& bestDistance,
+        TriangleAabbTreeStats& stats) const;
 
     std::vector<Triangle> m_triangles;
     std::vector<Node> m_nodes;

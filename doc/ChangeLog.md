@@ -196,3 +196,10 @@ out\build\x64-Debug\MovementPathBenchmark.exe
 - `SegmentClearanceResult` 增加 `clearance`、`radius` 和 `requiredDistance` 字段。
 - `TriangleAabbTreeStats` 与 `GeometryPathProfile` 增加 segment clearance dry-run 剪枝统计字段，当前只统计不改变遍历行为。
 - 补充 radius 与 dry-run 统计单测。
+- 新增 `GeometrySearchGraph.h`，定义按需搜索图第一版节点、边、边 clearance 结果和 graph profile。
+- `GeometryQueryPathPlanner::Plan()` 增加 start/goal 有限性检查、clearance 合法性检查和失败原因。
+- 补充搜索图接口与 planner invalid input 单测。
+- 在 `GeometryQueryPathPlanner` Roadmap 中补充第一版 geometry benchmark 输出字段设计，用于后续与 voxel baseline 对齐。
+- `TriangleAabbTree` 新增 `EstimateSegmentClearancePruning()`，独立模拟 segment clearance 剪枝收益，不改变正式查询行为。
+- 剪枝 dry-run 统计新增估算访问节点数、估算测试三角形数、估算跳过三角形数、best-distance 剪枝数和 clearance-safe 剪枝数。
+- `GeometryPathProfile` 同步新增上述剪枝估算字段，便于后续 benchmark 输出。

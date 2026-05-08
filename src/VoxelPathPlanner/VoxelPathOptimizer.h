@@ -27,6 +27,11 @@ struct VoxelPathOptimizeOptions
 
     // 是否执行直线可通行压缩
     bool enableLineOfSightShortcut = true;
+
+    bool enableCurveSmoothing = false;
+    int curveSamplesPerSegment = 8;
+    double curveSampleSpacing = 0.0;
+    double maxCurveDeviation = 0.0;
 };
 
 // ============================================================
@@ -41,8 +46,11 @@ struct VoxelPathOptimizeResult
     std::size_t inputCount = 0;
     std::size_t afterCollinearCount = 0;
     std::size_t outputCount = 0;
+    std::size_t smoothedPointCount = 0;
 
     int lineCheckCount = 0;
+    int smoothingLineCheckCount = 0;
+    bool smoothingSucceeded = false;
 };
 
 // ============================================================
@@ -69,6 +77,12 @@ public:
     static std::vector<Vec> ConvertToPoints(
         const VoxelSpace& space,
         const std::vector<VoxelIndex>& path);
+
+    static std::vector<Vec> SmoothPointPath(
+        const VoxelSpace& space,
+        const std::vector<Vec>& controlPath,
+        const VoxelPathOptimizeOptions& options,
+        int& lineCheckCount);
 
 private:
     static bool SameDirection(

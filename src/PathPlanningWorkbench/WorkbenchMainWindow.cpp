@@ -24,6 +24,7 @@
 #include <QApplication>
 #include <QtConcurrent/QtConcurrentRun>
 
+#include <algorithm>
 #include <iomanip>
 #include <sstream>
 #include <utility>
@@ -337,6 +338,8 @@ void WorkbenchMainWindow::BuildUi()
     m_neighborTypeCombo->addItem("18-face-edge");
     m_neighborTypeCombo->addItem("26-face-edge-vertex");
     m_neighborTypeCombo->setCurrentIndex(2);
+    m_smoothPathCheck = new QCheckBox("Smooth path");
+    m_smoothPathCheck->setChecked(false);
     m_realtimeCheck = new QCheckBox("Realtime after input changes");
     plannerLayout->addRow("Method", m_plannerCombo);
     plannerLayout->addRow("Search", m_searchModeCombo);
@@ -344,6 +347,7 @@ void WorkbenchMainWindow::BuildUi()
     plannerLayout->addRow("Voxel size", m_voxelSizeSpin);
     plannerLayout->addRow("Clearance", m_clearanceSpin);
     plannerLayout->addRow("Snap radius", m_snapRadiusSpin);
+    plannerLayout->addRow(m_smoothPathCheck);
     plannerLayout->addRow(m_realtimeCheck);
     plannerLayout->addRow(vtkExportSettingsButton);
     plannerLayout->addRow(m_computeButton);
@@ -698,10 +702,24 @@ void WorkbenchMainWindow::OnPathComputationFinished()
         << ", mode=" << result.profile.buildRegionMode
         << ", triangles=" << result.profile.triangleCount
         << ", rawPath=" << result.profile.rawPathCount
-        << ", optimizedPath=" << result.profile.optimizedPathCount
+        << ", optimizedPath=" << result.profile.optimizedPathCount;
+    if (result.profile.smoothingRequested)
+    {
+        ss << ", smoothedPath=" << result.profile.smoothedPathPointCount
+            << ", smoothing="
+            << (result.profile.smoothingSucceeded ? "accepted" : "rejected");
+    }
+    ss
         << ", cost=" << std::fixed << std::setprecision(3)
         << result.profile.totalCost;
     AppendLog(QString::fromStdString(ss.str()));
+
+    if (result.profile.smoothingRequested &&
+        result.profile.optimizedPathCount > 2 &&
+        !result.profile.smoothingSucceeded)
+    {
+        AppendLog("Curve smoothing rejected by voxel constraints; displaying optimized polyline.");
+    }
 
     if (!result.success)
     {
@@ -917,6 +935,12 @@ VoxelPathPlannerOptions WorkbenchMainWindow::MakeVoxelOptions(
         m_searchModeCombo->currentIndex() == 1 ?
             VoxelAStarSearchMode::FreeSpace :
             VoxelAStarSearchMode::ClearanceBand;
+    options.smoothOptimizedPath =
+        m_smoothPathCheck != nullptr && m_smoothPathCheck->isChecked();
+    options.smoothPathSamplesPerSegment = 10;
+    options.smoothPathSampleSpacing =
+        std::max(0.1, m_voxelSizeSpin->value() * 0.5);
+    options.smoothPathMaxDeviation = m_voxelSizeSpin->value() * 0.75;
 
     if (m_neighborTypeCombo->currentIndex() == 1)
     {

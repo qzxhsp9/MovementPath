@@ -1089,6 +1089,14 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                     optOptions.enableLineOfSightShortcut = true;
                     optOptions.maxShortcutLookAhead =
                         options.optimizerMaxShortcutLookAhead;
+                    optOptions.enableCurveSmoothing =
+                        options.smoothOptimizedPath;
+                    optOptions.curveSamplesPerSegment =
+                        options.smoothPathSamplesPerSegment;
+                    optOptions.curveSampleSpacing =
+                        options.smoothPathSampleSpacing;
+                    optOptions.maxCurveDeviation =
+                        options.smoothPathMaxDeviation;
 
                     VoxelPathOptimizeResult optResult;
 
@@ -1108,7 +1116,15 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                     }
 
                     profile.optimizedPathCount = optResult.outputCount;
+                    profile.smoothedPathPointCount =
+                        optResult.smoothedPointCount;
                     profile.lineCheckCount = optResult.lineCheckCount;
+                    profile.smoothingLineCheckCount =
+                        optResult.smoothingLineCheckCount;
+                    profile.smoothingRequested =
+                        options.smoothOptimizedPath;
+                    profile.smoothingSucceeded =
+                        optResult.smoothingSucceeded;
                     ReplacePathEndpoints(
                         optResult.pointPath,
                         startPoint3D,
@@ -1413,6 +1429,10 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
     optOptions.removeCollinear = true;
     optOptions.enableLineOfSightShortcut = true;
     optOptions.maxShortcutLookAhead = options.optimizerMaxShortcutLookAhead;
+    optOptions.enableCurveSmoothing = options.smoothOptimizedPath;
+    optOptions.curveSamplesPerSegment = options.smoothPathSamplesPerSegment;
+    optOptions.curveSampleSpacing = options.smoothPathSampleSpacing;
+    optOptions.maxCurveDeviation = options.smoothPathMaxDeviation;
 
     VoxelPathOptimizeResult optResult;
 
@@ -1427,7 +1447,11 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
     }
 
     profile.optimizedPathCount = optResult.outputCount;
+    profile.smoothedPathPointCount = optResult.smoothedPointCount;
     profile.lineCheckCount = optResult.lineCheckCount;
+    profile.smoothingLineCheckCount = optResult.smoothingLineCheckCount;
+    profile.smoothingRequested = options.smoothOptimizedPath;
+    profile.smoothingSucceeded = optResult.smoothingSucceeded;
     ReplacePathEndpoints(
         optResult.pointPath,
         startPoint3D,

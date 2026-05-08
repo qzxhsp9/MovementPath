@@ -106,6 +106,7 @@ protected:
     QCheckBox* m_realtimeCheck = nullptr;
     QComboBox* m_searchModeCombo = nullptr;
     QComboBox* m_neighborTypeCombo = nullptr;
+    QCheckBox* m_smoothPathCheck = nullptr;
 
     QDoubleSpinBox* m_linearDeflectionSpin = nullptr;
     QDoubleSpinBox* m_angularDeflectionSpin = nullptr;
