@@ -12,6 +12,7 @@
 struct VoxelPathOptimizeOptions
 {
     VoxelAStarSearchMode searchMode = VoxelAStarSearchMode::ClearanceBand;
+    double minTravelDistanceToSurface = 0.0;
 
     // 直线检测时是否允许经过 Start / Goal / Path
     // 通常应为 true。
@@ -73,6 +74,12 @@ public:
         const VoxelIndex& from,
         const VoxelIndex& to,
         VoxelAStarSearchMode mode);
+
+    static bool IsLineWalkable(
+        const VoxelSpace& space,
+        const VoxelIndex& from,
+        const VoxelIndex& to,
+        const VoxelPathOptimizeOptions& options);
 
     static std::vector<Vec> ConvertToPoints(
         const VoxelSpace& space,

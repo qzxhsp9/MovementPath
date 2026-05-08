@@ -105,6 +105,173 @@ std::size_t SmoothSegmentSampleCount(
 
     return count;
 }
+
+int LocalSign(int value)
+{
+    if (value > 0)
+    {
+        return 1;
+    }
+
+    if (value < 0)
+    {
+        return -1;
+    }
+
+    return 0;
+}
+
+bool IsIndexCollisionFree(
+    const VoxelSpace& space,
+    const VoxelIndex& index)
+{
+    if (!space.IsInsideSearchBounds(index))
+    {
+        return false;
+    }
+
+    return space.GetCellState(index) != VoxelState::Occupied;
+}
+
+bool IsLineCollisionFree(
+    const VoxelSpace& space,
+    const VoxelIndex& from,
+    const VoxelIndex& to)
+{
+    if (!IsIndexCollisionFree(space, from) ||
+        !IsIndexCollisionFree(space, to))
+    {
+        return false;
+    }
+
+    if (from == to)
+    {
+        return true;
+    }
+
+    const Vec p0 = space.IndexToCenter(from);
+    const Vec p1 = space.IndexToCenter(to);
+
+    const double dx = p1.x - p0.x;
+    const double dy = p1.y - p0.y;
+    const double dz = p1.z - p0.z;
+    const double voxelSize = space.GetVoxelSize();
+
+    if (voxelSize <= 0.0)
+    {
+        return false;
+    }
+
+    VoxelIndex current = from;
+
+    const int stepX = LocalSign(to.x - from.x);
+    const int stepY = LocalSign(to.y - from.y);
+    const int stepZ = LocalSign(to.z - from.z);
+    const double inf = std::numeric_limits<double>::infinity();
+
+    auto ComputeTDelta = [](double d, double cellSize) -> double
+        {
+            if (std::abs(d) <= 1.0e-15)
+            {
+                return std::numeric_limits<double>::infinity();
+            }
+            return std::abs(cellSize / d);
+        };
+
+    auto ComputeTMax = [](
+        double p,
+        double d,
+        double nextBoundary) -> double
+        {
+            if (std::abs(d) <= 1.0e-15)
+            {
+                return std::numeric_limits<double>::infinity();
+            }
+            return (nextBoundary - p) / d;
+        };
+
+    const Vec origin = space.GetOrigin();
+
+    auto BoundaryForAxis = [](
+        double originCoord,
+        int indexCoord,
+        double cellSize,
+        int step) -> double
+        {
+            if (step > 0)
+            {
+                return originCoord +
+                    static_cast<double>(indexCoord + 1) * cellSize;
+            }
+
+            if (step < 0)
+            {
+                return originCoord +
+                    static_cast<double>(indexCoord) * cellSize;
+            }
+
+            return 0.0;
+        };
+
+    double tMaxX = stepX == 0 ? inf :
+        ComputeTMax(p0.x, dx, BoundaryForAxis(origin.x, from.x, voxelSize, stepX));
+    double tMaxY = stepY == 0 ? inf :
+        ComputeTMax(p0.y, dy, BoundaryForAxis(origin.y, from.y, voxelSize, stepY));
+    double tMaxZ = stepZ == 0 ? inf :
+        ComputeTMax(p0.z, dz, BoundaryForAxis(origin.z, from.z, voxelSize, stepZ));
+
+    if (tMaxX < 0.0) tMaxX = 0.0;
+    if (tMaxY < 0.0) tMaxY = 0.0;
+    if (tMaxZ < 0.0) tMaxZ = 0.0;
+
+    const double tDeltaX = ComputeTDelta(dx, voxelSize);
+    const double tDeltaY = ComputeTDelta(dy, voxelSize);
+    const double tDeltaZ = ComputeTDelta(dz, voxelSize);
+
+    const int maxStepCount =
+        std::abs(to.x - from.x) +
+        std::abs(to.y - from.y) +
+        std::abs(to.z - from.z) +
+        3;
+
+    int stepCount = 0;
+
+    while (current != to)
+    {
+        if (stepCount++ > maxStepCount)
+        {
+            return false;
+        }
+
+        const double tMin = std::min(tMaxX, std::min(tMaxY, tMaxZ));
+        const double eps = 1.0e-12;
+
+        if (std::abs(tMaxX - tMin) <= eps)
+        {
+            current.x += stepX;
+            tMaxX += tDeltaX;
+        }
+
+        if (std::abs(tMaxY - tMin) <= eps)
+        {
+            current.y += stepY;
+            tMaxY += tDeltaY;
+        }
+
+        if (std::abs(tMaxZ - tMin) <= eps)
+        {
+            current.z += stepZ;
+            tMaxZ += tDeltaZ;
+        }
+
+        if (!IsIndexCollisionFree(space, current))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
 }
 
 // ============================================================
@@ -148,6 +315,21 @@ bool VoxelPathOptimizer::IsIndexWalkableForLine(
     VoxelAStarSearchMode mode)
 {
     return VoxelWalkability::IsIndexWalkable(space, index, mode);
+}
+
+namespace
+{
+bool IsIndexWalkableForLineWithMinDistance(
+    const VoxelSpace& space,
+    const VoxelIndex& index,
+    const VoxelPathOptimizeOptions& options)
+{
+    return VoxelWalkability::IsIndexWalkableWithMinDistance(
+        space,
+        index,
+        options.searchMode,
+        options.minTravelDistanceToSurface);
+}
 }
 
 // ============================================================
@@ -250,7 +432,7 @@ std::vector<Vec> VoxelPathOptimizer::SmoothPointPath(
         }
 
         const VoxelIndex index = space.WorldToIndex(sampled[i]);
-        if (!IsIndexWalkableForLine(space, index, options.searchMode))
+        if (!IsIndexCollisionFree(space, index))
         {
             return std::vector<Vec>();
         }
@@ -260,7 +442,7 @@ std::vector<Vec> VoxelPathOptimizer::SmoothPointPath(
             ++lineCheckCount;
 
             const VoxelIndex prevIndex = space.WorldToIndex(sampled[i - 1]);
-            if (!IsLineWalkable(space, prevIndex, index, options.searchMode))
+            if (!IsLineCollisionFree(space, prevIndex, index))
             {
                 return std::vector<Vec>();
             }
@@ -444,6 +626,175 @@ bool VoxelPathOptimizer::IsLineWalkable(
     return true;
 }
 
+bool VoxelPathOptimizer::IsLineWalkable(
+    const VoxelSpace& space,
+    const VoxelIndex& from,
+    const VoxelIndex& to,
+    const VoxelPathOptimizeOptions& options)
+{
+    if (options.minTravelDistanceToSurface <= 0.0)
+    {
+        return IsLineWalkable(space, from, to, options.searchMode);
+    }
+
+    if (!IsIndexWalkableForLineWithMinDistance(space, from, options))
+    {
+        return false;
+    }
+
+    if (!IsIndexWalkableForLineWithMinDistance(space, to, options))
+    {
+        return false;
+    }
+
+    if (from == to)
+    {
+        return true;
+    }
+
+    const Vec p0 = space.IndexToCenter(from);
+    const Vec p1 = space.IndexToCenter(to);
+
+    const double x0 = p0.x;
+    const double y0 = p0.y;
+    const double z0 = p0.z;
+
+    const double x1 = p1.x;
+    const double y1 = p1.y;
+    const double z1 = p1.z;
+
+    const double dx = x1 - x0;
+    const double dy = y1 - y0;
+    const double dz = z1 - z0;
+
+    const double voxelSize = space.GetVoxelSize();
+
+    if (voxelSize <= 0.0)
+    {
+        return false;
+    }
+
+    VoxelIndex current = from;
+
+    const int stepX = Sign(to.x - from.x);
+    const int stepY = Sign(to.y - from.y);
+    const int stepZ = Sign(to.z - from.z);
+
+    const double inf = std::numeric_limits<double>::infinity();
+
+    auto ComputeTDelta = [](double d, double cellSize) -> double
+        {
+            if (std::abs(d) <= 1.0e-15)
+            {
+                return std::numeric_limits<double>::infinity();
+            }
+
+            return std::abs(cellSize / d);
+        };
+
+    auto ComputeTMax = [](
+        double p,
+        double d,
+        double nextBoundary) -> double
+        {
+            if (std::abs(d) <= 1.0e-15)
+            {
+                return std::numeric_limits<double>::infinity();
+            }
+
+            return (nextBoundary - p) / d;
+        };
+
+    const Vec origin = space.GetOrigin();
+
+    auto BoundaryForAxis = [](
+        double originCoord,
+        int indexCoord,
+        double voxelSize,
+        int step) -> double
+        {
+            if (step > 0)
+            {
+                return originCoord +
+                    static_cast<double>(indexCoord + 1) * voxelSize;
+            }
+
+            if (step < 0)
+            {
+                return originCoord +
+                    static_cast<double>(indexCoord) * voxelSize;
+            }
+
+            return 0.0;
+        };
+
+    const double nextX =
+        BoundaryForAxis(origin.x, from.x, voxelSize, stepX);
+    const double nextY =
+        BoundaryForAxis(origin.y, from.y, voxelSize, stepY);
+    const double nextZ =
+        BoundaryForAxis(origin.z, from.z, voxelSize, stepZ);
+
+    double tMaxX =
+        stepX == 0 ? inf : ComputeTMax(x0, dx, nextX);
+    double tMaxY =
+        stepY == 0 ? inf : ComputeTMax(y0, dy, nextY);
+    double tMaxZ =
+        stepZ == 0 ? inf : ComputeTMax(z0, dz, nextZ);
+
+    if (tMaxX < 0.0) tMaxX = 0.0;
+    if (tMaxY < 0.0) tMaxY = 0.0;
+    if (tMaxZ < 0.0) tMaxZ = 0.0;
+
+    const double tDeltaX = ComputeTDelta(dx, voxelSize);
+    const double tDeltaY = ComputeTDelta(dy, voxelSize);
+    const double tDeltaZ = ComputeTDelta(dz, voxelSize);
+
+    const int maxStepCount =
+        std::abs(to.x - from.x) +
+        std::abs(to.y - from.y) +
+        std::abs(to.z - from.z) +
+        3;
+
+    int stepCount = 0;
+
+    while (current != to)
+    {
+        if (stepCount++ > maxStepCount)
+        {
+            return false;
+        }
+
+        const double tMin = std::min(tMaxX, std::min(tMaxY, tMaxZ));
+        const double eps = 1.0e-12;
+
+        if (std::abs(tMaxX - tMin) <= eps)
+        {
+            current.x += stepX;
+            tMaxX += tDeltaX;
+        }
+
+        if (std::abs(tMaxY - tMin) <= eps)
+        {
+            current.y += stepY;
+            tMaxY += tDeltaY;
+        }
+
+        if (std::abs(tMaxZ - tMin) <= eps)
+        {
+            current.z += stepZ;
+            tMaxZ += tDeltaZ;
+        }
+
+        if (!IsIndexWalkableForLineWithMinDistance(space, current, options))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 // ============================================================
 // 主优化入口
 // ============================================================
@@ -478,6 +829,8 @@ VoxelPathOptimizeResult VoxelPathOptimizer::Optimize(
         result.pointPath = ConvertToPoints(space, result.voxelPath);
         result.outputCount = result.voxelPath.size();
         result.smoothedPointCount = result.pointPath.size();
+        result.smoothingSucceeded =
+            options.enableCurveSmoothing && result.pointPath.size() <= 2;
         return result;
     }
 
@@ -512,7 +865,7 @@ VoxelPathOptimizeResult VoxelPathOptimizer::Optimize(
                 space,
                 workingPath[i],
                 workingPath[j],
-                options.searchMode))
+                options))
             {
                 bestJ = j;
                 break;
@@ -528,7 +881,7 @@ VoxelPathOptimizeResult VoxelPathOptimizer::Optimize(
                 space,
                 workingPath[i],
                 workingPath[i + 1],
-                options.searchMode);
+                options);
         }
 
         optimized.push_back(workingPath[bestJ]);
@@ -540,7 +893,11 @@ VoxelPathOptimizeResult VoxelPathOptimizer::Optimize(
     result.outputCount = result.voxelPath.size();
     result.smoothedPointCount = result.pointPath.size();
 
-    if (options.enableCurveSmoothing && result.pointPath.size() > 2)
+    if (options.enableCurveSmoothing && result.pointPath.size() <= 2)
+    {
+        result.smoothingSucceeded = true;
+    }
+    else if (options.enableCurveSmoothing)
     {
         int smoothingLineCheckCount = 0;
         std::vector<Vec> smoothed =

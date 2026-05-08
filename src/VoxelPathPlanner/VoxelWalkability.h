@@ -62,4 +62,35 @@ public:
 
         return IsStateWalkable(space.GetCellState(index), mode);
     }
+
+    static bool IsIndexWalkableWithMinDistance(
+        const VoxelSpace& space,
+        const VoxelIndex& index,
+        VoxelAStarSearchMode mode,
+        double minDistanceToSurface)
+    {
+        if (!IsIndexWalkable(space, index, mode))
+        {
+            return false;
+        }
+
+        if (minDistanceToSurface <= 0.0)
+        {
+            return true;
+        }
+
+        const VoxelCell* cell = space.FindCell(index);
+        if (cell == nullptr)
+        {
+            return true;
+        }
+
+        if (cell->state == VoxelState::Start ||
+            cell->state == VoxelState::Goal)
+        {
+            return true;
+        }
+
+        return cell->distanceToSurface >= minDistanceToSurface;
+    }
 };

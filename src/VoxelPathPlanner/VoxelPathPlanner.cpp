@@ -247,7 +247,7 @@ VoxelAStarResult SearchWithConnectivityFallback(
     return result;
 }
 
-void ReplacePathEndpoints(
+void AddOriginalEndpointsToPath(
     std::vector<Vec>& points,
     const Vec& startPoint,
     const Vec& goalPoint)
@@ -257,11 +257,16 @@ void ReplacePathEndpoints(
         return;
     }
 
-    points.front() = startPoint;
+    constexpr double epsilon = 1.0e-9;
 
-    if (points.size() > 1)
+    if (points.front().Distance(startPoint) > epsilon)
     {
-        points.back() = goalPoint;
+        points.insert(points.begin(), startPoint);
+    }
+
+    if (points.back().Distance(goalPoint) > epsilon)
+    {
+        points.push_back(goalPoint);
     }
 }
 
@@ -929,6 +934,8 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
 
     VoxelAStarOptions astarOptions = options.astarOptions;
     astarOptions.shouldCancel = options.runOptions.shouldCancel;
+    astarOptions.minTravelDistanceToSurface =
+        options.meshBuildOptions.clearance;
     astarOptions.startSnapDirection = {
         scenario.startDir.X(),
         scenario.startDir.Y(),
@@ -1035,7 +1042,7 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                 profile.rawPathCount = lazyAStarResult.voxelPath.size();
                 profile.totalCost = lazyAStarResult.totalCost;
                 profile.astarSucceeded = lazyAStarResult.success;
-                ReplacePathEndpoints(
+                AddOriginalEndpointsToPath(
                     lazyAStarResult.pointPath,
                     startPoint3D,
                     goalPoint3D);
@@ -1085,6 +1092,8 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
 
                     VoxelPathOptimizeOptions optOptions;
                     optOptions.searchMode = astarOptions.searchMode;
+                    optOptions.minTravelDistanceToSurface =
+                        options.meshBuildOptions.clearance;
                     optOptions.removeCollinear = true;
                     optOptions.enableLineOfSightShortcut = true;
                     optOptions.maxShortcutLookAhead =
@@ -1125,7 +1134,7 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                         options.smoothOptimizedPath;
                     profile.smoothingSucceeded =
                         optResult.smoothingSucceeded;
-                    ReplacePathEndpoints(
+                    AddOriginalEndpointsToPath(
                         optResult.pointPath,
                         startPoint3D,
                         goalPoint3D);
@@ -1361,7 +1370,7 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
     }
 
     result.astarResult = astarResult;
-    ReplacePathEndpoints(
+    AddOriginalEndpointsToPath(
         result.astarResult.pointPath,
         startPoint3D,
         goalPoint3D);
@@ -1426,6 +1435,8 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
 
     VoxelPathOptimizeOptions optOptions;
     optOptions.searchMode = astarOptions.searchMode;
+    optOptions.minTravelDistanceToSurface =
+        options.meshBuildOptions.clearance;
     optOptions.removeCollinear = true;
     optOptions.enableLineOfSightShortcut = true;
     optOptions.maxShortcutLookAhead = options.optimizerMaxShortcutLookAhead;
@@ -1452,7 +1463,7 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
     profile.smoothingLineCheckCount = optResult.smoothingLineCheckCount;
     profile.smoothingRequested = options.smoothOptimizedPath;
     profile.smoothingSucceeded = optResult.smoothingSucceeded;
-    ReplacePathEndpoints(
+    AddOriginalEndpointsToPath(
         optResult.pointPath,
         startPoint3D,
         goalPoint3D);
@@ -1500,7 +1511,7 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
     profile.storedCellCount = voxelSpace.CellCount();
     result.success = true;
     result.astarResult = astarResult;
-    ReplacePathEndpoints(
+    AddOriginalEndpointsToPath(
         result.astarResult.pointPath,
         startPoint3D,
         goalPoint3D);

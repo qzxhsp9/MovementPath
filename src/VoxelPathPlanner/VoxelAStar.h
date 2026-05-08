@@ -22,6 +22,11 @@ struct VoxelAStarOptions
     // 转折惩罚，越大越倾向少转弯。
     double turnPenalty = 0.0;
 
+    // Non-endpoint path cells must keep at least this center-to-surface
+    // distance. This prevents clearance-band searches from using the inner
+    // cells that are technically walkable but visually/physically too close.
+    double minTravelDistanceToSurface = 0.0;
+
     // 起点/终点若不在可走体素上，是否吸附到最近可走体素
     bool snapStartGoalToWalkable = true;
 

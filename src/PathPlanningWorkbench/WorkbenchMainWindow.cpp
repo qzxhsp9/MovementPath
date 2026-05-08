@@ -73,7 +73,12 @@ std::vector<Vec> ToPathPoints(const std::vector<Vec>& points)
 std::vector<Vec> ToVoxelCenters(
     const std::vector<Vec>& pathPoints)
 {
-    return pathPoints;
+    if (pathPoints.size() <= 2)
+    {
+        return pathPoints;
+    }
+
+    return std::vector<Vec>(pathPoints.begin() + 1, pathPoints.end() - 1);
 }
 
 QString ToText(VoxelAStarFailReason reason)
@@ -940,7 +945,7 @@ VoxelPathPlannerOptions WorkbenchMainWindow::MakeVoxelOptions(
     options.smoothPathSamplesPerSegment = 10;
     options.smoothPathSampleSpacing =
         std::max(0.1, m_voxelSizeSpin->value() * 0.5);
-    options.smoothPathMaxDeviation = m_voxelSizeSpin->value() * 0.75;
+    options.smoothPathMaxDeviation = 0.0;
 
     if (m_neighborTypeCombo->currentIndex() == 1)
     {

@@ -65,9 +65,11 @@ bool VoxelAStar::FindNearestWalkableIndex(
     }
 
     if (space.IsInsideSearchBounds(seed) &&
-        VoxelWalkability::IsStateWalkable(
-            space.GetCellState(seed),
-            options.searchMode))
+        VoxelWalkability::IsIndexWalkableWithMinDistance(
+            space,
+            seed,
+            options.searchMode,
+            options.minTravelDistanceToSurface))
     {
         outIndex = seed;
         return true;
@@ -105,11 +107,11 @@ bool VoxelAStar::FindNearestWalkableIndex(
 
                     EnsureCellBuilt(space, index, options);
 
-                    VoxelState state = space.GetCellState(index);
-
-                    if (!VoxelWalkability::IsStateWalkable(
-                        state,
-                        options.searchMode))
+                    if (!VoxelWalkability::IsIndexWalkableWithMinDistance(
+                        space,
+                        index,
+                        options.searchMode,
+                        options.minTravelDistanceToSurface))
                     {
                         continue;
                     }
@@ -321,11 +323,11 @@ bool VoxelAStar::FindNearestWalkableIndexWithDirection(
 
                     EnsureCellBuilt(space, index, options);
 
-                    VoxelState state = space.GetCellState(index);
-
-                    if (!VoxelWalkability::IsStateWalkable(
-                        state,
-                        options.searchMode))
+                    if (!VoxelWalkability::IsIndexWalkableWithMinDistance(
+                        space,
+                        index,
+                        options.searchMode,
+                        options.minTravelDistanceToSurface))
                     {
                         continue;
                     }
@@ -437,9 +439,11 @@ bool VoxelAStar::FindFirstWalkableIndexAlongDirection(
 
         EnsureCellBuilt(space, index, options);
 
-        if (VoxelWalkability::IsStateWalkable(
-            space.GetCellState(index),
-            options.searchMode))
+        if (VoxelWalkability::IsIndexWalkableWithMinDistance(
+            space,
+            index,
+            options.searchMode,
+            options.minTravelDistanceToSurface))
         {
             outIndex = index;
             return true;
@@ -583,9 +587,11 @@ VoxelAStarResult VoxelAStar::Search(
     {
         EnsureCellBuilt(space, startIndex, options);
 
-        if (!VoxelWalkability::IsStateWalkable(
-            space.GetCellState(startIndex),
-            options.searchMode))
+        if (!VoxelWalkability::IsIndexWalkableWithMinDistance(
+            space,
+            startIndex,
+            options.searchMode,
+            options.minTravelDistanceToSurface))
         {
             result.failReason = VoxelAStarFailReason::StartNotWalkable;
             return result;
@@ -593,9 +599,11 @@ VoxelAStarResult VoxelAStar::Search(
 
         EnsureCellBuilt(space, goalIndex, options);
 
-        if (!VoxelWalkability::IsStateWalkable(
-            space.GetCellState(goalIndex),
-            options.searchMode))
+        if (!VoxelWalkability::IsIndexWalkableWithMinDistance(
+            space,
+            goalIndex,
+            options.searchMode,
+            options.minTravelDistanceToSurface))
         {
             result.failReason = VoxelAStarFailReason::GoalNotWalkable;
             return result;
@@ -725,9 +733,11 @@ VoxelAStarResult VoxelAStar::Search(
 
             if (!isGoal && !isStart)
             {
-                if (!VoxelWalkability::IsStateWalkable(
-                    neighborState,
-                    options.searchMode))
+                if (!VoxelWalkability::IsIndexWalkableWithMinDistance(
+                    space,
+                    neighborIndex,
+                    options.searchMode,
+                    options.minTravelDistanceToSurface))
                 {
                     continue;
                 }
