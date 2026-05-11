@@ -38,8 +38,8 @@ bool TestBaselinePlannerDefaultBehavior(
         !baselineResult.profile.lazyBuildEnabled,
         "planner profile should report lazy disabled by default");
     ok &= Expect(
-        baselineResult.profile.lazyChunkBuildCount == 0,
-        "default planner should not build lazy chunks");
+        baselineResult.profile.lazyVoxelQueryCount == 0,
+        "default planner should not query lazy voxels");
     ok &= Expect(
         !baselineResult.profile.lazyFallbackTriggered,
         "default planner should not trigger lazy fallback");
@@ -135,12 +135,12 @@ bool TestFullBoundsBoxPath(
     return ok;
 }
 
-bool TestLazyGuardrailFallback(
+bool TestLazyTimeoutReportsFailure(
     const VoxelPlanningScenario& scenario)
 {
     VoxelPathPlannerOptions options = MakeSmokeOptions();
     options.lazyBuildOptions.enabled = true;
-    options.lazyBuildOptions.maxChunkBuildCount = 1;
+    options.lazyBuildOptions.timeBudgetMs = 0.001;
     options.lazyBuildOptions.fallbackPolicy =
         VoxelLazyFallbackPolicy::FullMeshBoundsOnFailure;
 
@@ -148,22 +148,19 @@ bool TestLazyGuardrailFallback(
         VoxelPathPlanner::Plan(scenario, options);
 
     bool ok = true;
-    ok &= Expect(result.success, "lazy guardrail fallback plan should succeed");
+    ok &= Expect(!result.success, "lazy timeout should report failure");
     ok &= Expect(
-        result.profile.lazyBuildEnabled,
-        "fallback result should preserve lazy enabled profile state");
+        result.executionMode == VoxelPlannerExecutionMode::VoxelLazy,
+        "lazy timeout should stay in lazy mode");
     ok &= Expect(
-        result.profile.lazyFallbackTriggered,
-        "lazy guardrail should trigger fallback");
+        result.profile.lazyTimeoutTriggered,
+        "lazy timeout should be explicit");
     ok &= Expect(
-        result.profile.lazyChunkBuildCount <= 1,
-        "lazy guardrail should limit chunk builds");
+        result.profile.lazyFallbackReason == "timeout",
+        "lazy timeout reason should be explicit");
     ok &= Expect(
-        result.profile.buildRegionMode == "FullMeshBounds",
-        "lazy fallback should rerun full-bounds planning");
-    ok &= Expect(
-        result.fallbackExecutionMode == VoxelPlannerExecutionMode::FullMeshBounds,
-        "lazy fallback should expose fallback execution mode");
+        result.astarResult.failReason == VoxelAStarFailReason::Timeout,
+        "lazy timeout should expose A* timeout fail reason");
 
     return ok;
 }
@@ -181,7 +178,7 @@ bool TestPlannerLazySuccessWithoutFallback(
     ok &= Expect(baselineResult.success, "lazy baseline should succeed");
     ok &= Expect(lazyResult.success, "lazy planner should succeed");
     ok &= Expect(
-        lazyResult.executionMode == VoxelPlannerExecutionMode::LazyChunks,
+        lazyResult.executionMode == VoxelPlannerExecutionMode::VoxelLazy,
         "lazy planner should expose lazy execution mode");
     ok &= Expect(
         lazyResult.profile.lazyBuildEnabled,
@@ -190,45 +187,20 @@ bool TestPlannerLazySuccessWithoutFallback(
         !lazyResult.profile.lazyFallbackTriggered,
         "lazy planner should not fallback in success scenario");
     ok &= Expect(
-        lazyResult.profile.buildRegionMode == "LazyChunks",
-        "lazy planner should report LazyChunks build mode");
+        lazyResult.profile.buildRegionMode == "VoxelLazy",
+        "lazy planner should report VoxelLazy build mode");
     ok &= Expect(
-        lazyResult.profile.lazyChunkBuildCount > 0,
-        "lazy planner should build at least one chunk");
+        lazyResult.profile.lazyVoxelQueryCount > 0,
+        "lazy planner should query at least one voxel");
     ok &= Expect(
         lazyResult.profile.lazyCandidateTriangleCount > 0,
         "lazy planner should accumulate candidate triangles");
     ok &= Expect(
-        lazyResult.profile.lazyDistanceCalculationCount ==
-            lazyResult.profile.lazyDistanceImprovedCount +
-            lazyResult.profile.lazyDistanceNotImprovedCount,
-        "lazy distance stats should partition calculations");
+        lazyResult.profile.lazyDistanceCalculationCount > 0,
+        "lazy planner should calculate non-intersecting triangle distances");
     ok &= Expect(
-        lazyResult.profile.lazyStateUnchangedWriteCount <=
-            lazyResult.profile.lazyStateWriteCount,
-        "lazy unchanged state writes should not exceed total writes");
-    ok &= Expect(
-        lazyResult.profile.lazyStateUnchangedWriteCount ==
-            lazyResult.profile.lazyOccupiedUnchangedWriteCount +
-            lazyResult.profile.lazyClearanceUnchangedWriteCount,
-        "lazy unchanged state writes should be split by target state");
-    ok &= Expect(
-        lazyResult.profile.lazyMinCandidateTriangleCount <=
-            lazyResult.profile.lazyMaxCandidateTriangleCount,
-        "lazy profile should expose candidate count distribution");
-    ok &= Expect(
-        lazyResult.profile.lazyDryRunActiveCandidateTriangleCount +
-            lazyResult.profile.lazyDryRunInactiveCandidateTriangleCount ==
-            lazyResult.profile.lazyCandidateTriangleCount,
-        "lazy dry-run active/inactive candidates should partition candidates");
-    ok &= Expect(
-        lazyResult.profile.lazyDryRunClippedVoxelPairCount ==
-            lazyResult.profile.lazyDistanceCalculationCount,
-        "lazy dry-run clipped voxel pairs should match distance calculations");
-    ok &= Expect(
-        lazyResult.profile.lazyDryRunClippedVoxelPairCount <=
-            lazyResult.profile.lazyDryRunCandidateVoxelPairUpperBound,
-        "lazy dry-run clipped pairs should not exceed upper bound");
+        lazyResult.profile.lazyTriangleVoxelIntersectTestCount > 0,
+        "lazy planner should test triangle-voxel pairs");
     ok &= Expect(
         lazyResult.profile.lazyFailedBuildCount == 0,
         "lazy planner should not report failed chunk builds");
@@ -298,7 +270,7 @@ bool TestPlannerLazyCostRegressionFallback(
     return ok;
 }
 
-bool TestPlannerLazyChunkBoundsExport(
+bool TestPlannerLazyPathExport(
     const VoxelPlanningScenario& scenario)
 {
     const std::string shapeMeshPath = "test_planner_lazy_shape_mesh.vtk";
@@ -307,14 +279,11 @@ bool TestPlannerLazyChunkBoundsExport(
         "test_planner_lazy_optimized_path_voxels.vtk";
     const std::string optimizedPolylinePath =
         "test_planner_lazy_optimized_path_polyline.vtk";
-    const std::string chunkBoundsPath =
-        "test_planner_lazy_chunk_bounds.vtk";
 
     std::remove(shapeMeshPath.c_str());
     std::remove(astarPathPath.c_str());
     std::remove(optimizedVoxelPath.c_str());
     std::remove(optimizedPolylinePath.c_str());
-    std::remove(chunkBoundsPath.c_str());
 
     VoxelPathPlannerOptions options = MakeLazySmokeOptions();
     options.runOptions.exportVtk = true;
@@ -322,7 +291,6 @@ bool TestPlannerLazyChunkBoundsExport(
     options.runOptions.astarPathVtkPath = astarPathPath;
     options.runOptions.optimizedPathVoxelsVtkPath = optimizedVoxelPath;
     options.runOptions.optimizedPathPolylineVtkPath = optimizedPolylinePath;
-    options.runOptions.lazyChunkBoundsVtkPath = chunkBoundsPath;
 
     const VoxelPathPlannerResult result =
         VoxelPathPlanner::Plan(scenario, options);
@@ -330,24 +298,8 @@ bool TestPlannerLazyChunkBoundsExport(
     bool ok = true;
     ok &= Expect(result.success, "lazy export planner should succeed");
     ok &= Expect(
-        result.executionMode == VoxelPlannerExecutionMode::LazyChunks,
+        result.executionMode == VoxelPlannerExecutionMode::VoxelLazy,
         "lazy export planner should stay in lazy mode");
-
-    std::ifstream ifs(chunkBoundsPath.c_str(), std::ios::in);
-    ok &= Expect(
-        ifs.is_open(),
-        "lazy planner should export chunk bounds VTK");
-
-    std::stringstream buffer;
-    buffer << ifs.rdbuf();
-    const std::string content = buffer.str();
-
-    ok &= Expect(
-        content.find("Lazy voxel chunk bounds") != std::string::npos,
-        "lazy planner chunk bounds VTK should include title");
-    ok &= Expect(
-        content.find("SCALARS chunk_x int 1") != std::string::npos,
-        "lazy planner chunk bounds VTK should include chunk indices");
 
     std::ifstream astarPathIfs(astarPathPath.c_str(), std::ios::in);
     ok &= Expect(
@@ -372,7 +324,6 @@ bool TestPlannerLazyChunkBoundsExport(
     std::remove(astarPathPath.c_str());
     std::remove(optimizedVoxelPath.c_str());
     std::remove(optimizedPolylinePath.c_str());
-    std::remove(chunkBoundsPath.c_str());
 
     return ok;
 }
@@ -424,10 +375,10 @@ int main()
     ok &= TestBaselinePlannerDefaultBehavior(boxScenario, baselineResult);
     ok &= TestNoopEnsureHookDoesNotChangePath(boxScenario, baselineResult);
     ok &= TestFullBoundsBoxPath(boxScenario);
-    ok &= TestLazyGuardrailFallback(boxScenario);
+    ok &= TestLazyTimeoutReportsFailure(boxScenario);
     ok &= TestPlannerLazySuccessWithoutFallback(boxScenario);
     ok &= TestPlannerLazyCostRegressionFallback(boxScenario);
-    ok &= TestPlannerLazyChunkBoundsExport(boxScenario);
+    ok &= TestPlannerLazyPathExport(boxScenario);
     ok &= TestBrepScenarioHelpersHandleMissingFile();
 
     return ok ? EXIT_SUCCESS : EXIT_FAILURE;

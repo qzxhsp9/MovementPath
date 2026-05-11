@@ -73,7 +73,8 @@ enum class VoxelAStarFailReason
     GoalNotWalkable,
     MaxVisitedExceeded,
     OpenSetEmpty,
-    Cancelled
+    Cancelled,
+    Timeout
 };
 
 // ============================================================

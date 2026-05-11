@@ -101,11 +101,7 @@ inline VoxelPathPlannerOptions MakeLazySmokeOptions()
 {
     VoxelPathPlannerOptions options = MakeSmokeOptions();
     options.lazyBuildOptions.enabled = true;
-    options.lazyBuildOptions.chunkCacheOptions.chunkVoxelSize = 16;
-    options.lazyBuildOptions.chunkCacheOptions.buildPadding =
-        options.meshBuildOptions.clearance +
-        0.5 * std::sqrt(3.0) * options.meshBuildOptions.voxelSize;
-    options.lazyBuildOptions.maxChunkBuildCount = 128;
+    options.lazyBuildOptions.timeBudgetMs = 3000.0;
     options.lazyBuildOptions.fallbackPolicy =
         VoxelLazyFallbackPolicy::FullMeshBoundsOnFailure;
     return options;

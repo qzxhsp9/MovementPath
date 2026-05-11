@@ -1,4 +1,5 @@
 set(VOXEL_PATH_PLANNER_HEADERS
+    LazyVoxelStateQuery.h
     VoxelChunkCache.h
     VoxelAStar.h
     VoxelMeshBuilder.h
@@ -9,6 +10,7 @@ set(VOXEL_PATH_PLANNER_HEADERS
 )
 
 set(VOXEL_PATH_PLANNER_SOURCES
+    LazyVoxelStateQuery.cpp
     VoxelChunkCache.cpp
     VoxelAStar.cpp
     VoxelMeshBuilder.cpp

@@ -6,9 +6,9 @@ This roadmap tracks the voxel baseline. Implementation details live in
 ## Current Position
 
 The voxel planner is the correctness baseline. It now keeps one eager build
-mode, `FullMeshBounds`, plus the experimental `LazyChunks` path. The former is
-the default and the fallback target; the latter remains opt-in and
-benchmark-driven.
+mode, `FullMeshBounds`, plus the experimental `VoxelLazy` path. The former is
+the default and correctness baseline; the latter remains opt-in,
+benchmark-driven, and bounded by an explicit timeout budget.
 
 The source tree is organized by role:
 
@@ -21,8 +21,10 @@ The source tree is organized by role:
 
 - Extracted `VoxelPathPlanner` from example code into a library target.
 - Kept `FullMeshBounds` as the default correctness and path-quality baseline.
-- Added lazy chunk options, fallback policy, guardrails, and profile fields.
-- Added `VoxelChunkCache`, lazy planner tests, and lazy VTK exports.
+- Added lazy voxel options, fallback policy, timeout reporting, and profile
+  fields.
+- Added on-demand lazy voxel-state queries, lazy planner tests, and lazy VTK
+  path exports.
 - Added benchmark CSV output for full and lazy planner runs.
 - Added detailed lazy statistics for distance calculations, state writes,
   candidate distributions, and dry-run voxel-pair estimates.
@@ -35,6 +37,6 @@ The source tree is organized by role:
 - Add dry-run statistics before changing any voxel marking behavior.
 - Evaluate whether unchanged-state and non-improving-distance writes can be
   skipped safely.
-- Keep `LazyChunks` disabled by default until benchmark data supports changing
+- Keep `VoxelLazy` disabled by default until benchmark data supports changing
   that default.
 - Consider JSON or summary-row benchmark output once the CSV schema stabilizes.

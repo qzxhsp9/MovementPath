@@ -1,7 +1,6 @@
 #pragma once
 
 #include "VoxelAStar.h"
-#include "VoxelChunkCache.h"
 #include "VoxelMeshBuilder.h"
 #include "VoxelPathOptimizer.h"
 
@@ -21,9 +20,9 @@ struct VoxelPlanningProfile
     double spatialIndexBuildMs = 0.0;
     double voxelBuildMs = 0.0;
 
-    // Lazy chunk build time is included in astarMs because chunks are built
+    // Lazy query time is included in astarMs because voxel states are resolved
     // from A* ensureCellBuilt callbacks. The fields below split that cost.
-    double lazyChunkBuildMs = 0.0;
+    double lazyVoxelQueryMs = 0.0;
     double lazyCandidateQueryMs = 0.0;
     double lazyCandidateFilterMs = 0.0;
     double lazyVoxelMarkMs = 0.0;
@@ -42,9 +41,11 @@ struct VoxelPlanningProfile
 
     // Number of A* lazy hook invocations, including cache hits.
     std::size_t lazyEnsureCallCount = 0;
-    std::size_t lazyChunkBuildCount = 0;
     std::size_t lazyCacheHitCount = 0;
     std::size_t lazyFailedBuildCount = 0;
+    std::size_t lazyVoxelQueryCount = 0;
+    std::size_t lazyTriangleVoxelIntersectTestCount = 0;
+    std::size_t lazyTriangleVoxelNoIntersectCacheHitCount = 0;
     std::size_t lazyCandidateTriangleCount = 0;
     std::size_t lazyRawCandidateTriangleCount = 0;
     std::size_t lazyVoxelVisitCount = 0;
@@ -91,6 +92,8 @@ struct VoxelPlanningProfile
     bool astarSucceeded = false;
     bool lazyBuildEnabled = false;
     bool lazyFallbackTriggered = false;
+    bool lazyTimeoutTriggered = false;
+    double lazyTimeBudgetMs = 0.0;
     std::string lazyFallbackReason;
 };
 
@@ -130,7 +133,6 @@ struct VoxelPlanningRunOptions
     std::string astarPathVtkPath = "D:/astar_path.vtk";
     std::string optimizedPathVoxelsVtkPath = "D:/optimized_path_voxels.vtk";
     std::string optimizedPathPolylineVtkPath = "D:/optimized_path_polyline.vtk";
-    std::string lazyChunkBoundsVtkPath = "D:/lazy_chunk_bounds.vtk";
 
     std::function<bool()> shouldCancel;
 };
@@ -148,7 +150,7 @@ enum class VoxelPlannerExecutionMode
 {
     Unknown,
     FullMeshBounds,
-    LazyChunks
+    VoxelLazy
 };
 
 struct VoxelLazyBuildOptions
@@ -156,15 +158,13 @@ struct VoxelLazyBuildOptions
     // Experimental. Keep disabled for correctness baseline.
     bool enabled = false;
 
-    VoxelChunkCacheOptions chunkCacheOptions;
-
-    // 0 means unlimited. Intended as a guardrail against accidental full-model
-    // expansion through lazy chunk generation.
-    std::size_t maxChunkBuildCount = 0;
-
     // 0 means disabled. When enabled, callers can reject lazy paths that are
     // much more expensive than the fallback/baseline path.
     double maxCostRegressionRatio = 0.0;
+
+    // 0 means unlimited. Lazy reports timeout instead of falling back when the
+    // budget is exceeded.
+    double timeBudgetMs = 3000.0;
 
     VoxelLazyFallbackPolicy fallbackPolicy =
         VoxelLazyFallbackPolicy::FullMeshBoundsOnFailure;

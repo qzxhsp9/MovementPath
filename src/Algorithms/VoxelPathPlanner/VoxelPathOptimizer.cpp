@@ -320,10 +320,15 @@ bool VoxelPathOptimizer::IsIndexWalkableForLine(
 namespace
 {
 bool IsIndexWalkableForLineWithMinDistance(
-    const VoxelSpace& space,
+    VoxelSpace& space,
     const VoxelIndex& index,
     const VoxelPathOptimizeOptions& options)
 {
+    if (options.ensureCellBuilt)
+    {
+        options.ensureCellBuilt(space, index);
+    }
+
     return VoxelWalkability::IsIndexWalkableWithMinDistance(
         space,
         index,
@@ -627,16 +632,11 @@ bool VoxelPathOptimizer::IsLineWalkable(
 }
 
 bool VoxelPathOptimizer::IsLineWalkable(
-    const VoxelSpace& space,
+    VoxelSpace& space,
     const VoxelIndex& from,
     const VoxelIndex& to,
     const VoxelPathOptimizeOptions& options)
 {
-    if (options.minTravelDistanceToSurface <= 0.0)
-    {
-        return IsLineWalkable(space, from, to, options.searchMode);
-    }
-
     if (!IsIndexWalkableForLineWithMinDistance(space, from, options))
     {
         return false;
@@ -760,6 +760,11 @@ bool VoxelPathOptimizer::IsLineWalkable(
 
     while (current != to)
     {
+        if (options.shouldCancel && options.shouldCancel())
+        {
+            return false;
+        }
+
         if (stepCount++ > maxStepCount)
         {
             return false;
@@ -800,7 +805,7 @@ bool VoxelPathOptimizer::IsLineWalkable(
 // ============================================================
 
 VoxelPathOptimizeResult VoxelPathOptimizer::Optimize(
-    const VoxelSpace& space,
+    VoxelSpace& space,
     const std::vector<VoxelIndex>& inputPath,
     const VoxelPathOptimizeOptions& options)
 {
@@ -859,6 +864,15 @@ VoxelPathOptimizeResult VoxelPathOptimizer::Optimize(
         // 从远到近尝试，找到最远可直连点
         for (std::size_t j = maxJ; j > i + 1; --j)
         {
+            if (options.shouldCancel && options.shouldCancel())
+            {
+                result.voxelPath = workingPath;
+                result.pointPath = ConvertToPoints(space, result.voxelPath);
+                result.outputCount = result.voxelPath.size();
+                result.smoothedPointCount = result.pointPath.size();
+                return result;
+            }
+
             ++result.lineCheckCount;
 
             if (IsLineWalkable(

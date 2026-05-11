@@ -26,9 +26,9 @@ doc/VoxelPathPlanningBaseline/voxel_planner_benchmark.csv
 
 关键字段：
 
-- 耗时：`triangulationMs`、`spatialIndexBuildMs`、`voxelBuildMs`、`astarMs`、`lazyChunkBuildMs`、`lazyVoxelMarkMs`、`optimizeMs`、`totalMeasuredMs`
+- 耗时：`triangulationMs`、`spatialIndexBuildMs`、`voxelBuildMs`、`astarMs`、`lazyVoxelQueryMs`、`lazyVoxelMarkMs`、`optimizeMs`、`totalMeasuredMs`
 - 规模：`triangleCount`、`candidateTriangleCount`、`storedCellCount`
-- lazy：`lazyEnsureCallCount`、`lazyChunkBuildCount`、`lazyCacheHitCount`
+- lazy：`lazyEnsureCallCount`、`lazyVoxelQueryCount`、`lazyCacheHitCount`、`lazyTriangleVoxelIntersectTestCount`、`lazyTriangleVoxelNoIntersectCacheHitCount`
 - 标记：`lazyVoxelVisitCount`、`lazyOutOfBoundsVoxelCount`、`lazyDistanceCalculationCount`、`lazyDistanceImprovedCount`、`lazyStateWriteCount`
 - 质量：`totalCost`、`lazyAttemptCost`、`fallbackCost`
 
@@ -325,7 +325,8 @@ box_long_face_to_face / lazy:
 当前 voxel/full/local/lazy 方案继续作为性能与正确性 baseline。后续 voxel 侧优化只做保守推进：
 
 - 保留 `FullMeshBounds` 作为 correctness 和路径质量基线。
-- `LazyChunks` 继续默认关闭，除非 benchmark 证明其收益稳定。
-- 不再把 lazy chunk 当作长期性能唯一主线。
+- `VoxelLazy` 继续默认关闭，除非 benchmark 证明其收益稳定。
+- 当前 lazy 主线调整为“按需查询 + 缓存”：一个 voxel 只计算一次状态，一个 triangle/voxel pair 只计算一次相交或距离结果。
+- 超过 `lazyBuildOptions.timeBudgetMs` 时显式报告 timeout，不再把超时隐藏为 full-bounds fallback。
 - 新的长期方向放入 `src/Algorithms/GeometryQueryPathPlanner/`，重点研究空间索引、按需几何查询、局部缓存和连续路径优化。
 - 两个模块在源码和 CMake 层面保持隔离；新模块成熟前不接入 baseline 主流程。

@@ -9,7 +9,8 @@ optimizes the path, and exports VTK files for inspection.
 ## Current Focus
 
 - Keep `FullMeshBounds` as the correctness baseline.
-- Support experimental `LazyChunks` build mode.
+- Support experimental `VoxelLazy` mode with on-demand voxel-state queries and
+  cached triangle/voxel pair results.
 - Measure performance with stable benchmark scenarios before enabling lazy by
   default.
 - Keep the voxel implementation as the baseline module.
@@ -27,7 +28,7 @@ The `doc/` directory separates module documentation:
 
 - `src/Algorithms/VoxelPathPlanner/`: voxel baseline planner library.
 - `src/Algorithms/GeometryQueryPathPlanner/`: independent geometry-query planner module.
-- `src/IO/VtkExport/`: VTK mesh, voxel, path, and lazy chunk exporters.
+- `src/IO/VtkExport/`: VTK mesh, voxel, path, and diagnostic exporters.
 - `src/Apps/MovementPathCli/`: sample command-line executable.
 - `src/Apps/PathPlanningWorkbench/`: optional Qt + OCCT interactive workbench.
 - `tests/`: unit and planner integration tests.
@@ -52,6 +53,7 @@ doc/VoxelPathPlanningBaseline/voxel_planner_benchmark.csv
 
 ## Notes
 
-- `LazyChunks` remains disabled by default.
+- `VoxelLazy` remains disabled by default. Its default timeout budget is
+  3000 ms and the Workbench exposes this value as `Lazy timeout ms`.
 - Some source files currently trigger MSVC C4819 code-page warnings because of
   Chinese comments. These warnings do not block the current build.

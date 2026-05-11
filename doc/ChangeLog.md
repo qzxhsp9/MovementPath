@@ -14,6 +14,15 @@
 - Moved executable/workbench code under `src/Apps/`.
 - Updated tests and current docs to match the smaller mode set and new layout.
 
+### Voxel lazy on-demand state cache
+
+- Replaced planner-level lazy chunk generation with `LazyVoxelStateQuery`.
+- Lazy mode now classifies voxels on demand and caches both final voxel state and triangle/voxel pair results.
+- Occupied voxel records are terminal; later queries reuse the cached occupied state instead of rechecking triangles.
+- Added `lazyBuildOptions.timeBudgetMs`, defaulting to 3000 ms, and exposed it in the Workbench as `Lazy timeout ms`.
+- Lazy timeout now reports `VoxelAStarFailReason::Timeout` instead of silently falling back.
+- Updated benchmark CSV fields from chunk-build metrics to lazy voxel query, pair-test, pair-cache, and timeout metrics.
+
 ## 2026-04-30
 
 ### PathPlanningWorkbench 交互平台骨架

@@ -339,6 +339,11 @@ void WorkbenchMainWindow::BuildUi()
     m_snapRadiusSpin = new QSpinBox();
     m_snapRadiusSpin->setRange(0, 1000000);
     m_snapRadiusSpin->setValue(20);
+    m_lazyTimeBudgetSpin = new QDoubleSpinBox();
+    m_lazyTimeBudgetSpin->setRange(0.0, 600000.0);
+    m_lazyTimeBudgetSpin->setDecimals(0);
+    m_lazyTimeBudgetSpin->setSingleStep(500.0);
+    m_lazyTimeBudgetSpin->setValue(3000.0);
     m_searchModeCombo = new QComboBox();
     m_searchModeCombo->addItem("Clearance band");
     m_searchModeCombo->addItem("Free space");
@@ -356,6 +361,7 @@ void WorkbenchMainWindow::BuildUi()
     plannerLayout->addRow("Voxel size", m_voxelSizeSpin);
     plannerLayout->addRow("Clearance", m_clearanceSpin);
     plannerLayout->addRow("Snap radius", m_snapRadiusSpin);
+    plannerLayout->addRow("Lazy timeout ms", m_lazyTimeBudgetSpin);
     plannerLayout->addRow(m_smoothPathCheck);
     plannerLayout->addRow(m_realtimeCheck);
     plannerLayout->addRow(vtkExportSettingsButton);
@@ -619,8 +625,6 @@ void WorkbenchMainWindow::OpenVtkExportSettings()
     QLineEdit* astarPath = nullptr;
     QLineEdit* optimizedPathVoxelsPath = nullptr;
     QLineEdit* optimizedPathPolylinePath = nullptr;
-    QLineEdit* lazyChunkBoundsPath = nullptr;
-
     AddPathEditorRow(
         pathGroup,
         pathLayout,
@@ -651,13 +655,6 @@ void WorkbenchMainWindow::OpenVtkExportSettings()
         "Optimized polyline",
         optimizedPathPolylinePath,
         m_vtkExportSettings.optimizedPathPolylinePath);
-    AddPathEditorRow(
-        pathGroup,
-        pathLayout,
-        "Lazy chunk bounds",
-        lazyChunkBoundsPath,
-        m_vtkExportSettings.lazyChunkBoundsPath);
-
     dialogLayout->addWidget(pathGroup);
 
     QDialogButtonBox* buttons = new QDialogButtonBox(
@@ -681,8 +678,6 @@ void WorkbenchMainWindow::OpenVtkExportSettings()
         optimizedPathVoxelsPath->text();
     m_vtkExportSettings.optimizedPathPolylinePath =
         optimizedPathPolylinePath->text();
-    m_vtkExportSettings.lazyChunkBoundsPath = lazyChunkBoundsPath->text();
-
     AppendLog(QString("VTK export %1.")
         .arg(m_vtkExportSettings.exportEnabled ? "enabled" : "disabled"));
 }
@@ -992,8 +987,6 @@ VoxelPathPlannerOptions WorkbenchMainWindow::MakeVoxelOptions(
         m_vtkExportSettings.optimizedPathVoxelsPath.toStdString();
     options.runOptions.optimizedPathPolylineVtkPath =
         m_vtkExportSettings.optimizedPathPolylinePath.toStdString();
-    options.runOptions.lazyChunkBoundsVtkPath =
-        m_vtkExportSettings.lazyChunkBoundsPath.toStdString();
     options.runOptions.debugNeighborhood = false;
     options.runOptions.verbose = false;
     options.runOptions.collectVoxelOverlayCenters =
@@ -1006,6 +999,8 @@ VoxelPathPlannerOptions WorkbenchMainWindow::MakeVoxelOptions(
     if (method == PlannerMethod::VoxelLazy)
     {
         options.lazyBuildOptions.enabled = true;
+        options.lazyBuildOptions.timeBudgetMs =
+            m_lazyTimeBudgetSpin->value();
     }
     else
     {

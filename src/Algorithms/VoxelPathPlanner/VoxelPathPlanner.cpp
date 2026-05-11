@@ -1,5 +1,6 @@
 #include "VoxelPathPlanner.h"
 
+#include "LazyVoxelStateQuery.h"
 #include "MeshVtkExporter.h"
 #include "VoxelPathOptimizer.h"
 #include "VoxelVtkExporter.h"
@@ -348,12 +349,14 @@ void PreserveLazyAttemptOnFallback(
     fallbackResult.profile.lazyFallbackTriggered = true;
     fallbackResult.profile.lazyFallbackReason =
         lazyProfile.lazyFallbackReason;
-    fallbackResult.profile.lazyChunkBuildCount =
-        lazyProfile.lazyChunkBuildCount;
+    fallbackResult.profile.lazyTimeoutTriggered =
+        lazyProfile.lazyTimeoutTriggered;
+    fallbackResult.profile.lazyTimeBudgetMs =
+        lazyProfile.lazyTimeBudgetMs;
     fallbackResult.profile.lazyEnsureCallCount =
         lazyProfile.lazyEnsureCallCount;
-    fallbackResult.profile.lazyChunkBuildMs =
-        lazyProfile.lazyChunkBuildMs;
+    fallbackResult.profile.lazyVoxelQueryMs =
+        lazyProfile.lazyVoxelQueryMs;
     fallbackResult.profile.lazyCandidateQueryMs =
         lazyProfile.lazyCandidateQueryMs;
     fallbackResult.profile.lazyCandidateFilterMs =
@@ -366,6 +369,12 @@ void PreserveLazyAttemptOnFallback(
         lazyProfile.lazyCacheHitCount;
     fallbackResult.profile.lazyFailedBuildCount =
         lazyProfile.lazyFailedBuildCount;
+    fallbackResult.profile.lazyVoxelQueryCount =
+        lazyProfile.lazyVoxelQueryCount;
+    fallbackResult.profile.lazyTriangleVoxelIntersectTestCount =
+        lazyProfile.lazyTriangleVoxelIntersectTestCount;
+    fallbackResult.profile.lazyTriangleVoxelNoIntersectCacheHitCount =
+        lazyProfile.lazyTriangleVoxelNoIntersectCacheHitCount;
     fallbackResult.profile.lazyCandidateTriangleCount =
         lazyProfile.lazyCandidateTriangleCount;
     fallbackResult.profile.lazyRawCandidateTriangleCount =
@@ -509,62 +518,9 @@ void CopyBuildStatsToProfile(
         buildResult.clearanceBandVoxelCount;
 }
 
-void CopyLazyStatsToProfile(
-    const VoxelChunkCacheStats& stats,
-    VoxelPlanningProfile& profile)
-{
-    profile.lazyEnsureCallCount = stats.ensureCallCount;
-    profile.lazyChunkBuildCount = stats.chunkBuildCount;
-    profile.lazyCacheHitCount = stats.cacheHitCount;
-    profile.lazyFailedBuildCount = stats.failedBuildCount;
-    profile.lazyChunkBuildMs = stats.totalBuildMs;
-    profile.lazyCandidateQueryMs = stats.totalCandidateQueryMs;
-    profile.lazyCandidateFilterMs = stats.totalCandidateFilterMs;
-    profile.lazyVoxelMarkMs = stats.totalVoxelMarkMs;
-    profile.lazyStateCountMs = stats.totalStateCountMs;
-    profile.lazyCandidateTriangleCount =
-        stats.totalCandidateTriangleCount;
-    profile.lazyRawCandidateTriangleCount =
-        stats.totalRawCandidateTriangleCount;
-    profile.lazyVoxelVisitCount = stats.totalVoxelVisitCount;
-    profile.lazyOutOfBoundsVoxelCount =
-        stats.totalOutOfBoundsVoxelCount;
-    profile.lazyDistanceCalculationCount =
-        stats.totalDistanceCalculationCount;
-    profile.lazyDistanceImprovedCount =
-        stats.totalDistanceImprovedCount;
-    profile.lazyDistanceNotImprovedCount =
-        stats.totalDistanceNotImprovedCount;
-    profile.lazyStateWriteCount = stats.totalStateWriteCount;
-    profile.lazyStateUnchangedWriteCount =
-        stats.totalStateUnchangedWriteCount;
-    profile.lazyOccupiedUnchangedWriteCount =
-        stats.totalOccupiedUnchangedWriteCount;
-    profile.lazyClearanceUnchangedWriteCount =
-        stats.totalClearanceUnchangedWriteCount;
-    profile.lazyOccupiedWriteCount = stats.totalOccupiedWriteCount;
-    profile.lazyClearanceWriteCount = stats.totalClearanceWriteCount;
-    profile.lazyInfluenceCacheHitCount =
-        stats.totalInfluenceCacheHitCount;
-    profile.lazyInfluenceCacheMissCount =
-        stats.totalInfluenceCacheMissCount;
-    profile.lazyMinCandidateTriangleCount =
-        stats.minCandidateTriangleCount;
-    profile.lazyMaxCandidateTriangleCount =
-        stats.maxCandidateTriangleCount;
-    profile.lazyMinRawCandidateTriangleCount =
-        stats.minRawCandidateTriangleCount;
-    profile.lazyMaxRawCandidateTriangleCount =
-        stats.maxRawCandidateTriangleCount;
-    profile.lazyDryRunActiveCandidateTriangleCount =
-        stats.totalDryRunActiveCandidateTriangleCount;
-    profile.lazyDryRunInactiveCandidateTriangleCount =
-        stats.totalDryRunInactiveCandidateTriangleCount;
-    profile.lazyDryRunCandidateVoxelPairUpperBound =
-        stats.totalDryRunCandidateVoxelPairUpperBound;
-    profile.lazyDryRunClippedVoxelPairCount =
-        stats.totalDryRunClippedVoxelPairCount;
-}
+void CopyLazyQueryStatsToProfile(
+    const LazyVoxelStateQueryStats& stats,
+    VoxelPlanningProfile& profile);
 
 bool ComputeTrianglesAABBForPlanner(
     const std::vector<MeshTriangle>& triangles,
@@ -691,6 +647,31 @@ bool InitializeLazyVoxelSpace(
 
     return true;
 }
+
+void CopyLazyQueryStatsToProfile(
+    const LazyVoxelStateQueryStats& stats,
+    VoxelPlanningProfile& profile)
+{
+    profile.lazyEnsureCallCount = stats.ensureCallCount;
+    profile.lazyCacheHitCount = stats.voxelCacheHitCount;
+    profile.lazyVoxelQueryCount = stats.voxelQueryCount;
+    profile.lazyCandidateTriangleCount = stats.candidateTriangleCount;
+    profile.lazyRawCandidateTriangleCount = stats.rawCandidateTriangleCount;
+    profile.lazyVoxelVisitCount = stats.voxelQueryCount;
+    profile.lazyDistanceCalculationCount = stats.distanceCalculationCount;
+    profile.lazyStateWriteCount =
+        stats.occupiedWriteCount + stats.clearanceWriteCount +
+        stats.freeWriteCount;
+    profile.lazyOccupiedWriteCount = stats.occupiedWriteCount;
+    profile.lazyClearanceWriteCount = stats.clearanceWriteCount;
+    profile.lazyTriangleVoxelIntersectTestCount =
+        stats.triangleVoxelIntersectTestCount;
+    profile.lazyTriangleVoxelNoIntersectCacheHitCount =
+        stats.triangleVoxelNoIntersectCacheHitCount;
+    profile.lazyCandidateQueryMs = stats.candidateQueryMs;
+    profile.lazyVoxelMarkMs = stats.voxelEvaluateMs;
+    profile.lazyVoxelQueryMs = stats.voxelEvaluateMs;
+}
 }
 
 double VoxelPathPlanner::SafeRatio(
@@ -719,12 +700,8 @@ VoxelPathPlannerOptions VoxelPathPlanner::MakeDefaultOptions()
     options.meshBuildOptions.storeFreeCells = false;
 
     options.lazyBuildOptions.enabled = false;
-    options.lazyBuildOptions.chunkCacheOptions.chunkVoxelSize = 16;
-    options.lazyBuildOptions.chunkCacheOptions.buildPadding =
-        options.meshBuildOptions.clearance +
-        0.5 * std::sqrt(3.0) * options.meshBuildOptions.voxelSize;
-    options.lazyBuildOptions.maxChunkBuildCount = 0;
     options.lazyBuildOptions.maxCostRegressionRatio = 0.0;
+    options.lazyBuildOptions.timeBudgetMs = 3000.0;
     options.lazyBuildOptions.fallbackPolicy =
         VoxelLazyFallbackPolicy::FullMeshBoundsOnFailure;
 
@@ -761,8 +738,6 @@ VoxelPathPlannerOptions VoxelPathPlanner::MakeBrepBaselineOptions(
         vtkPathPrefix + "_optimized_path_voxels.vtk";
     options.runOptions.optimizedPathPolylineVtkPath =
         vtkPathPrefix + "_optimized_path_polyline.vtk";
-    options.runOptions.lazyChunkBoundsVtkPath =
-        vtkPathPrefix + "_lazy_chunk_bounds.vtk";
 
     options.lazyBuildOptions.enabled = false;
     return options;
@@ -941,8 +916,8 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
             return result;
         }
 
-        profile.buildRegionMode = "LazyChunks";
-        result.executionMode = VoxelPlannerExecutionMode::LazyChunks;
+        profile.buildRegionMode = "VoxelLazy";
+        result.executionMode = VoxelPlannerExecutionMode::VoxelLazy;
 
         VoxelSpace lazyVoxelSpace;
         VoxelBounds lazyBounds;
@@ -964,43 +939,36 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
             profile.finalSearchPadding = 0.0;
             profile.buildSucceeded = true;
 
-            VoxelChunkCache chunkCache;
-            bool lazyGuardrailTriggered = false;
+            LazyVoxelStateQuery lazyQuery;
 
-            if (!chunkCache.Configure(
-                &triangles,
-                &spatialHash,
-                meshBuildOptions,
-                options.lazyBuildOptions.chunkCacheOptions))
+            if (!lazyQuery.Configure(
+                    &triangles,
+                    &spatialHash,
+                    meshBuildOptions,
+                    options.lazyBuildOptions.timeBudgetMs))
             {
                 profile.lazyFallbackTriggered = true;
-                profile.lazyFallbackReason = "failed to configure chunk cache";
+                profile.lazyFallbackReason = "failed to configure lazy query";
             }
             else
             {
+                lazyQuery.StartBudget();
+                profile.lazyTimeBudgetMs =
+                    options.lazyBuildOptions.timeBudgetMs;
+
                 astarOptions.ensureCellBuilt =
-                    [&chunkCache,
-                     &options,
-                     &lazyGuardrailTriggered,
-                     &profile](
+                    [&lazyQuery](
                         VoxelSpace& space,
                         const VoxelIndex& index)
                     {
-                        const std::size_t maxChunkBuildCount =
-                            options.lazyBuildOptions.maxChunkBuildCount;
+                        lazyQuery.EnsureVoxel(space, index);
+                    };
 
-                        if (maxChunkBuildCount > 0 &&
-                            !chunkCache.IsChunkBuiltForIndex(index) &&
-                            chunkCache.GetStats().chunkBuildCount >=
-                                maxChunkBuildCount)
-                        {
-                            lazyGuardrailTriggered = true;
-                            profile.lazyFallbackReason =
-                                "maxChunkBuildCount exceeded";
-                            return;
-                        }
-
-                        chunkCache.EnsureChunkForIndex(space, index);
+                astarOptions.shouldCancel =
+                    [&options, &lazyQuery]()
+                    {
+                        return IsCancelled(options) ||
+                            lazyQuery.HasTimedOut();
                     };
 
                 VoxelAStarResult lazyAStarResult;
@@ -1023,7 +991,16 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                     return result;
                 }
 
-                CopyLazyStatsToProfile(chunkCache.GetStats(), profile);
+                CopyLazyQueryStatsToProfile(lazyQuery.GetStats(), profile);
+
+                if (lazyQuery.HasTimedOut())
+                {
+                    profile.lazyTimeoutTriggered = true;
+                    profile.lazyFallbackTriggered = false;
+                    profile.lazyFallbackReason = "timeout";
+                    lazyAStarResult.failReason =
+                        VoxelAStarFailReason::Timeout;
+                }
 
                 profile.astarVisitedCount = lazyAStarResult.visitedCount;
                 profile.rawPathCount = lazyAStarResult.voxelPath.size();
@@ -1041,27 +1018,7 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                     profile.clearanceBandCount);
                 profile.storedCellCount = lazyVoxelSpace.CellCount();
 
-                if (options.runOptions.exportVtk)
-                {
-                    const std::vector<VoxelChunkIndex> builtChunks =
-                        chunkCache.GetBuiltChunks();
-
-                    ScopedTimer timer(profile.vtkExportMs);
-                    VoxelVtkExporter::ExportChunkBoundsToVtk(
-                        lazyVoxelSpace,
-                        builtChunks.data(),
-                        builtChunks.size(),
-                        options.lazyBuildOptions
-                            .chunkCacheOptions.chunkVoxelSize,
-                        options.runOptions.lazyChunkBoundsVtkPath);
-                }
-
-                if (lazyGuardrailTriggered)
-                {
-                    profile.lazyFallbackTriggered = true;
-                }
-
-                if (lazyAStarResult.success && !lazyGuardrailTriggered)
+                if (lazyAStarResult.success && !lazyQuery.HasTimedOut())
                 {
                     if (options.runOptions.exportVtk)
                     {
@@ -1096,6 +1053,19 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                         options.smoothPathSampleSpacing;
                     optOptions.maxCurveDeviation =
                         options.smoothPathMaxDeviation;
+                    optOptions.ensureCellBuilt =
+                        [&lazyQuery](
+                            VoxelSpace& space,
+                            const VoxelIndex& index)
+                        {
+                            lazyQuery.EnsureVoxel(space, index);
+                        };
+                    optOptions.shouldCancel =
+                        [&options, &lazyQuery]()
+                        {
+                            return IsCancelled(options) ||
+                                lazyQuery.HasTimedOut();
+                        };
 
                     VoxelPathOptimizeResult optResult;
 
@@ -1114,7 +1084,23 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                         return result;
                     }
 
+                    if (lazyQuery.HasTimedOut())
+                    {
+                        CopyLazyQueryStatsToProfile(
+                            lazyQuery.GetStats(),
+                            profile);
+                        profile.lazyTimeoutTriggered = true;
+                        profile.lazyFallbackReason = "timeout";
+                        result.success = false;
+                        result.astarResult.failReason =
+                            VoxelAStarFailReason::Timeout;
+                        return result;
+                    }
+
                     profile.optimizedPathCount = optResult.outputCount;
+                    CopyLazyQueryStatsToProfile(
+                        lazyQuery.GetStats(),
+                        profile);
                     profile.smoothedPathPointCount =
                         optResult.smoothedPointCount;
                     profile.lineCheckCount = optResult.lineCheckCount;
@@ -1204,12 +1190,18 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                     return result;
                 }
 
-                if (!profile.lazyFallbackTriggered)
+                if (!profile.lazyFallbackTriggered &&
+                    !profile.lazyTimeoutTriggered)
                 {
                     profile.lazyFallbackTriggered = true;
                     profile.lazyFallbackReason = "lazy A* failed";
                 }
             }
+        }
+
+        if (profile.lazyTimeoutTriggered)
+        {
+            return result;
         }
 
         if (options.lazyBuildOptions.fallbackPolicy ==
@@ -1523,8 +1515,8 @@ void VoxelPathPlanner::PrintProfile(
         << profile.spatialIndexBuildMs << std::endl;
     std::cout << "Voxel build ms: "
         << profile.voxelBuildMs << std::endl;
-    std::cout << "Lazy chunk build ms: "
-        << profile.lazyChunkBuildMs << std::endl;
+    std::cout << "Lazy voxel query ms: "
+        << profile.lazyVoxelQueryMs << std::endl;
     std::cout << "Lazy candidate query ms: "
         << profile.lazyCandidateQueryMs << std::endl;
     std::cout << "Lazy candidate filter ms: "
@@ -1554,6 +1546,10 @@ void VoxelPathPlanner::PrintProfile(
         << (profile.lazyBuildEnabled ? "true" : "false") << std::endl;
     std::cout << "Lazy fallback triggered: "
         << (profile.lazyFallbackTriggered ? "true" : "false") << std::endl;
+    std::cout << "Lazy timeout triggered: "
+        << (profile.lazyTimeoutTriggered ? "true" : "false") << std::endl;
+    std::cout << "Lazy time budget ms: "
+        << profile.lazyTimeBudgetMs << std::endl;
     std::cout << "Lazy fallback reason: "
         << profile.lazyFallbackReason << std::endl;
 
@@ -1573,12 +1569,16 @@ void VoxelPathPlanner::PrintProfile(
         << profile.hashRawTriangleCount << std::endl;
     std::cout << "Lazy ensure call count: "
         << profile.lazyEnsureCallCount << std::endl;
-    std::cout << "Lazy chunk build count: "
-        << profile.lazyChunkBuildCount << std::endl;
+    std::cout << "Lazy voxel query count: "
+        << profile.lazyVoxelQueryCount << std::endl;
     std::cout << "Lazy cache hit count: "
         << profile.lazyCacheHitCount << std::endl;
     std::cout << "Lazy failed build count: "
         << profile.lazyFailedBuildCount << std::endl;
+    std::cout << "Lazy triangle-voxel intersect test count: "
+        << profile.lazyTriangleVoxelIntersectTestCount << std::endl;
+    std::cout << "Lazy triangle-voxel no-intersect cache hit count: "
+        << profile.lazyTriangleVoxelNoIntersectCacheHitCount << std::endl;
     std::cout << "Lazy candidate triangle count: "
         << profile.lazyCandidateTriangleCount << std::endl;
     std::cout << "Lazy raw candidate triangle count: "

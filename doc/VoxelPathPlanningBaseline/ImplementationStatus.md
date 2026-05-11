@@ -9,9 +9,10 @@ path, and can export VTK artifacts for inspection.
 
 - `FullMeshBounds`: eager full mesh-bounds voxelization. This is the default,
   correctness baseline, benchmark baseline, and lazy fallback target.
-- `LazyChunks`: experimental on-demand chunk voxelization during A* search.
-  It remains disabled by default and should be enabled only by callers that
-  accept its guardrails and fallback behavior.
+- `VoxelLazy`: experimental on-demand voxel-state classification during A*
+  search and path optimization. It caches both voxel records and
+  triangle/voxel pair results. It remains disabled by default and reports
+  timeout explicitly when the configured budget is exceeded.
 
 The previous start-goal local box build mode has been removed from the public
 planner API and benchmark matrix.
@@ -22,7 +23,7 @@ planner API and benchmark matrix.
   `VoxelPathPlanner`.
 - `src/Algorithms/GeometryQueryPathPlanner/`: independent long-term
   geometry-query planner target.
-- `src/IO/VtkExport/`: VTK mesh, voxel, path, and lazy chunk exporters.
+- `src/IO/VtkExport/`: VTK mesh, voxel, path, and diagnostic exporters.
 - `src/Apps/MovementPathCli/`: sample command-line executable.
 - `src/Apps/PathPlanningWorkbench/`: optional interactive Qt + OCCT workbench.
 - `tests/`: unit and planner integration tests.
@@ -31,17 +32,15 @@ planner API and benchmark matrix.
 ## Key Behaviors
 
 - `lazyBuildOptions.enabled` defaults to `false`.
+- `lazyBuildOptions.timeBudgetMs` defaults to `3000.0`.
 - `maxCostRegressionRatio` defaults to `0.0`, meaning disabled unless the
   caller explicitly enables the quality guardrail.
 - `voxelPath` stores snapped voxel indices for search and validation.
 - `pointPath` preserves the API start and goal points for external display.
-- `lazy_chunk_bounds.vtk` shows chunks actually built by lazy search; it is not
-  a closed mesh bounds representation.
 
 ## Known Limits
 
-- Lazy chunking can still perform many point-to-triangle distance calculations
-  inside active chunks.
-- Current data shows repeated `ClearanceBand -> ClearanceBand` writes and
-  non-improving distance calculations are the main lazy bottlenecks.
+- Voxel lazy can still perform many triangle/voxel intersection and
+  point-to-triangle distance checks when candidate sets are broad.
+- The current cache is scoped to one planning call; no cross-run cache is kept.
 - Benchmark output is CSV-first; summary rows or JSON are still future work.

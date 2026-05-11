@@ -4,6 +4,7 @@
 #include "VoxelWalkability.h"
 
 #include <vector>
+#include <functional>
 
 // ============================================================
 // 路径优化配置
@@ -33,6 +34,11 @@ struct VoxelPathOptimizeOptions
     int curveSamplesPerSegment = 8;
     double curveSampleSpacing = 0.0;
     double maxCurveDeviation = 0.0;
+
+    // Lazy voxel state source. Full-bounds callers leave this empty because
+    // every relevant voxel has already been classified.
+    std::function<void(VoxelSpace&, const VoxelIndex&)> ensureCellBuilt;
+    std::function<bool()> shouldCancel;
 };
 
 // ============================================================
@@ -62,7 +68,7 @@ class VoxelPathOptimizer
 {
 public:
     static VoxelPathOptimizeResult Optimize(
-        const VoxelSpace& space,
+        VoxelSpace& space,
         const std::vector<VoxelIndex>& inputPath,
         const VoxelPathOptimizeOptions& options);
 
@@ -76,7 +82,7 @@ public:
         VoxelAStarSearchMode mode);
 
     static bool IsLineWalkable(
-        const VoxelSpace& space,
+        VoxelSpace& space,
         const VoxelIndex& from,
         const VoxelIndex& to,
         const VoxelPathOptimizeOptions& options);

@@ -37,18 +37,20 @@ struct BenchmarkRow
     bool success = false;
     std::string buildRegionMode;
     bool lazyFallbackTriggered = false;
+    bool lazyTimeoutTriggered = false;
+    double lazyTimeBudgetMs = 0.0;
     std::string lazyFallbackReason;
 
     double triangulationMs = 0.0;
     double spatialIndexBuildMs = 0.0;
     double voxelBuildMs = 0.0;
-    double lazyChunkBuildMs = 0.0;
+    double lazyVoxelQueryMs = 0.0;
     double lazyCandidateQueryMs = 0.0;
     double lazyCandidateFilterMs = 0.0;
     double lazyVoxelMarkMs = 0.0;
     double lazyStateCountMs = 0.0;
     double astarMs = 0.0;
-    double astarNonChunkMs = 0.0;
+    double astarNonLazyQueryMs = 0.0;
     double optimizeMs = 0.0;
     double totalMeasuredMs = 0.0;
 
@@ -59,9 +61,11 @@ struct BenchmarkRow
     std::size_t occupiedCount = 0;
     std::size_t clearanceBandCount = 0;
     std::size_t lazyEnsureCallCount = 0;
-    std::size_t lazyChunkBuildCount = 0;
     std::size_t lazyCacheHitCount = 0;
     std::size_t lazyFailedBuildCount = 0;
+    std::size_t lazyVoxelQueryCount = 0;
+    std::size_t lazyTriangleVoxelIntersectTestCount = 0;
+    std::size_t lazyTriangleVoxelNoIntersectCacheHitCount = 0;
     std::size_t lazyCandidateTriangleCount = 0;
     std::size_t lazyRawCandidateTriangleCount = 0;
     std::size_t lazyVoxelVisitCount = 0;
@@ -117,12 +121,8 @@ VoxelPathPlannerOptions MakeLazyOptions()
 {
     VoxelPathPlannerOptions options = MakeBenchmarkBaseOptions();
     options.lazyBuildOptions.enabled = true;
-    options.lazyBuildOptions.chunkCacheOptions.chunkVoxelSize = 16;
-    options.lazyBuildOptions.chunkCacheOptions.buildPadding =
-        options.meshBuildOptions.clearance +
-        0.5 * std::sqrt(3.0) * options.meshBuildOptions.voxelSize;
-    options.lazyBuildOptions.maxChunkBuildCount = 0;
     options.lazyBuildOptions.maxCostRegressionRatio = 0.0;
+    options.lazyBuildOptions.timeBudgetMs = 3000.0;
     options.lazyBuildOptions.fallbackPolicy =
         VoxelLazyFallbackPolicy::FullMeshBoundsOnFailure;
     // options.runOptions.exportVtk = true;
@@ -179,20 +179,22 @@ BenchmarkRow MakeRow(
     row.success = result.success;
     row.buildRegionMode = profile.buildRegionMode;
     row.lazyFallbackTriggered = profile.lazyFallbackTriggered;
+    row.lazyTimeoutTriggered = profile.lazyTimeoutTriggered;
+    row.lazyTimeBudgetMs = profile.lazyTimeBudgetMs;
     row.lazyFallbackReason = profile.lazyFallbackReason;
     row.triangulationMs = profile.triangulationMs;
     row.spatialIndexBuildMs = profile.spatialIndexBuildMs;
     row.voxelBuildMs = profile.voxelBuildMs;
-    row.lazyChunkBuildMs = profile.lazyChunkBuildMs;
+    row.lazyVoxelQueryMs = profile.lazyVoxelQueryMs;
     row.lazyCandidateQueryMs = profile.lazyCandidateQueryMs;
     row.lazyCandidateFilterMs = profile.lazyCandidateFilterMs;
     row.lazyVoxelMarkMs = profile.lazyVoxelMarkMs;
     row.lazyStateCountMs = profile.lazyStateCountMs;
     row.astarMs = profile.astarMs;
-    row.astarNonChunkMs = profile.astarMs - profile.lazyChunkBuildMs;
-    if (row.astarNonChunkMs < 0.0)
+    row.astarNonLazyQueryMs = profile.astarMs - profile.lazyVoxelQueryMs;
+    if (row.astarNonLazyQueryMs < 0.0)
     {
-        row.astarNonChunkMs = 0.0;
+        row.astarNonLazyQueryMs = 0.0;
     }
     row.optimizeMs = profile.optimizeMs;
     row.totalMeasuredMs =
@@ -208,9 +210,13 @@ BenchmarkRow MakeRow(
     row.occupiedCount = profile.occupiedCount;
     row.clearanceBandCount = profile.clearanceBandCount;
     row.lazyEnsureCallCount = profile.lazyEnsureCallCount;
-    row.lazyChunkBuildCount = profile.lazyChunkBuildCount;
     row.lazyCacheHitCount = profile.lazyCacheHitCount;
     row.lazyFailedBuildCount = profile.lazyFailedBuildCount;
+    row.lazyVoxelQueryCount = profile.lazyVoxelQueryCount;
+    row.lazyTriangleVoxelIntersectTestCount =
+        profile.lazyTriangleVoxelIntersectTestCount;
+    row.lazyTriangleVoxelNoIntersectCacheHitCount =
+        profile.lazyTriangleVoxelNoIntersectCacheHitCount;
     row.lazyCandidateTriangleCount =
         profile.lazyCandidateTriangleCount;
     row.lazyRawCandidateTriangleCount =
@@ -267,16 +273,18 @@ void WriteCsvHeader(std::ostream& os)
 {
     os
         << "scene,mode,runIndex,runCount,success,buildRegionMode,"
-        << "lazyFallbackTriggered,"
+        << "lazyFallbackTriggered,lazyTimeoutTriggered,lazyTimeBudgetMs,"
         << "lazyFallbackReason,triangulationMs,spatialIndexBuildMs,"
-        << "voxelBuildMs,astarMs,lazyChunkBuildMs,"
+        << "voxelBuildMs,astarMs,lazyVoxelQueryMs,"
         << "lazyCandidateQueryMs,lazyCandidateFilterMs,"
-        << "lazyVoxelMarkMs,lazyStateCountMs,astarNonChunkMs,"
+        << "lazyVoxelMarkMs,lazyStateCountMs,astarNonLazyQueryMs,"
         << "optimizeMs,totalMeasuredMs,"
         << "triangleCount,candidateTriangleCount,rawCandidateTriangleCount,"
         << "storedCellCount,occupiedCount,clearanceBandCount,"
-        << "lazyEnsureCallCount,lazyChunkBuildCount,"
+        << "lazyEnsureCallCount,lazyVoxelQueryCount,"
         << "lazyCacheHitCount,lazyFailedBuildCount,"
+        << "lazyTriangleVoxelIntersectTestCount,"
+        << "lazyTriangleVoxelNoIntersectCacheHitCount,"
         << "lazyCandidateTriangleCount,lazyRawCandidateTriangleCount,"
         << "lazyVoxelVisitCount,lazyOutOfBoundsVoxelCount,"
         << "lazyDistanceCalculationCount,lazyDistanceImprovedCount,"
@@ -310,17 +318,19 @@ void WriteCsvRow(
         << (row.success ? "true" : "false") << ","
         << row.buildRegionMode << ","
         << (row.lazyFallbackTriggered ? "true" : "false") << ","
+        << (row.lazyTimeoutTriggered ? "true" : "false") << ","
+        << row.lazyTimeBudgetMs << ","
         << row.lazyFallbackReason << ","
         << row.triangulationMs << ","
         << row.spatialIndexBuildMs << ","
         << row.voxelBuildMs << ","
         << row.astarMs << ","
-        << row.lazyChunkBuildMs << ","
+        << row.lazyVoxelQueryMs << ","
         << row.lazyCandidateQueryMs << ","
         << row.lazyCandidateFilterMs << ","
         << row.lazyVoxelMarkMs << ","
         << row.lazyStateCountMs << ","
-        << row.astarNonChunkMs << ","
+        << row.astarNonLazyQueryMs << ","
         << row.optimizeMs << ","
         << row.totalMeasuredMs << ","
         << row.triangleCount << ","
@@ -330,9 +340,11 @@ void WriteCsvRow(
         << row.occupiedCount << ","
         << row.clearanceBandCount << ","
         << row.lazyEnsureCallCount << ","
-        << row.lazyChunkBuildCount << ","
+        << row.lazyVoxelQueryCount << ","
         << row.lazyCacheHitCount << ","
         << row.lazyFailedBuildCount << ","
+        << row.lazyTriangleVoxelIntersectTestCount << ","
+        << row.lazyTriangleVoxelNoIntersectCacheHitCount << ","
         << row.lazyCandidateTriangleCount << ","
         << row.lazyRawCandidateTriangleCount << ","
         << row.lazyVoxelVisitCount << ","
@@ -434,7 +446,7 @@ int main(
                 << row.sceneName << " / " << row.modeName
                 << " success=" << (row.success ? "true" : "false")
                 << " cost=" << row.totalCost
-                << " chunks=" << row.lazyChunkBuildCount
+                << " lazyQueries=" << row.lazyVoxelQueryCount
                 << " measuredMs=" << row.totalMeasuredMs
                 << std::endl;
         }

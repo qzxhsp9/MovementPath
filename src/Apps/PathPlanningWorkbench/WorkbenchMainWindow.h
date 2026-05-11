@@ -31,7 +31,6 @@ struct VtkExportSettings
     QString astarPath = "D:/astar_path.vtk";
     QString optimizedPathVoxelsPath = "D:/optimized_path_voxels.vtk";
     QString optimizedPathPolylinePath = "D:/optimized_path_polyline.vtk";
-    QString lazyChunkBoundsPath = "D:/lazy_chunk_bounds.vtk";
 };
 
 enum class PlannerMethod
@@ -114,6 +113,7 @@ protected:
     QDoubleSpinBox* m_angularDeflectionSpin = nullptr;
     QDoubleSpinBox* m_voxelSizeSpin = nullptr;
     QDoubleSpinBox* m_clearanceSpin = nullptr;
+    QDoubleSpinBox* m_lazyTimeBudgetSpin = nullptr;
     QSpinBox* m_snapRadiusSpin = nullptr;
 
     QDoubleSpinBox* m_startX = nullptr;
