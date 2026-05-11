@@ -375,6 +375,20 @@ void OcctViewWidget::ClearOverlays()
     m_view->Redraw();
 }
 
+void OcctViewWidget::ResetToInitialView()
+{
+    EnsureViewer();
+
+    if (m_view.IsNull())
+    {
+        return;
+    }
+
+    m_view->SetProj(V3d_TypeOfOrientation_Zup_AxoRight);
+    m_view->FitAll();
+    m_view->Redraw();
+}
+
 void OcctViewWidget::SetPointPickCallback(
     std::function<void(const gp_Pnt&)> callback)
 {

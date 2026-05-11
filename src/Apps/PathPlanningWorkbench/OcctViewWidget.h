@@ -63,6 +63,8 @@ public:
 
     void ClearOverlays();
 
+    void ResetToInitialView();
+
     void SetPointPickCallback(
         std::function<void(const gp_Pnt&)> callback);
 

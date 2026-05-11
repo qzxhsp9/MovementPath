@@ -17,6 +17,7 @@
 #include <QLineEdit>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QShortcut>
 #include <QSignalBlocker>
 #include <QSplitter>
 #include <QSpinBox>
@@ -393,6 +394,15 @@ void WorkbenchMainWindow::BuildUi()
     });
     connect(vtkExportSettingsButton, &QPushButton::clicked, this, [this]() {
         OpenVtkExportSettings();
+    });
+    QShortcut* resetViewShortcut =
+        new QShortcut(QKeySequence(Qt::Key_Space), this);
+    resetViewShortcut->setContext(Qt::WindowShortcut);
+    connect(resetViewShortcut, &QShortcut::activated, this, [this]() {
+        if (m_view != nullptr)
+        {
+            m_view->ResetToInitialView();
+        }
     });
     connect(m_displayModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
         this, [this]() {
@@ -890,6 +900,12 @@ void WorkbenchMainWindow::keyPressEvent(QKeyEvent* event)
     if (event->key() == Qt::Key_E)
     {
         CycleGoalDirection();
+        event->accept();
+        return;
+    }
+    if (event->key() == Qt::Key_Space)
+    {
+        m_view->ResetToInitialView();
         event->accept();
         return;
     }
