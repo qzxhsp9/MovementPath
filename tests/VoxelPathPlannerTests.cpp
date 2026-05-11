@@ -17,64 +17,63 @@ bool IsNear(
         std::abs(p.z - q.Z()) <= tolerance;
 }
 
-bool TestLocalPlannerDefaultBehavior(
+bool TestBaselinePlannerDefaultBehavior(
     const VoxelPlanningScenario& scenario,
-    VoxelPathPlannerResult& localResult)
+    VoxelPathPlannerResult& baselineResult)
 {
-    VoxelPathPlannerOptions localOptions = MakeLocalBuildSmokeOptions();
+    VoxelPathPlannerOptions baselineOptions = MakeBaselineSmokeOptions();
     bool ok = true;
     ok &= Expect(
-        !localOptions.lazyBuildOptions.enabled,
+        !baselineOptions.lazyBuildOptions.enabled,
         "lazy build should be disabled by default");
     ok &= Expect(
-        localOptions.lazyBuildOptions.fallbackPolicy ==
+        baselineOptions.lazyBuildOptions.fallbackPolicy ==
             VoxelLazyFallbackPolicy::FullMeshBoundsOnFailure,
         "lazy fallback policy should default to full-bounds fallback");
 
-    localResult = VoxelPathPlanner::Plan(scenario, localOptions);
+    baselineResult = VoxelPathPlanner::Plan(scenario, baselineOptions);
 
-    ok &= Expect(localResult.success, "local plan should succeed");
+    ok &= Expect(baselineResult.success, "baseline plan should succeed");
     ok &= Expect(
-        !localResult.profile.lazyBuildEnabled,
+        !baselineResult.profile.lazyBuildEnabled,
         "planner profile should report lazy disabled by default");
     ok &= Expect(
-        localResult.profile.lazyChunkBuildCount == 0,
+        baselineResult.profile.lazyChunkBuildCount == 0,
         "default planner should not build lazy chunks");
     ok &= Expect(
-        !localResult.profile.lazyFallbackTriggered,
+        !baselineResult.profile.lazyFallbackTriggered,
         "default planner should not trigger lazy fallback");
     ok &= Expect(
-        localResult.profile.astarSucceeded,
-        "local A* should succeed");
+        baselineResult.profile.astarSucceeded,
+        "baseline A* should succeed");
     ok &= Expect(
-        localResult.profile.rawPathCount > 0,
-        "local path should contain voxels");
+        baselineResult.profile.rawPathCount > 0,
+        "baseline path should contain voxels");
     ok &= Expect(
-        localResult.profile.candidateTriangleCount > 0,
-        "local candidate triangle count should be positive");
+        baselineResult.profile.candidateTriangleCount > 0,
+        "baseline candidate triangle count should be positive");
     ok &= Expect(
-        localResult.profile.candidateTriangleCount <
-            localResult.profile.triangleCount,
-        "local build should reduce candidate triangle count");
+        baselineResult.profile.buildRegionMode == "FullMeshBounds",
+        "default build mode should be full mesh bounds");
     ok &= Expect(
-        localResult.optimizeResult.voxelPath.size() ==
-            localResult.profile.optimizedPathCount,
+        baselineResult.optimizeResult.voxelPath.size() ==
+            baselineResult.profile.optimizedPathCount,
         "planner result should expose optimized voxel path");
     ok &= Expect(
-        localResult.hasFinalSearchBounds,
+        baselineResult.hasFinalSearchBounds,
         "planner result should expose final search bounds");
     ok &= Expect(
-        !localResult.astarResult.pointPath.empty() &&
-            IsNear(localResult.astarResult.pointPath.front(),
+        !baselineResult.astarResult.pointPath.empty() &&
+            IsNear(baselineResult.astarResult.pointPath.front(),
                 scenario.startPoint) &&
-            IsNear(localResult.astarResult.pointPath.back(),
+            IsNear(baselineResult.astarResult.pointPath.back(),
                 scenario.goalPoint),
         "A* point path should preserve API start and goal points");
     ok &= Expect(
-        !localResult.optimizeResult.pointPath.empty() &&
-            IsNear(localResult.optimizeResult.pointPath.front(),
+        !baselineResult.optimizeResult.pointPath.empty() &&
+            IsNear(baselineResult.optimizeResult.pointPath.front(),
                 scenario.startPoint) &&
-            IsNear(localResult.optimizeResult.pointPath.back(),
+            IsNear(baselineResult.optimizeResult.pointPath.back(),
                 scenario.goalPoint),
         "optimized point path should preserve API start and goal points");
 
@@ -83,9 +82,9 @@ bool TestLocalPlannerDefaultBehavior(
 
 bool TestNoopEnsureHookDoesNotChangePath(
     const VoxelPlanningScenario& scenario,
-    const VoxelPathPlannerResult& localResult)
+    const VoxelPathPlannerResult& baselineResult)
 {
-    VoxelPathPlannerOptions noopHookOptions = MakeLocalBuildSmokeOptions();
+    VoxelPathPlannerOptions noopHookOptions = MakeBaselineSmokeOptions();
     int ensureCallCount = 0;
     noopHookOptions.astarOptions.ensureCellBuilt =
         [&ensureCallCount](VoxelSpace&, const VoxelIndex&)
@@ -101,43 +100,37 @@ bool TestNoopEnsureHookDoesNotChangePath(
     ok &= Expect(ensureCallCount > 0, "ensure hook should be exercised");
     ok &= Expect(
         noopHookResult.profile.rawPathCount ==
-            localResult.profile.rawPathCount,
+            baselineResult.profile.rawPathCount,
         "no-op ensure hook should not change raw path count");
     ok &= Expect(
         noopHookResult.profile.optimizedPathCount ==
-            localResult.profile.optimizedPathCount,
+            baselineResult.profile.optimizedPathCount,
         "no-op ensure hook should not change optimized path count");
     ok &= Expect(
         std::abs(
             noopHookResult.profile.totalCost -
-            localResult.profile.totalCost) < 1.0e-9,
+            baselineResult.profile.totalCost) < 1.0e-9,
         "no-op ensure hook should not change total cost");
 
     return ok;
 }
 
-bool TestFullBoundsAvoidsStartGoalBoxClipping(
+bool TestFullBoundsBoxPath(
     const VoxelPlanningScenario& scenario)
 {
     const VoxelPathPlannerResult fullResult =
         VoxelPathPlanner::Plan(scenario, MakeSmokeOptions());
 
-    const VoxelPathPlannerResult localResult =
-        VoxelPathPlanner::Plan(scenario, MakeLocalBuildSmokeOptions());
-
     bool ok = true;
     ok &= Expect(
         fullResult.success,
-        "full-bounds pole-to-pole plan should succeed");
-    ok &= Expect(
-        localResult.success,
-        "local pole-to-pole plan should still succeed for comparison");
+        "full-bounds box path plan should succeed");
     ok &= Expect(
         fullResult.profile.buildRegionMode == "FullMeshBounds",
         "default build mode should be full mesh bounds");
     ok &= Expect(
-        fullResult.profile.totalCost < localResult.profile.totalCost,
-        "full-bounds pole-to-pole path should avoid local-box clipping");
+        fullResult.profile.totalCost > 0.0,
+        "full-bounds box path should have positive cost");
 
     return ok;
 }
@@ -411,10 +404,6 @@ bool TestBrepScenarioHelpersHandleMissingFile()
     const VoxelPathPlannerOptions options =
         VoxelPathPlanner::MakeBrepBaselineOptions("D:/brep_helper_test");
     ok &= Expect(
-        options.localBuildOptions.regionMode ==
-            VoxelBuildRegionMode::FullMeshBounds,
-        "BREP helper options should use full-bounds baseline");
-    ok &= Expect(
         !options.lazyBuildOptions.enabled,
         "BREP helper options should disable lazy build");
     ok &= Expect(
@@ -428,22 +417,17 @@ bool TestBrepScenarioHelpersHandleMissingFile()
 
 int main()
 {
-    const double radius = 50.0;
-    const TopoDS_Shape sphere = MakeSmokeSphere(radius);
-    const VoxelPlanningScenario localScenario =
-        MakeLocalShortPathScenario(sphere, radius);
-    const VoxelPlanningScenario poleScenario =
-        MakePoleToPoleScenario(sphere, radius);
+    const VoxelPlanningScenario boxScenario = MakeBoxFaceScenario();
 
     bool ok = true;
-    VoxelPathPlannerResult localResult;
-    ok &= TestLocalPlannerDefaultBehavior(localScenario, localResult);
-    ok &= TestNoopEnsureHookDoesNotChangePath(localScenario, localResult);
-    ok &= TestFullBoundsAvoidsStartGoalBoxClipping(poleScenario);
-    ok &= TestLazyGuardrailFallback(localScenario);
-    ok &= TestPlannerLazySuccessWithoutFallback(localScenario);
-    ok &= TestPlannerLazyCostRegressionFallback(localScenario);
-    ok &= TestPlannerLazyChunkBoundsExport(localScenario);
+    VoxelPathPlannerResult baselineResult;
+    ok &= TestBaselinePlannerDefaultBehavior(boxScenario, baselineResult);
+    ok &= TestNoopEnsureHookDoesNotChangePath(boxScenario, baselineResult);
+    ok &= TestFullBoundsBoxPath(boxScenario);
+    ok &= TestLazyGuardrailFallback(boxScenario);
+    ok &= TestPlannerLazySuccessWithoutFallback(boxScenario);
+    ok &= TestPlannerLazyCostRegressionFallback(boxScenario);
+    ok &= TestPlannerLazyChunkBoundsExport(boxScenario);
     ok &= TestBrepScenarioHelpersHandleMissingFile();
 
     return ok ? EXIT_SUCCESS : EXIT_FAILURE;

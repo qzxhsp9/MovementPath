@@ -327,5 +327,5 @@ box_long_face_to_face / lazy:
 - 保留 `FullMeshBounds` 作为 correctness 和路径质量基线。
 - `LazyChunks` 继续默认关闭，除非 benchmark 证明其收益稳定。
 - 不再把 lazy chunk 当作长期性能唯一主线。
-- 新的长期方向放入 `src/GeometryQueryPathPlanner/`，重点研究空间索引、按需几何查询、局部缓存和连续路径优化。
+- 新的长期方向放入 `src/Algorithms/GeometryQueryPathPlanner/`，重点研究空间索引、按需几何查询、局部缓存和连续路径优化。
 - 两个模块在源码和 CMake 层面保持隔离；新模块成熟前不接入 baseline 主流程。

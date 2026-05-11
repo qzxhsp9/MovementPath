@@ -1009,8 +1009,6 @@ VoxelPathPlannerOptions WorkbenchMainWindow::MakeVoxelOptions(
     }
     else
     {
-        options.localBuildOptions.regionMode =
-            VoxelBuildRegionMode::FullMeshBounds;
         options.lazyBuildOptions.enabled = false;
     }
 

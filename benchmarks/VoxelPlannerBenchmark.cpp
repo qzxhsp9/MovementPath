@@ -1,7 +1,6 @@
 #include "VoxelPathPlanner.h"
 
 #include <BRepPrimAPI_MakeBox.hxx>
-#include <BRepPrimAPI_MakeSphere.hxx>
 #include <TopoDS_Shape.hxx>
 #include <gp_Pnt.hxx>
 #include <gp_Vec.hxx>
@@ -111,16 +110,7 @@ VoxelPathPlannerOptions MakeBenchmarkBaseOptions()
 
 VoxelPathPlannerOptions MakeFullOptions()
 {
-    VoxelPathPlannerOptions options = MakeBenchmarkBaseOptions();
-    options.localBuildOptions.regionMode = VoxelBuildRegionMode::FullMeshBounds;
-    return options;
-}
-
-VoxelPathPlannerOptions MakeLocalOptions()
-{
-    VoxelPathPlannerOptions options = MakeBenchmarkBaseOptions();
-    options.localBuildOptions.regionMode = VoxelBuildRegionMode::StartGoalBox;
-    return options;
+    return MakeBenchmarkBaseOptions();
 }
 
 VoxelPathPlannerOptions MakeLazyOptions()
@@ -137,22 +127,6 @@ VoxelPathPlannerOptions MakeLazyOptions()
         VoxelLazyFallbackPolicy::FullMeshBoundsOnFailure;
     // options.runOptions.exportVtk = true;
     return options;
-}
-
-VoxelPlanningScenario MakeSpherePoleScenario()
-{
-    const double radius = 50.0;
-
-    VoxelPlanningScenario scenario;
-    scenario.name = "sphere_pole_to_pole";
-    scenario.shape =
-        BRepPrimAPI_MakeSphere(gp_Pnt(0, 0, 0), radius).Shape();
-    scenario.startPoint = gp_Pnt(0, 0, -radius);
-    scenario.startDir = gp_Vec(0, 0, -1);
-    scenario.goalPoint = gp_Pnt(0, 0, radius);
-    scenario.goalDir = gp_Vec(0, 0, 1);
-
-    return scenario;
 }
 
 VoxelPlanningScenario MakeBoxFaceScenario()
@@ -175,7 +149,6 @@ std::vector<BenchmarkCase> MakeBenchmarkCases()
 {
     std::vector<BenchmarkCase> cases;
     const std::vector<VoxelPlanningScenario> scenarios = {
-        MakeSpherePoleScenario(),
         MakeBoxFaceScenario()
     };
 
@@ -183,8 +156,6 @@ std::vector<BenchmarkCase> MakeBenchmarkCases()
     {
         cases.push_back(
             { scenario.name, "full", scenario, MakeFullOptions() });
-        cases.push_back(
-            { scenario.name, "local", scenario, MakeLocalOptions() });
         cases.push_back(
             { scenario.name, "lazy", scenario, MakeLazyOptions() });
     }

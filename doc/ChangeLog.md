@@ -2,6 +2,18 @@
 
 本文档记录 MovementPath 项目的所有重要代码修改。模块文档分别放在 `doc/VoxelPathPlanningBaseline/` 和 `doc/GeometryQueryPathPlanner/`。
 
+## 2026-05-11
+
+### Voxel baseline cleanup and source layout
+
+- Removed the start-goal local box build mode from the public voxel planner API.
+- Kept `FullMeshBounds` as the only eager voxel build path and the fallback target for lazy planning.
+- Reduced benchmark modes to `full` and `lazy`.
+- Moved algorithm code under `src/Algorithms/`.
+- Moved VTK export code under `src/IO/VtkExport/` and built it as `MovementPathVtkExport`.
+- Moved executable/workbench code under `src/Apps/`.
+- Updated tests and current docs to match the smaller mode set and new layout.
+
 ## 2026-04-30
 
 ### PathPlanningWorkbench 交互平台骨架

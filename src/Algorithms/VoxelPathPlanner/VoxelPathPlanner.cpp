@@ -39,27 +39,6 @@ private:
     std::chrono::steady_clock::time_point m_start;
 };
 
-const char* ToString(VoxelBuildRegionMode mode)
-{
-    if (mode == VoxelBuildRegionMode::StartGoalBox)
-    {
-        return "StartGoalBox";
-    }
-
-    return "FullMeshBounds";
-}
-
-VoxelPlannerExecutionMode ToExecutionMode(
-    VoxelBuildRegionMode mode)
-{
-    if (mode == VoxelBuildRegionMode::StartGoalBox)
-    {
-        return VoxelPlannerExecutionMode::StartGoalBox;
-    }
-
-    return VoxelPlannerExecutionMode::FullMeshBounds;
-}
-
 bool IsCancelled(const VoxelPathPlannerOptions& options)
 {
     return options.runOptions.shouldCancel &&
@@ -435,85 +414,6 @@ void PreserveLazyAttemptOnFallback(
         lazyProfile.lazyDryRunClippedVoxelPairCount;
 }
 
-MeshAABB MakeStartGoalBuildBox(
-    const Vec& startPoint,
-    const Vec& goalPoint,
-    double expand)
-{
-    MeshAABB box;
-
-    box.minP = Vec(
-        std::min(startPoint.x, goalPoint.x),
-        std::min(startPoint.y, goalPoint.y),
-        std::min(startPoint.z, goalPoint.z)
-    );
-
-    box.maxP = Vec(
-        std::max(startPoint.x, goalPoint.x),
-        std::max(startPoint.y, goalPoint.y),
-        std::max(startPoint.z, goalPoint.z)
-    );
-
-    box.minP.x -= expand;
-    box.minP.y -= expand;
-    box.minP.z -= expand;
-
-    box.maxP.x += expand;
-    box.maxP.y += expand;
-    box.maxP.z += expand;
-
-    return box;
-}
-
-double ComputeLocalSearchPadding(
-    const VoxelLocalBuildOptions& options,
-    int attemptIndex)
-{
-    if (attemptIndex <= 0)
-    {
-        return options.searchPadding;
-    }
-
-    return options.searchPadding *
-        std::pow(options.retryExpandFactor, attemptIndex);
-}
-
-VoxelMeshBuildResult BuildVoxelSpaceForAttempt(
-    const std::vector<MeshTriangle>& triangles,
-    const TriangleSpatialHash& spatialHash,
-    const VoxelMeshBuildOptions& buildOptions,
-    const VoxelLocalBuildOptions& localOptions,
-    const Vec& startPoint,
-    const Vec& goalPoint,
-    double searchPadding,
-    VoxelSpace& voxelSpace)
-{
-    if (localOptions.regionMode == VoxelBuildRegionMode::FullMeshBounds)
-    {
-        return VoxelMeshBuilder::BuildVoxelSpaceFromTriangles(
-            triangles,
-            buildOptions,
-            voxelSpace
-        );
-    }
-
-    const double halfDiag =
-        0.5 * std::sqrt(3.0) * buildOptions.voxelSize;
-    const double expand =
-        buildOptions.clearance + halfDiag + searchPadding;
-
-    const MeshAABB buildBox =
-        MakeStartGoalBuildBox(startPoint, goalPoint, expand);
-
-    return VoxelMeshBuilder::BuildVoxelSpaceFromTrianglesInBox(
-        triangles,
-        &spatialHash,
-        buildBox,
-        buildOptions,
-        voxelSpace
-    );
-}
-
 void DebugVoxelStateAround(
     const VoxelSpace& space,
     const VoxelIndex& seed,
@@ -818,11 +718,6 @@ VoxelPathPlannerOptions VoxelPathPlanner::MakeDefaultOptions()
     options.meshBuildOptions.conservativeClearance = true;
     options.meshBuildOptions.storeFreeCells = false;
 
-    options.localBuildOptions.regionMode = VoxelBuildRegionMode::FullMeshBounds;
-    options.localBuildOptions.searchPadding = 20.0;
-    options.localBuildOptions.maxRetryCount = 3;
-    options.localBuildOptions.retryExpandFactor = 2.0;
-
     options.lazyBuildOptions.enabled = false;
     options.lazyBuildOptions.chunkCacheOptions.chunkVoxelSize = 16;
     options.lazyBuildOptions.chunkCacheOptions.buildPadding =
@@ -869,7 +764,6 @@ VoxelPathPlannerOptions VoxelPathPlanner::MakeBrepBaselineOptions(
     options.runOptions.lazyChunkBoundsVtkPath =
         vtkPathPrefix + "_lazy_chunk_bounds.vtk";
 
-    options.localBuildOptions.regionMode = VoxelBuildRegionMode::FullMeshBounds;
     options.lazyBuildOptions.enabled = false;
     return options;
 }
@@ -925,9 +819,9 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
     VoxelPathPlannerResult result;
     VoxelPlanningProfile& profile = result.profile;
     profile.scenarioName = scenario.name;
-    profile.buildRegionMode = ToString(options.localBuildOptions.regionMode);
+    profile.buildRegionMode = "FullMeshBounds";
     profile.lazyBuildEnabled = options.lazyBuildOptions.enabled;
-    result.executionMode = ToExecutionMode(options.localBuildOptions.regionMode);
+    result.executionMode = VoxelPlannerExecutionMode::FullMeshBounds;
 
     VoxelMeshBuildOptions meshBuildOptions = options.meshBuildOptions;
     meshBuildOptions.shouldCancel = options.runOptions.shouldCancel;
@@ -1273,8 +1167,6 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                     {
                         VoxelPathPlannerOptions baselineOptions = options;
                         baselineOptions.lazyBuildOptions.enabled = false;
-                        baselineOptions.localBuildOptions.regionMode =
-                            VoxelBuildRegionMode::FullMeshBounds;
 
                         VoxelPathPlannerResult baselineResult =
                             VoxelPathPlanner::Plan(
@@ -1325,8 +1217,6 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
         {
             VoxelPathPlannerOptions fallbackOptions = options;
             fallbackOptions.lazyBuildOptions.enabled = false;
-            fallbackOptions.localBuildOptions.regionMode =
-                VoxelBuildRegionMode::FullMeshBounds;
 
             VoxelPathPlannerResult fallbackResult =
                 VoxelPathPlanner::Plan(scenario, fallbackOptions);
@@ -1347,11 +1237,7 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
     VoxelMeshBuildResult buildResult;
     VoxelSpace voxelSpace;
 
-    const int maxAttemptCount =
-        options.localBuildOptions.regionMode ==
-            VoxelBuildRegionMode::FullMeshBounds ?
-        1 :
-        options.localBuildOptions.maxRetryCount + 1;
+    constexpr int maxAttemptCount = 1;
 
     for (int attempt = 0; attempt < maxAttemptCount; ++attempt)
     {
@@ -1360,17 +1246,13 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
             return result;
         }
 
-        const double searchPadding =
-            options.localBuildOptions.regionMode ==
-                VoxelBuildRegionMode::FullMeshBounds ?
-            0.0 :
-            ComputeLocalSearchPadding(options.localBuildOptions, attempt);
+        constexpr double searchPadding = 0.0;
 
         if (options.runOptions.verbose)
         {
             std::cout << "Build/search attempt: "
                 << attempt + 1 << " / " << maxAttemptCount
-                << ", mode: " << ToString(options.localBuildOptions.regionMode)
+                << ", mode: FullMeshBounds"
                 << ", search padding: " << searchPadding
                 << std::endl;
         }
@@ -1378,14 +1260,9 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
         {
             ScopedTimer timer(profile.voxelBuildMs);
             buildResult =
-                BuildVoxelSpaceForAttempt(
+                VoxelMeshBuilder::BuildVoxelSpaceFromTriangles(
                     triangles,
-                    spatialHash,
                     meshBuildOptions,
-                    options.localBuildOptions,
-                    startPoint3D,
-                    goalPoint3D,
-                    searchPadding,
                     voxelSpace
                 );
         }
@@ -1443,8 +1320,7 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                     goalPoint3D,
                     astarOptions,
                     options.runOptions.verbose,
-                    options.localBuildOptions.regionMode ==
-                        VoxelBuildRegionMode::FullMeshBounds
+                    true
                 );
         }
 

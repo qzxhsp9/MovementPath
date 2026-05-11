@@ -1,6 +1,6 @@
 # GeometryQueryPathPlanner 开发计划
 
-本文档维护 `src/GeometryQueryPathPlanner/` 的长期开发计划。该模块用于验证“基于几何查询的路径规划”是否能在长期性能和路径质量上优于当前体素 baseline。
+本文档维护 `src/Algorithms/GeometryQueryPathPlanner/` 的长期开发计划。该模块用于验证“基于几何查询的路径规划”是否能在长期性能和路径质量上优于当前体素 baseline。
 
 体素 baseline 的状态和计划见 `doc/VoxelPathPlanningBaseline/`。全项目修改记录见 `doc/ChangeLog.md`。
 
@@ -40,7 +40,7 @@
 
 已完成：
 
-- 新增 `src/GeometryQueryPathPlanner/`。
+- 新增 `src/Algorithms/GeometryQueryPathPlanner/`。
 - 新增 `GeometryPrimitives.h`。
 - 新增 `GeometryQueryPathPlanner.h/.cpp`。
 - 新增独立 CMake target `GeometryQueryPathPlanner`。

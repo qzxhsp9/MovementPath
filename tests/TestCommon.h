@@ -2,6 +2,7 @@
 
 #include "VoxelPathPlanner.h"
 
+#include <BRepPrimAPI_MakeBox.hxx>
 #include <BRepPrimAPI_MakeSphere.hxx>
 #include <TopoDS_Shape.hxx>
 #include <gp_Pnt.hxx>
@@ -63,6 +64,22 @@ inline VoxelPlanningScenario MakePoleToPoleScenario(
     return scenario;
 }
 
+inline VoxelPlanningScenario MakeBoxFaceScenario()
+{
+    VoxelPlanningScenario scenario;
+    scenario.name = "box_long_face_to_face";
+    scenario.shape =
+        BRepPrimAPI_MakeBox(
+            gp_Pnt(-30, -10, -10),
+            gp_Pnt(30, 10, 10)).Shape();
+    scenario.startPoint = gp_Pnt(-30, 0, 0);
+    scenario.startDir = gp_Vec(-1, 0, 0);
+    scenario.goalPoint = gp_Pnt(30, 0, 0);
+    scenario.goalDir = gp_Vec(1, 0, 0);
+
+    return scenario;
+}
+
 inline VoxelPathPlannerOptions MakeSmokeOptions()
 {
     VoxelPathPlannerOptions options =
@@ -75,11 +92,9 @@ inline VoxelPathPlannerOptions MakeSmokeOptions()
     return options;
 }
 
-inline VoxelPathPlannerOptions MakeLocalBuildSmokeOptions()
+inline VoxelPathPlannerOptions MakeBaselineSmokeOptions()
 {
-    VoxelPathPlannerOptions options = MakeSmokeOptions();
-    options.localBuildOptions.regionMode = VoxelBuildRegionMode::StartGoalBox;
-    return options;
+    return MakeSmokeOptions();
 }
 
 inline VoxelPathPlannerOptions MakeLazySmokeOptions()
