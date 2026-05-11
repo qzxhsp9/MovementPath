@@ -192,7 +192,8 @@ static void ExpandAABBLocal(
 
 bool TriangleSpatialHash::Build(
     const std::vector<MeshTriangle>& triangles,
-    const TriangleSpatialHashOptions& options)
+    const TriangleSpatialHashOptions& options,
+    const std::function<bool()>& shouldCancel)
 {
     m_cells.clear();
     m_cellSize = 0.0;
@@ -216,6 +217,14 @@ bool TriangleSpatialHash::Build(
 
     for (std::size_t i = 0; i < triangles.size(); ++i)
     {
+        if (shouldCancel && shouldCancel())
+        {
+            m_cells.clear();
+            m_entryCount = 0;
+            m_cellSize = 0.0;
+            return false;
+        }
+
         const MeshAABB triBox = ComputeTriangleAABBLocal(triangles[i]);
 
         SpatialCellIndex minCell = WorldToCell(triBox.minP);
@@ -355,7 +364,8 @@ bool VoxelMeshBuilder::BuildShapeTriangulation(
     const TopoDS_Shape& shape,
     double deflection,
     double angularDeflection,
-    std::vector<MeshTriangle>& outTriangles)
+    std::vector<MeshTriangle>& outTriangles,
+    const std::function<bool()>& shouldCancel)
 {
     outTriangles.clear();
 
@@ -374,6 +384,82 @@ bool VoxelMeshBuilder::BuildShapeTriangulation(
         angularDeflection = 0.5;
     }
 
+    const auto collectExistingTriangulation = [&]() -> bool
+    {
+        outTriangles.clear();
+        bool sawFace = false;
+        bool missingFaceTriangulation = false;
+
+        for (TopExp_Explorer exp(shape, TopAbs_FACE);
+             exp.More();
+             exp.Next())
+        {
+            if (shouldCancel && shouldCancel())
+            {
+                outTriangles.clear();
+                return false;
+            }
+
+            sawFace = true;
+            const TopoDS_Face& face = TopoDS::Face(exp.Current());
+
+            TopLoc_Location loc;
+            Handle(Poly_Triangulation) triangulation =
+                BRep_Tool::Triangulation(face, loc);
+
+            if (triangulation.IsNull() || triangulation->NbTriangles() <= 0)
+            {
+                missingFaceTriangulation = true;
+                continue;
+            }
+
+            const gp_Trsf trsf = loc.Transformation();
+            const Standard_Integer nbTriangles =
+                triangulation->NbTriangles();
+
+            for (int i = 1; i <= nbTriangles; ++i)
+            {
+                if ((i & 255) == 0 && shouldCancel && shouldCancel())
+                {
+                    outTriangles.clear();
+                    return false;
+                }
+
+                const Poly_Triangle& triangle =
+                    triangulation->Triangle(i);
+                gp_Pnt p0 =
+                    triangulation->Node(triangle.Value(1)).Transformed(trsf);
+                gp_Pnt p1 =
+                    triangulation->Node(triangle.Value(2)).Transformed(trsf);
+                gp_Pnt p2 =
+                    triangulation->Node(triangle.Value(3)).Transformed(trsf);
+
+                MeshTriangle tri;
+                tri.p0 = Vec(p0.X(), p0.Y(), p0.Z());
+                tri.p1 = Vec(p1.X(), p1.Y(), p1.Z());
+                tri.p2 = Vec(p2.X(), p2.Y(), p2.Z());
+                outTriangles.push_back(tri);
+            }
+        }
+
+        return sawFace &&
+            !missingFaceTriangulation &&
+            !outTriangles.empty();
+    };
+
+    // Interactive callers pass shouldCancel and usually remesh explicitly
+    // before planning. Reuse that triangulation so Stop does not wait inside
+    // OCCT's non-cooperative mesher on every path computation.
+    if (shouldCancel && collectExistingTriangulation())
+    {
+        return true;
+    }
+
+    if (shouldCancel && shouldCancel())
+    {
+        return false;
+    }
+
     BRepMesh_IncrementalMesh mesher(
         shape,
         deflection,
@@ -384,42 +470,17 @@ bool VoxelMeshBuilder::BuildShapeTriangulation(
 
     mesher.Perform();
 
+    if (shouldCancel && shouldCancel())
+    {
+        return false;
+    }
+
     if (!mesher.IsDone())
     {
         return false;
     }
 
-    for (TopExp_Explorer exp(shape, TopAbs_FACE); exp.More(); exp.Next())
-    {
-        const TopoDS_Face& face = TopoDS::Face(exp.Current());
-
-        TopLoc_Location loc;
-        Handle(Poly_Triangulation) triangulation =
-            BRep_Tool::Triangulation(face, loc);
-
-        if (triangulation.IsNull())
-        {
-            continue;
-        }
-
-        const gp_Trsf trsf = loc.Transformation();
-
-        Standard_Integer nbTriangles = triangulation->NbTriangles();
-        for (int i = 1; i <= nbTriangles; ++i)
-        {
-            const Poly_Triangle& triangle = triangulation->Triangle(i);            
-            gp_Pnt p0 = triangulation->Node(triangle.Value(1)).Transformed(trsf);
-            gp_Pnt p1 = triangulation->Node(triangle.Value(2)).Transformed(trsf);
-            gp_Pnt p2 = triangulation->Node(triangle.Value(3)).Transformed(trsf);
-            MeshTriangle tri;
-            tri.p0 = Vec(p0.X(), p0.Y(), p0.Z());
-            tri.p1 = Vec(p1.X(), p1.Y(), p1.Z());
-            tri.p2 = Vec(p2.X(), p2.Y(), p2.Z());
-            outTriangles.push_back(tri);
-        }
-    }
-
-    return !outTriangles.empty();
+    return collectExistingTriangulation();
 }
 
 // ============================================================
@@ -923,7 +984,8 @@ VoxelMeshBuildResult VoxelMeshBuilder::BuildVoxelSpaceFromShapeMeshInBox(
         shape,
         options.meshDeflection,
         options.angularDeflection,
-        triangles))
+        triangles,
+        options.shouldCancel))
     {
         return result;
     }

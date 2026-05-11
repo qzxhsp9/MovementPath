@@ -602,8 +602,16 @@ void WorkbenchMainWindow::StopPathComputation()
 {
     if (m_cancelRequested != nullptr)
     {
-        m_cancelRequested->store(true, std::memory_order_relaxed);
-        AppendLog("Stop requested. Waiting for planner to reach a cancellation point...");
+        const bool wasAlreadyRequested =
+            m_cancelRequested->exchange(true, std::memory_order_relaxed);
+        if (!wasAlreadyRequested)
+        {
+            AppendLog("Stop requested. Waiting for planner to reach a cancellation point...");
+        }
+        else
+        {
+            AppendLog("Stop already requested; still waiting for current blocking step to return...");
+        }
     }
 }
 

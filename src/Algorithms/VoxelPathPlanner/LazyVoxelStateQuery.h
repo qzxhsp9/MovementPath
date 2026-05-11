@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <cstddef>
+#include <functional>
 #include <limits>
 #include <unordered_map>
 #include <unordered_set>
@@ -33,7 +34,8 @@ public:
         const std::vector<MeshTriangle>* triangles,
         const TriangleSpatialHash* spatialHash,
         const VoxelMeshBuildOptions& buildOptions,
-        double timeBudgetMs);
+        double timeBudgetMs,
+        const std::function<bool()>& shouldCancel = nullptr);
 
     void StartBudget();
 
@@ -81,6 +83,7 @@ private:
     };
 
     bool IsConfigured() const;
+    bool IsCancelled() const;
     bool IsBudgetExpired() const;
     void ApplyRecordToSpace(
         VoxelSpace& space,
@@ -104,6 +107,7 @@ private:
     const TriangleSpatialHash* m_spatialHash = nullptr;
     VoxelMeshBuildOptions m_buildOptions;
     double m_timeBudgetMs = 0.0;
+    std::function<bool()> m_shouldCancel;
     bool m_timedOut = false;
     std::chrono::steady_clock::time_point m_startTime;
     LazyVoxelStateQueryStats m_stats;

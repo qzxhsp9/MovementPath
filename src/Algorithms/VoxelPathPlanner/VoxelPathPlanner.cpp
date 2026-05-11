@@ -820,7 +820,8 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                 scenario.shape,
                 meshBuildOptions.meshDeflection,
                 meshBuildOptions.angularDeflection,
-                triangles))
+                triangles,
+                options.runOptions.shouldCancel))
         {
             if (options.runOptions.verbose)
             {
@@ -866,7 +867,10 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
     {
         ScopedTimer timer(profile.spatialIndexBuildMs);
 
-        if (!spatialHash.Build(triangles, spatialHashOptions))
+        if (!spatialHash.Build(
+                triangles,
+                spatialHashOptions,
+                options.runOptions.shouldCancel))
         {
             if (options.runOptions.verbose)
             {
@@ -945,7 +949,8 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                     &triangles,
                     &spatialHash,
                     meshBuildOptions,
-                    options.lazyBuildOptions.timeBudgetMs))
+                    options.lazyBuildOptions.timeBudgetMs,
+                    options.runOptions.shouldCancel))
             {
                 profile.lazyFallbackTriggered = true;
                 profile.lazyFallbackReason = "failed to configure lazy query";

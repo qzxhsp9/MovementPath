@@ -83,12 +83,14 @@ bool LazyVoxelStateQuery::Configure(
     const std::vector<MeshTriangle>* triangles,
     const TriangleSpatialHash* spatialHash,
     const VoxelMeshBuildOptions& buildOptions,
-    double timeBudgetMs)
+    double timeBudgetMs,
+    const std::function<bool()>& shouldCancel)
 {
     m_triangles = triangles;
     m_spatialHash = spatialHash;
     m_buildOptions = buildOptions;
     m_timeBudgetMs = timeBudgetMs;
+    m_shouldCancel = shouldCancel;
     m_timedOut = false;
     m_stats = LazyVoxelStateQueryStats();
     m_voxelCache.clear();
@@ -110,6 +112,11 @@ bool LazyVoxelStateQuery::IsConfigured() const
         m_spatialHash != nullptr &&
         m_spatialHash->IsValid() &&
         m_buildOptions.voxelSize > 0.0;
+}
+
+bool LazyVoxelStateQuery::IsCancelled() const
+{
+    return m_shouldCancel && m_shouldCancel();
 }
 
 bool LazyVoxelStateQuery::IsBudgetExpired() const
@@ -164,7 +171,10 @@ void LazyVoxelStateQuery::EnsureVoxel(
 {
     ++m_stats.ensureCallCount;
 
-    if (!IsConfigured() || m_timedOut || !space.IsInsideSearchBounds(index))
+    if (!IsConfigured() ||
+        m_timedOut ||
+        IsCancelled() ||
+        !space.IsInsideSearchBounds(index))
     {
         return;
     }
@@ -212,6 +222,11 @@ void LazyVoxelStateQuery::EnsureVoxel(
 
     for (int triangleId : candidateTriangleIds)
     {
+        if (IsCancelled())
+        {
+            return;
+        }
+
         if (IsBudgetExpired())
         {
             m_timedOut = true;
@@ -355,6 +370,11 @@ void LazyVoxelStateQuery::EnsureTriangleIntersections(
         {
             for (int z = minIndex.z; z <= maxIndex.z; ++z)
             {
+                if (IsCancelled())
+                {
+                    return;
+                }
+
                 if (IsBudgetExpired())
                 {
                     m_timedOut = true;

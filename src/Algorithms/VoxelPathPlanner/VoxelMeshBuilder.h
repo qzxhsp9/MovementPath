@@ -76,7 +76,8 @@ class TriangleSpatialHash
 public:
     bool Build(
         const std::vector<MeshTriangle>& triangles,
-        const TriangleSpatialHashOptions& options);
+        const TriangleSpatialHashOptions& options,
+        const std::function<bool()>& shouldCancel = nullptr);
 
     bool IsValid() const;
 
@@ -231,7 +232,8 @@ public:
         const TopoDS_Shape& shape,
         double deflection,
         double angularDeflection,
-        std::vector<MeshTriangle>& outTriangles);
+        std::vector<MeshTriangle>& outTriangles,
+        const std::function<bool()>& shouldCancel = nullptr);
 
     static VoxelMeshBuildResult BuildVoxelSpaceFromShapeMesh(
         const TopoDS_Shape& shape,
