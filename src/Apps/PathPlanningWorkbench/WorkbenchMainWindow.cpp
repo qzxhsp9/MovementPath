@@ -18,6 +18,7 @@
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QShortcut>
+#include <QSettings>
 #include <QSignalBlocker>
 #include <QSplitter>
 #include <QSpinBox>
@@ -34,6 +35,10 @@ namespace path_planning_workbench
 {
 namespace
 {
+constexpr const char* kSettingsOrganization = "MovementPath";
+constexpr const char* kSettingsApplication = "PathPlanningWorkbench";
+constexpr const char* kLastModelDirectoryKey = "import/lastModelDirectory";
+
 QDoubleSpinBox* MakeCoordinateSpin(double value = 0.0)
 {
     QDoubleSpinBox* spin = new QDoubleSpinBox();
@@ -443,11 +448,22 @@ void WorkbenchMainWindow::BuildUi()
 void WorkbenchMainWindow::ImportModel()
 {
     QString startDir;
-#ifdef MOVEMENTPATH_WORKBENCH_DATA_DIR
-    const QString dataDir = QString::fromUtf8(MOVEMENTPATH_WORKBENCH_DATA_DIR);
-    if (QDir(dataDir).exists())
+    QSettings settings(kSettingsOrganization, kSettingsApplication);
+    const QString cachedModelDir =
+        settings.value(kLastModelDirectoryKey).toString();
+    if (QDir(cachedModelDir).exists())
     {
-        startDir = QFileInfo(dataDir).absoluteFilePath();
+        startDir = QFileInfo(cachedModelDir).absoluteFilePath();
+    }
+
+#ifdef MOVEMENTPATH_WORKBENCH_DATA_DIR
+    if (startDir.isEmpty())
+    {
+        const QString dataDir = QString::fromUtf8(MOVEMENTPATH_WORKBENCH_DATA_DIR);
+        if (QDir(dataDir).exists())
+        {
+            startDir = QFileInfo(dataDir).absoluteFilePath();
+        }
     }
 #endif
 
@@ -461,6 +477,10 @@ void WorkbenchMainWindow::ImportModel()
     {
         return;
     }
+
+    settings.setValue(
+        kLastModelDirectoryKey,
+        QFileInfo(path).absolutePath());
 
     ImportedModel model;
     QString error;
