@@ -19,9 +19,8 @@ struct VoxelRestrictedHalfSpace
 
 enum class VoxelAStarSearchMode
 {
-    // 普通避障模式：
-    // Free 可走，Occupied / ClearanceBand 不走。
-    // 后续如果需要，也可以改成 Free + ClearanceBand 可走。
+    // Standard free-space mode:
+    // Free and ClearanceBand are equivalent traversable states.
     FreeSpace,
 
     // 安全距离层模式：
@@ -98,7 +97,7 @@ public:
 
         if (mode == VoxelAStarSearchMode::FreeSpace)
         {
-            return state != VoxelState::Occupied;
+            return IsStateFreeSpaceWalkable(state);
         }
 
         if (mode == VoxelAStarSearchMode::ClearanceBand)
@@ -107,6 +106,15 @@ public:
         }
 
         return false;
+    }
+
+    static bool IsStateFreeSpaceWalkable(VoxelState state)
+    {
+        return state == VoxelState::Free ||
+            state == VoxelState::ClearanceBand ||
+            state == VoxelState::Start ||
+            state == VoxelState::Goal ||
+            state == VoxelState::Path;
     }
 
     static bool IsIndexWalkable(

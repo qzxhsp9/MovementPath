@@ -139,7 +139,8 @@ bool IsIndexCollisionFree(
         return false;
     }
 
-    return space.GetCellState(index) != VoxelState::Occupied;
+    return VoxelWalkability::IsStateFreeSpaceWalkable(
+        space.GetCellState(index));
 }
 
 bool IsLineCollisionFree(

@@ -388,6 +388,34 @@ bool TestRestrictedHalfSpaceCanBlockSearch(
 
     return ok;
 }
+
+bool TestFreeSpaceTreatsFreeAndClearanceBandEqually()
+{
+    bool ok = true;
+
+    ok &= Expect(
+        VoxelWalkability::IsStateWalkable(
+            VoxelState::Free,
+            VoxelAStarSearchMode::FreeSpace),
+        "FreeSpace should allow Free voxels");
+    ok &= Expect(
+        VoxelWalkability::IsStateWalkable(
+            VoxelState::ClearanceBand,
+            VoxelAStarSearchMode::FreeSpace),
+        "FreeSpace should allow ClearanceBand voxels");
+    ok &= Expect(
+        !VoxelWalkability::IsStateWalkable(
+            VoxelState::Occupied,
+            VoxelAStarSearchMode::FreeSpace),
+        "FreeSpace should block Occupied voxels");
+    ok &= Expect(
+        !VoxelWalkability::IsStateWalkable(
+            VoxelState::Free,
+            VoxelAStarSearchMode::ClearanceBand),
+        "ClearanceBand mode should still reject Free voxels");
+
+    return ok;
+}
 }
 
 int main()
@@ -405,6 +433,7 @@ int main()
     ok &= TestPlannerLazyPathExport(boxScenario);
     ok &= TestBrepScenarioHelpersHandleMissingFile();
     ok &= TestRestrictedHalfSpaceCanBlockSearch(boxScenario);
+    ok &= TestFreeSpaceTreatsFreeAndClearanceBandEqually();
 
     return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }
