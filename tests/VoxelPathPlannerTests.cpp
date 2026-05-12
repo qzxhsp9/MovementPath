@@ -364,6 +364,30 @@ bool TestBrepScenarioHelpersHandleMissingFile()
 
     return ok;
 }
+
+bool TestRestrictedHalfSpaceCanBlockSearch(
+    const VoxelPlanningScenario& scenario)
+{
+    VoxelPathPlannerOptions options = MakeSmokeOptions();
+    VoxelRestrictedHalfSpace halfSpace;
+    halfSpace.point = Vec(0.0, 0.0, 0.0);
+    halfSpace.normal = Vec(1.0, 0.0, 0.0);
+    options.restrictedHalfSpaces.push_back(halfSpace);
+
+    const VoxelPathPlannerResult result =
+        VoxelPathPlanner::Plan(scenario, options);
+
+    bool ok = true;
+    ok &= Expect(
+        !result.success,
+        "restricted half-space should block a path whose goal is inside it");
+    ok &= Expect(
+        result.astarResult.failReason == VoxelAStarFailReason::SnapGoalFailed ||
+            result.astarResult.failReason == VoxelAStarFailReason::OpenSetEmpty,
+        "restricted half-space failure should be reported by A*");
+
+    return ok;
+}
 }
 
 int main()
@@ -380,6 +404,7 @@ int main()
     ok &= TestPlannerLazyCostRegressionFallback(boxScenario);
     ok &= TestPlannerLazyPathExport(boxScenario);
     ok &= TestBrepScenarioHelpersHandleMissingFile();
+    ok &= TestRestrictedHalfSpaceCanBlockSearch(boxScenario);
 
     return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }

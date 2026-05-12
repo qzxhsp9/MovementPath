@@ -123,9 +123,18 @@ int LocalSign(int value)
 
 bool IsIndexCollisionFree(
     const VoxelSpace& space,
-    const VoxelIndex& index)
+    const VoxelIndex& index,
+    const std::vector<VoxelRestrictedHalfSpace>& restrictedHalfSpaces)
 {
     if (!space.IsInsideSearchBounds(index))
+    {
+        return false;
+    }
+
+    if (VoxelWalkability::IsIndexRestricted(
+            space,
+            index,
+            restrictedHalfSpaces))
     {
         return false;
     }
@@ -136,10 +145,11 @@ bool IsIndexCollisionFree(
 bool IsLineCollisionFree(
     const VoxelSpace& space,
     const VoxelIndex& from,
-    const VoxelIndex& to)
+    const VoxelIndex& to,
+    const std::vector<VoxelRestrictedHalfSpace>& restrictedHalfSpaces)
 {
-    if (!IsIndexCollisionFree(space, from) ||
-        !IsIndexCollisionFree(space, to))
+    if (!IsIndexCollisionFree(space, from, restrictedHalfSpaces) ||
+        !IsIndexCollisionFree(space, to, restrictedHalfSpaces))
     {
         return false;
     }
@@ -264,9 +274,164 @@ bool IsLineCollisionFree(
             tMaxZ += tDeltaZ;
         }
 
-        if (!IsIndexCollisionFree(space, current))
+        if (!IsIndexCollisionFree(space, current, restrictedHalfSpaces))
         {
             return false;
+        }
+    }
+
+    return true;
+}
+
+double DirectionChangeSeverity(
+    const Vec& previous,
+    const Vec& current,
+    const Vec& next)
+{
+    const Vec incoming = current - previous;
+    const Vec outgoing = next - current;
+    const double incomingLength = std::sqrt(incoming.SquareMagnitude());
+    const double outgoingLength = std::sqrt(outgoing.SquareMagnitude());
+
+    if (incomingLength <= kEpsilon || outgoingLength <= kEpsilon)
+    {
+        return 0.0;
+    }
+
+    const double cosTheta = std::clamp(
+        incoming.Dot(outgoing) / (incomingLength * outgoingLength),
+        -1.0,
+        1.0);
+    return 1.0 - cosTheta;
+}
+
+double MaxDirectionChangeSeverity(const std::vector<Vec>& path)
+{
+    double maxSeverity = 0.0;
+
+    for (std::size_t i = 1; i + 1 < path.size(); ++i)
+    {
+        maxSeverity = std::max(
+            maxSeverity,
+            DirectionChangeSeverity(path[i - 1], path[i], path[i + 1]));
+    }
+
+    return maxSeverity;
+}
+
+std::vector<Vec> BuildCatmullRomSamples(
+    const std::vector<Vec>& controlPath,
+    const VoxelPathOptimizeOptions& options)
+{
+    std::vector<Vec> sampled;
+    sampled.push_back(controlPath.front());
+
+    for (std::size_t i = 0; i + 1 < controlPath.size(); ++i)
+    {
+        const Vec& p0 = controlPath[i == 0 ? i : i - 1];
+        const Vec& p1 = controlPath[i];
+        const Vec& p2 = controlPath[i + 1];
+        const Vec& p3 =
+            controlPath[i + 2 < controlPath.size() ? i + 2 : i + 1];
+        const std::size_t sampleCount =
+            SmoothSegmentSampleCount(p1, p2, options);
+
+        for (std::size_t sample = 1; sample <= sampleCount; ++sample)
+        {
+            const double t =
+                static_cast<double>(sample) / static_cast<double>(sampleCount);
+            sampled.push_back(CentripetalCatmullRom(p0, p1, p2, p3, t));
+        }
+    }
+
+    sampled.front() = controlPath.front();
+    sampled.back() = controlPath.back();
+    return sampled;
+}
+
+std::vector<Vec> BuildChaikinSamples(
+    const std::vector<Vec>& controlPath,
+    int iterationCount)
+{
+    std::vector<Vec> smoothed = controlPath;
+    constexpr double cutRatio = 0.25;
+
+    for (int iteration = 0; iteration < iterationCount; ++iteration)
+    {
+        if (smoothed.size() <= 2)
+        {
+            break;
+        }
+
+        std::vector<Vec> next;
+        next.reserve(smoothed.size() * 2);
+        next.push_back(smoothed.front());
+
+        for (std::size_t i = 0; i + 1 < smoothed.size(); ++i)
+        {
+            const Vec& p0 = smoothed[i];
+            const Vec& p1 = smoothed[i + 1];
+            next.push_back(p0 * (1.0 - cutRatio) + p1 * cutRatio);
+            next.push_back(p0 * cutRatio + p1 * (1.0 - cutRatio));
+        }
+
+        next.push_back(smoothed.back());
+        smoothed = std::move(next);
+    }
+
+    return smoothed;
+}
+
+bool ValidateSmoothedPath(
+    const VoxelSpace& space,
+    const std::vector<Vec>& controlPath,
+    const VoxelPathOptimizeOptions& options,
+    const std::vector<Vec>& candidate,
+    int& lineCheckCount)
+{
+    if (candidate.size() < 2)
+    {
+        return false;
+    }
+
+    for (std::size_t i = 0; i < candidate.size(); ++i)
+    {
+        if (options.maxCurveDeviation > 0.0 &&
+            DistancePointToPolyline(candidate[i], controlPath) >
+                options.maxCurveDeviation)
+        {
+            return false;
+        }
+
+        if (VoxelWalkability::IsPointRestricted(
+                candidate[i],
+                options.restrictedHalfSpaces))
+        {
+            return false;
+        }
+
+        const VoxelIndex index = space.WorldToIndex(candidate[i]);
+        if (!IsIndexCollisionFree(
+                space,
+                index,
+                options.restrictedHalfSpaces))
+        {
+            return false;
+        }
+
+        if (i > 0)
+        {
+            ++lineCheckCount;
+
+            const VoxelIndex prevIndex = space.WorldToIndex(candidate[i - 1]);
+            if (!IsLineCollisionFree(
+                    space,
+                    prevIndex,
+                    index,
+                    options.restrictedHalfSpaces))
+            {
+                return false;
+            }
         }
     }
 
@@ -333,7 +498,8 @@ bool IsIndexWalkableForLineWithMinDistance(
         space,
         index,
         options.searchMode,
-        options.minTravelDistanceToSurface);
+        options.minTravelDistanceToSurface,
+        options.restrictedHalfSpaces);
 }
 }
 
@@ -403,58 +569,50 @@ std::vector<Vec> VoxelPathOptimizer::SmoothPointPath(
         return controlPath;
     }
 
-    std::vector<Vec> sampled;
-    sampled.push_back(controlPath.front());
+    std::vector<std::vector<Vec>> candidates;
+    candidates.push_back(BuildCatmullRomSamples(controlPath, options));
 
-    for (std::size_t i = 0; i + 1 < controlPath.size(); ++i)
+    for (int iterations = 5; iterations >= 1; --iterations)
     {
-        const Vec& p0 = controlPath[i == 0 ? i : i - 1];
-        const Vec& p1 = controlPath[i];
-        const Vec& p2 = controlPath[i + 1];
-        const Vec& p3 =
-            controlPath[i + 2 < controlPath.size() ? i + 2 : i + 1];
-        const std::size_t sampleCount =
-            SmoothSegmentSampleCount(p1, p2, options);
+        candidates.push_back(BuildChaikinSamples(controlPath, iterations));
+    }
 
-        for (std::size_t sample = 1; sample <= sampleCount; ++sample)
+    std::vector<Vec> best;
+    double bestSeverity = std::numeric_limits<double>::max();
+    int bestLineCheckCount = 0;
+
+    for (const std::vector<Vec>& candidate : candidates)
+    {
+        int candidateLineCheckCount = 0;
+        if (!ValidateSmoothedPath(
+                space,
+                controlPath,
+                options,
+                candidate,
+                candidateLineCheckCount))
         {
-            const double t =
-                static_cast<double>(sample) / static_cast<double>(sampleCount);
-            sampled.push_back(CentripetalCatmullRom(p0, p1, p2, p3, t));
+            continue;
+        }
+
+        const double severity = MaxDirectionChangeSeverity(candidate);
+        if (severity < bestSeverity ||
+            (std::abs(severity - bestSeverity) <= 1.0e-9 &&
+                candidate.size() > best.size()))
+        {
+            best = candidate;
+            bestSeverity = severity;
+            bestLineCheckCount = candidateLineCheckCount;
         }
     }
 
-    sampled.front() = controlPath.front();
-    sampled.back() = controlPath.back();
+    lineCheckCount = bestLineCheckCount;
 
-    for (std::size_t i = 0; i < sampled.size(); ++i)
+    if (!best.empty())
     {
-        if (options.maxCurveDeviation > 0.0 &&
-            DistancePointToPolyline(sampled[i], controlPath) >
-                options.maxCurveDeviation)
-        {
-            return std::vector<Vec>();
-        }
-
-        const VoxelIndex index = space.WorldToIndex(sampled[i]);
-        if (!IsIndexCollisionFree(space, index))
-        {
-            return std::vector<Vec>();
-        }
-
-        if (i > 0)
-        {
-            ++lineCheckCount;
-
-            const VoxelIndex prevIndex = space.WorldToIndex(sampled[i - 1]);
-            if (!IsLineCollisionFree(space, prevIndex, index))
-            {
-                return std::vector<Vec>();
-            }
-        }
+        return best;
     }
 
-    return sampled;
+    return std::vector<Vec>();
 }
 
 // ============================================================

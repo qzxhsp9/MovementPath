@@ -46,6 +46,48 @@ bool IsCancelled(const VoxelPathPlannerOptions& options)
         options.runOptions.shouldCancel();
 }
 
+bool IsFiniteVec(const Vec& value)
+{
+    return std::isfinite(value.x) &&
+        std::isfinite(value.y) &&
+        std::isfinite(value.z);
+}
+
+bool AreValidRestrictedHalfSpaces(
+    const std::vector<VoxelRestrictedHalfSpace>& halfSpaces)
+{
+    for (const VoxelRestrictedHalfSpace& halfSpace : halfSpaces)
+    {
+        if (!IsFiniteVec(halfSpace.point) ||
+            !IsFiniteVec(halfSpace.normal) ||
+            halfSpace.normal.SquareMagnitude() <= 1.0e-20)
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool PrepareRestrictedHalfSpaces(
+    const std::vector<VoxelRestrictedHalfSpace>& input,
+    std::vector<VoxelRestrictedHalfSpace>& output)
+{
+    output = input;
+
+    if (!AreValidRestrictedHalfSpaces(output))
+    {
+        return false;
+    }
+
+    for (VoxelRestrictedHalfSpace& halfSpace : output)
+    {
+        VoxelWalkability::CachePointNormalDot(halfSpace);
+    }
+
+    return true;
+}
+
 void CollectVoxelOverlayCenters(
     const VoxelSpace& voxelSpace,
     std::size_t maxPerState,
@@ -801,6 +843,18 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
     VoxelMeshBuildOptions meshBuildOptions = options.meshBuildOptions;
     meshBuildOptions.shouldCancel = options.runOptions.shouldCancel;
 
+    std::vector<VoxelRestrictedHalfSpace> restrictedHalfSpaces;
+    if (!PrepareRestrictedHalfSpaces(
+            options.restrictedHalfSpaces,
+            restrictedHalfSpaces))
+    {
+        if (options.runOptions.verbose)
+        {
+            std::cout << "Invalid restricted half-space options." << std::endl;
+        }
+        return result;
+    }
+
     std::vector<MeshTriangle> triangles;
 
     if (IsCancelled(options))
@@ -898,6 +952,7 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
 
     VoxelAStarOptions astarOptions = options.astarOptions;
     astarOptions.shouldCancel = options.runOptions.shouldCancel;
+    astarOptions.restrictedHalfSpaces = restrictedHalfSpaces;
     astarOptions.minTravelDistanceToSurface =
         astarOptions.searchMode == VoxelAStarSearchMode::ClearanceBand ?
             options.meshBuildOptions.clearance :
@@ -1046,6 +1101,7 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                             VoxelAStarSearchMode::ClearanceBand ?
                             options.meshBuildOptions.clearance :
                             0.0;
+                    optOptions.restrictedHalfSpaces = restrictedHalfSpaces;
                     optOptions.removeCollinear = true;
                     optOptions.enableLineOfSightShortcut = true;
                     optOptions.maxShortcutLookAhead =
@@ -1418,6 +1474,7 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
         astarOptions.searchMode == VoxelAStarSearchMode::ClearanceBand ?
             options.meshBuildOptions.clearance :
             0.0;
+    optOptions.restrictedHalfSpaces = restrictedHalfSpaces;
     optOptions.removeCollinear = true;
     optOptions.enableLineOfSightShortcut = true;
     optOptions.maxShortcutLookAhead = options.optimizerMaxShortcutLookAhead;

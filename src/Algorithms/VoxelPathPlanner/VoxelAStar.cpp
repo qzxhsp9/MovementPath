@@ -69,7 +69,8 @@ bool VoxelAStar::FindNearestWalkableIndex(
             space,
             seed,
             options.searchMode,
-            options.minTravelDistanceToSurface))
+            options.minTravelDistanceToSurface,
+            options.restrictedHalfSpaces))
     {
         outIndex = seed;
         return true;
@@ -111,7 +112,8 @@ bool VoxelAStar::FindNearestWalkableIndex(
                         space,
                         index,
                         options.searchMode,
-                        options.minTravelDistanceToSurface))
+                        options.minTravelDistanceToSurface,
+                        options.restrictedHalfSpaces))
                     {
                         continue;
                     }
@@ -168,6 +170,34 @@ bool VoxelAStar::HasDirectionChanged(
     const int dz2 = next.z - curr.z;
 
     return dx1 != dx2 || dy1 != dy2 || dz1 != dz2;
+}
+
+double VoxelAStar::DirectionChangeSeverity(
+    const VoxelIndex& prev,
+    const VoxelIndex& curr,
+    const VoxelIndex& next)
+{
+    const double dx1 = static_cast<double>(curr.x - prev.x);
+    const double dy1 = static_cast<double>(curr.y - prev.y);
+    const double dz1 = static_cast<double>(curr.z - prev.z);
+
+    const double dx2 = static_cast<double>(next.x - curr.x);
+    const double dy2 = static_cast<double>(next.y - curr.y);
+    const double dz2 = static_cast<double>(next.z - curr.z);
+
+    const double len1 = std::sqrt(dx1 * dx1 + dy1 * dy1 + dz1 * dz1);
+    const double len2 = std::sqrt(dx2 * dx2 + dy2 * dy2 + dz2 * dz2);
+
+    if (len1 <= 1.0e-12 || len2 <= 1.0e-12)
+    {
+        return 0.0;
+    }
+
+    const double cosTheta = std::clamp(
+        (dx1 * dx2 + dy1 * dy2 + dz1 * dz2) / (len1 * len2),
+        -1.0,
+        1.0);
+    return 1.0 - cosTheta;
 }
 
 // ============================================================
@@ -327,7 +357,8 @@ bool VoxelAStar::FindNearestWalkableIndexWithDirection(
                         space,
                         index,
                         options.searchMode,
-                        options.minTravelDistanceToSurface))
+                        options.minTravelDistanceToSurface,
+                        options.restrictedHalfSpaces))
                     {
                         continue;
                     }
@@ -443,7 +474,8 @@ bool VoxelAStar::FindFirstWalkableIndexAlongDirection(
             space,
             index,
             options.searchMode,
-            options.minTravelDistanceToSurface))
+            options.minTravelDistanceToSurface,
+            options.restrictedHalfSpaces))
         {
             outIndex = index;
             return true;
@@ -591,7 +623,8 @@ VoxelAStarResult VoxelAStar::Search(
             space,
             startIndex,
             options.searchMode,
-            options.minTravelDistanceToSurface))
+            options.minTravelDistanceToSurface,
+            options.restrictedHalfSpaces))
         {
             result.failReason = VoxelAStarFailReason::StartNotWalkable;
             return result;
@@ -603,7 +636,8 @@ VoxelAStarResult VoxelAStar::Search(
             space,
             goalIndex,
             options.searchMode,
-            options.minTravelDistanceToSurface))
+            options.minTravelDistanceToSurface,
+            options.restrictedHalfSpaces))
         {
             result.failReason = VoxelAStarFailReason::GoalNotWalkable;
             return result;
@@ -737,7 +771,8 @@ VoxelAStarResult VoxelAStar::Search(
                     space,
                     neighborIndex,
                     options.searchMode,
-                    options.minTravelDistanceToSurface))
+                    options.minTravelDistanceToSurface,
+                    options.restrictedHalfSpaces))
                 {
                     continue;
                 }
@@ -761,7 +796,11 @@ VoxelAStarResult VoxelAStar::Search(
                     openNode.index,
                     neighborIndex))
                 {
-                    moveCost += options.turnPenalty;
+                    moveCost += options.turnPenalty *
+                        DirectionChangeSeverity(
+                            currentCell->parent,
+                            openNode.index,
+                            neighborIndex);
                 }
             }
 

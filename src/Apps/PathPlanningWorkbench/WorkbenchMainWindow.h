@@ -11,6 +11,7 @@
 
 #include <atomic>
 #include <memory>
+#include <vector>
 
 class QCheckBox;
 class QComboBox;
@@ -19,6 +20,7 @@ class QLabel;
 class QPushButton;
 class QPlainTextEdit;
 class QSpinBox;
+class QVBoxLayout;
 
 namespace path_planning_workbench
 {
@@ -47,6 +49,12 @@ enum class PointPickMode
     GoalPoint
 };
 
+struct RestrictedRegion
+{
+    Vec point;
+    Vec normal = Vec(0.0, 0.0, 1.0);
+};
+
 class WorkbenchMainWindow final : public QMainWindow
 {
 public:
@@ -68,6 +76,11 @@ private:
     void CycleStartDirection();
     void CycleGoalDirection();
     void AppendLog(const QString& line);
+    void NotifyPlanningInputChanged();
+    void AddRestrictedRegion();
+    void EditRestrictedRegion(std::size_t index);
+    void RemoveRestrictedRegion(std::size_t index);
+    void RefreshRestrictedRegionList();
     void SetDirectionSpins(
         QDoubleSpinBox* x,
         QDoubleSpinBox* y,
@@ -93,6 +106,7 @@ protected:
 
     VoxelPathPlannerOptions MakeVoxelOptions(
         PlannerMethod method) const;
+    std::vector<VoxelRestrictedHalfSpace> ReadRestrictedHalfSpaces() const;
 
     OcctViewWidget* m_view = nullptr;
     QPlainTextEdit* m_log = nullptr;
@@ -108,6 +122,8 @@ protected:
     QComboBox* m_searchModeCombo = nullptr;
     QComboBox* m_neighborTypeCombo = nullptr;
     QCheckBox* m_smoothPathCheck = nullptr;
+    QCheckBox* m_enableRestrictedRegionsCheck = nullptr;
+    QVBoxLayout* m_restrictedRegionListLayout = nullptr;
 
     QDoubleSpinBox* m_linearDeflectionSpin = nullptr;
     QDoubleSpinBox* m_angularDeflectionSpin = nullptr;
@@ -129,6 +145,7 @@ protected:
     QDoubleSpinBox* m_goalDirX = nullptr;
     QDoubleSpinBox* m_goalDirY = nullptr;
     QDoubleSpinBox* m_goalDirZ = nullptr;
+    std::vector<RestrictedRegion> m_restrictedRegions;
 
     ImportedModel m_model;
     PointPickMode m_pickMode = PointPickMode::None;

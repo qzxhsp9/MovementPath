@@ -27,6 +27,8 @@ struct VoxelAStarOptions
     // cells that are technically walkable but visually/physically too close.
     double minTravelDistanceToSurface = 0.0;
 
+    std::vector<VoxelRestrictedHalfSpace> restrictedHalfSpaces;
+
     // 起点/终点若不在可走体素上，是否吸附到最近可走体素
     bool snapStartGoalToWalkable = true;
 
@@ -130,6 +132,11 @@ private:
         const VoxelIndex& b);
 
     static bool HasDirectionChanged(
+        const VoxelIndex& prev,
+        const VoxelIndex& curr,
+        const VoxelIndex& next);
+
+    static double DirectionChangeSeverity(
         const VoxelIndex& prev,
         const VoxelIndex& curr,
         const VoxelIndex& next);

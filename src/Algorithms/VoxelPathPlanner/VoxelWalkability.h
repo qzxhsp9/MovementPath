@@ -2,6 +2,17 @@
 
 #include "VoxelSpace.h"
 
+#include <cmath>
+#include <limits>
+#include <vector>
+
+struct VoxelRestrictedHalfSpace
+{
+    Vec point;
+    Vec normal;
+    double pointNormalDot = std::numeric_limits<double>::quiet_NaN();
+};
+
 // ============================================================
 // A* 搜索模式
 // ============================================================
@@ -26,6 +37,54 @@ enum class VoxelAStarSearchMode
 class VoxelWalkability
 {
 public:
+    static double ComputePointNormalDot(
+        const VoxelRestrictedHalfSpace& halfSpace)
+    {
+        return halfSpace.point.Dot(halfSpace.normal);
+    }
+
+    static void CachePointNormalDot(
+        VoxelRestrictedHalfSpace& halfSpace)
+    {
+        halfSpace.pointNormalDot = ComputePointNormalDot(halfSpace);
+    }
+
+    static bool IsPointInsideRestrictedHalfSpace(
+        const Vec& point,
+        const VoxelRestrictedHalfSpace& halfSpace)
+    {
+        const double pointNormalDot =
+            std::isfinite(halfSpace.pointNormalDot) ?
+                halfSpace.pointNormalDot :
+                ComputePointNormalDot(halfSpace);
+        return point.Dot(halfSpace.normal) > pointNormalDot;
+    }
+
+    static bool IsPointRestricted(
+        const Vec& point,
+        const std::vector<VoxelRestrictedHalfSpace>& restrictedHalfSpaces)
+    {
+        for (const VoxelRestrictedHalfSpace& halfSpace : restrictedHalfSpaces)
+        {
+            if (IsPointInsideRestrictedHalfSpace(point, halfSpace))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    static bool IsIndexRestricted(
+        const VoxelSpace& space,
+        const VoxelIndex& index,
+        const std::vector<VoxelRestrictedHalfSpace>& restrictedHalfSpaces)
+    {
+        return IsPointRestricted(
+            space.IndexToCenter(index),
+            restrictedHalfSpaces);
+    }
+
     static bool IsStateWalkable(
         VoxelState state,
         VoxelAStarSearchMode mode)
@@ -67,8 +126,14 @@ public:
         const VoxelSpace& space,
         const VoxelIndex& index,
         VoxelAStarSearchMode mode,
-        double minDistanceToSurface)
+        double minDistanceToSurface,
+        const std::vector<VoxelRestrictedHalfSpace>& restrictedHalfSpaces = {})
     {
+        if (IsIndexRestricted(space, index, restrictedHalfSpaces))
+        {
+            return false;
+        }
+
         if (!IsIndexWalkable(space, index, mode))
         {
             return false;

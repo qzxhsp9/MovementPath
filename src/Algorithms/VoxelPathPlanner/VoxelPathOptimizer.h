@@ -14,6 +14,7 @@ struct VoxelPathOptimizeOptions
 {
     VoxelAStarSearchMode searchMode = VoxelAStarSearchMode::ClearanceBand;
     double minTravelDistanceToSurface = 0.0;
+    std::vector<VoxelRestrictedHalfSpace> restrictedHalfSpaces;
 
     // 直线检测时是否允许经过 Start / Goal / Path
     // 通常应为 true。

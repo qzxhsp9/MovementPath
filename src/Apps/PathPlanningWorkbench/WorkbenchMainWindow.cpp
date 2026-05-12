@@ -14,6 +14,7 @@
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QLayoutItem>
 #include <QLineEdit>
 #include <QPlainTextEdit>
 #include <QPushButton>
@@ -22,7 +23,9 @@
 #include <QSignalBlocker>
 #include <QSplitter>
 #include <QSpinBox>
+#include <QStyle>
 #include <QVBoxLayout>
+#include <QToolButton>
 #include <QApplication>
 #include <QtConcurrent/QtConcurrentRun>
 
@@ -278,13 +281,18 @@ void WorkbenchMainWindow::BuildUi()
     m_displayModeCombo->addItem("Shaded");
     m_displayModeCombo->addItem("Wireframe");
     m_displayModeCombo->addItem("Mesh");
-    m_showKeyVoxelsCheck = new QCheckBox("Show key voxels");
-    m_showOccupiedVoxelsCheck = new QCheckBox("Show occupied voxels");
-    m_showClearanceVoxelsCheck = new QCheckBox("Show safety voxels");
+    m_showKeyVoxelsCheck = new QCheckBox("Key voxels");
+    m_showOccupiedVoxelsCheck = new QCheckBox("Occupied");
+    m_showClearanceVoxelsCheck = new QCheckBox("Safety");
+    QWidget* voxelDisplayOptions = new QWidget();
+    QHBoxLayout* voxelDisplayLayout = new QHBoxLayout(voxelDisplayOptions);
+    voxelDisplayLayout->setContentsMargins(0, 0, 0, 0);
+    voxelDisplayLayout->addWidget(m_showKeyVoxelsCheck);
+    voxelDisplayLayout->addWidget(m_showOccupiedVoxelsCheck);
+    voxelDisplayLayout->addWidget(m_showClearanceVoxelsCheck);
+    voxelDisplayLayout->addStretch(1);
     displayLayout->addRow("Mode", m_displayModeCombo);
-    displayLayout->addRow(m_showKeyVoxelsCheck);
-    displayLayout->addRow(m_showOccupiedVoxelsCheck);
-    displayLayout->addRow(m_showClearanceVoxelsCheck);
+    displayLayout->addRow("Voxels", voxelDisplayOptions);
     panelLayout->addWidget(displayGroup);
 
     QGroupBox* importGroup = new QGroupBox("Discretization");
@@ -327,6 +335,24 @@ void WorkbenchMainWindow::BuildUi()
     endpointLayout->addRow("Pick", pickWidget);
     panelLayout->addWidget(endpointGroup);
 
+    QGroupBox* restrictedGroup = new QGroupBox("Restricted Half-spaces");
+    QVBoxLayout* restrictedLayout = new QVBoxLayout(restrictedGroup);
+    QWidget* restrictedHeader = new QWidget(restrictedGroup);
+    QHBoxLayout* restrictedHeaderLayout = new QHBoxLayout(restrictedHeader);
+    restrictedHeaderLayout->setContentsMargins(0, 0, 0, 0);
+    m_enableRestrictedRegionsCheck = new QCheckBox("Enable regions", restrictedHeader);
+    QPushButton* addRestrictedRegionButton = new QPushButton("+", restrictedHeader);
+    addRestrictedRegionButton->setFixedWidth(32);
+    addRestrictedRegionButton->setToolTip("Add region");
+    restrictedHeaderLayout->addWidget(m_enableRestrictedRegionsCheck);
+    restrictedHeaderLayout->addStretch(1);
+    restrictedHeaderLayout->addWidget(addRestrictedRegionButton);
+    restrictedLayout->addWidget(restrictedHeader);
+    m_restrictedRegionListLayout = new QVBoxLayout();
+    m_restrictedRegionListLayout->setContentsMargins(0, 0, 0, 0);
+    restrictedLayout->addLayout(m_restrictedRegionListLayout);
+    panelLayout->addWidget(restrictedGroup);
+
     QGroupBox* plannerGroup = new QGroupBox("Planner");
     QFormLayout* plannerLayout = new QFormLayout(plannerGroup);
     m_plannerCombo = new QComboBox();
@@ -359,7 +385,7 @@ void WorkbenchMainWindow::BuildUi()
     m_neighborTypeCombo->addItem("26-face-edge-vertex");
     m_neighborTypeCombo->setCurrentIndex(2);
     m_smoothPathCheck = new QCheckBox("Smooth path");
-    m_smoothPathCheck->setChecked(false);
+    m_smoothPathCheck->setChecked(true);
     m_realtimeCheck = new QCheckBox("Realtime after input changes");
     plannerLayout->addRow("Method", m_plannerCombo);
     plannerLayout->addRow("Search", m_searchModeCombo);
@@ -400,6 +426,12 @@ void WorkbenchMainWindow::BuildUi()
     connect(vtkExportSettingsButton, &QPushButton::clicked, this, [this]() {
         OpenVtkExportSettings();
     });
+    connect(addRestrictedRegionButton, &QPushButton::clicked, this, [this]() {
+        AddRestrictedRegion();
+    });
+    connect(m_enableRestrictedRegionsCheck, &QCheckBox::toggled, this, [this]() {
+        NotifyPlanningInputChanged();
+    });
     QShortcut* resetViewShortcut =
         new QShortcut(QKeySequence(Qt::Key_Space), this);
     resetViewShortcut->setContext(Qt::WindowShortcut);
@@ -426,14 +458,6 @@ void WorkbenchMainWindow::BuildUi()
         ApplyPickedPoint(point);
     });
 
-    const auto endpointChanged = [this]() {
-        UpdateEndpointOverlay();
-        if (m_realtimeCheck->isChecked())
-        {
-            ComputePath();
-        }
-    };
-
     for (QDoubleSpinBox* spin : {
         m_startX, m_startY, m_startZ,
         m_startDirX, m_startDirY, m_startDirZ,
@@ -441,7 +465,176 @@ void WorkbenchMainWindow::BuildUi()
         m_goalDirX, m_goalDirY, m_goalDirZ})
     {
         connect(spin, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-            this, endpointChanged);
+            this, [this]() {
+                NotifyPlanningInputChanged();
+            });
+    }
+
+    RefreshRestrictedRegionList();
+}
+
+QString ToRestrictedRegionSummary(
+    const RestrictedRegion& region,
+    int index)
+{
+    return QString("Region %1  P(%2, %3, %4)  N(%5, %6, %7)")
+        .arg(index + 1)
+        .arg(region.point.x, 0, 'g', 4)
+        .arg(region.point.y, 0, 'g', 4)
+        .arg(region.point.z, 0, 'g', 4)
+        .arg(region.normal.x, 0, 'g', 4)
+        .arg(region.normal.y, 0, 'g', 4)
+        .arg(region.normal.z, 0, 'g', 4);
+}
+
+void WorkbenchMainWindow::NotifyPlanningInputChanged()
+{
+    UpdateEndpointOverlay();
+    if (m_realtimeCheck->isChecked())
+    {
+        ComputePath();
+    }
+}
+
+void WorkbenchMainWindow::AddRestrictedRegion()
+{
+    RestrictedRegion region;
+    m_restrictedRegions.push_back(region);
+    if (m_enableRestrictedRegionsCheck != nullptr)
+    {
+        m_enableRestrictedRegionsCheck->setChecked(true);
+    }
+    RefreshRestrictedRegionList();
+    NotifyPlanningInputChanged();
+}
+
+void WorkbenchMainWindow::EditRestrictedRegion(std::size_t index)
+{
+    if (index >= m_restrictedRegions.size())
+    {
+        return;
+    }
+
+    RestrictedRegion edited = m_restrictedRegions[index];
+    QDialog dialog(this);
+    dialog.setWindowTitle(QString("Edit Region %1").arg(index + 1));
+
+    QVBoxLayout* dialogLayout = new QVBoxLayout(&dialog);
+    QFormLayout* formLayout = new QFormLayout();
+    QDoubleSpinBox* pointX = nullptr;
+    QDoubleSpinBox* pointY = nullptr;
+    QDoubleSpinBox* pointZ = nullptr;
+    QDoubleSpinBox* normalX = nullptr;
+    QDoubleSpinBox* normalY = nullptr;
+    QDoubleSpinBox* normalZ = nullptr;
+
+    formLayout->addRow(
+        "Plane point",
+        MakeVectorEditor(
+            pointX,
+            pointY,
+            pointZ,
+            edited.point.x,
+            edited.point.y,
+            edited.point.z));
+    formLayout->addRow(
+        "Blocked normal",
+        MakeVectorEditor(
+            normalX,
+            normalY,
+            normalZ,
+            edited.normal.x,
+            edited.normal.y,
+            edited.normal.z));
+    dialogLayout->addLayout(formLayout);
+
+    QDialogButtonBox* buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
+        &dialog);
+    dialogLayout->addWidget(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+    if (dialog.exec() != QDialog::Accepted)
+    {
+        return;
+    }
+
+    edited.point = Vec(pointX->value(), pointY->value(), pointZ->value());
+    edited.normal = Vec(normalX->value(), normalY->value(), normalZ->value());
+    m_restrictedRegions[index] = edited;
+    RefreshRestrictedRegionList();
+    NotifyPlanningInputChanged();
+}
+
+void WorkbenchMainWindow::RemoveRestrictedRegion(std::size_t index)
+{
+    if (index >= m_restrictedRegions.size())
+    {
+        return;
+    }
+
+    m_restrictedRegions.erase(m_restrictedRegions.begin() + index);
+    RefreshRestrictedRegionList();
+    NotifyPlanningInputChanged();
+}
+
+void WorkbenchMainWindow::RefreshRestrictedRegionList()
+{
+    if (m_restrictedRegionListLayout == nullptr)
+    {
+        return;
+    }
+
+    if (m_enableRestrictedRegionsCheck != nullptr)
+    {
+        const bool hasRegions = !m_restrictedRegions.empty();
+        m_enableRestrictedRegionsCheck->setVisible(hasRegions);
+        if (!hasRegions)
+        {
+            QSignalBlocker blocker(m_enableRestrictedRegionsCheck);
+            m_enableRestrictedRegionsCheck->setChecked(false);
+        }
+    }
+
+    while (QLayoutItem* item = m_restrictedRegionListLayout->takeAt(0))
+    {
+        if (QWidget* widget = item->widget())
+        {
+            widget->deleteLater();
+        }
+        delete item;
+    }
+
+    for (std::size_t i = 0; i < m_restrictedRegions.size(); ++i)
+    {
+        QWidget* row = new QWidget();
+        QHBoxLayout* rowLayout = new QHBoxLayout(row);
+        rowLayout->setContentsMargins(0, 0, 0, 0);
+
+        QLabel* summary = new QLabel(
+            ToRestrictedRegionSummary(
+                m_restrictedRegions[i],
+                static_cast<int>(i)),
+            row);
+        summary->setTextInteractionFlags(Qt::TextSelectableByMouse);
+
+        QPushButton* editButton = new QPushButton("Edit", row);
+        QToolButton* removeButton = new QToolButton(row);
+        removeButton->setIcon(style()->standardIcon(QStyle::SP_TrashIcon));
+        removeButton->setToolTip("Remove region");
+
+        rowLayout->addWidget(summary, 1);
+        rowLayout->addWidget(editButton);
+        rowLayout->addWidget(removeButton);
+        m_restrictedRegionListLayout->addWidget(row);
+
+        connect(editButton, &QPushButton::clicked, this, [this, i]() {
+            EditRestrictedRegion(i);
+        });
+        connect(removeButton, &QToolButton::clicked, this, [this, i]() {
+            RemoveRestrictedRegion(i);
+        });
     }
 }
 
@@ -566,13 +759,16 @@ void WorkbenchMainWindow::ComputePath()
     const PlannerMethod method = ReadPlannerMethod();
 
     AppendLog("Preparing path computation...");
-    AppendLog(QString("Planner: %1, search=%2, neighbors=%3, voxelSize=%4, clearance=%5, snapRadius=%6, linearDeflection=%7, angularDeflection=%8")
+    const std::vector<VoxelRestrictedHalfSpace> restrictedHalfSpaces =
+        ReadRestrictedHalfSpaces();
+    AppendLog(QString("Planner: %1, search=%2, neighbors=%3, voxelSize=%4, clearance=%5, snapRadius=%6, restrictedRegions=%7, linearDeflection=%8, angularDeflection=%9")
         .arg(m_plannerCombo->currentText())
         .arg(m_searchModeCombo->currentText())
         .arg(m_neighborTypeCombo->currentText())
         .arg(m_voxelSizeSpin->value())
         .arg(m_clearanceSpin->value())
         .arg(m_snapRadiusSpin->value())
+        .arg(restrictedHalfSpaces.size())
         .arg(m_linearDeflectionSpin->value())
         .arg(m_angularDeflectionSpin->value()));
     QApplication::processEvents();
@@ -984,6 +1180,36 @@ PlannerMethod WorkbenchMainWindow::ReadPlannerMethod() const
     return PlannerMethod::VoxelFullBounds;
 }
 
+std::vector<VoxelRestrictedHalfSpace>
+WorkbenchMainWindow::ReadRestrictedHalfSpaces() const
+{
+    std::vector<VoxelRestrictedHalfSpace> halfSpaces;
+
+    if (m_enableRestrictedRegionsCheck == nullptr ||
+        !m_enableRestrictedRegionsCheck->isChecked())
+    {
+        return halfSpaces;
+    }
+
+    for (const RestrictedRegion& region : m_restrictedRegions)
+    {
+        VoxelRestrictedHalfSpace halfSpace;
+        halfSpace.point = region.point;
+        halfSpace.normal = region.normal;
+
+        if (halfSpace.normal.SquareMagnitude() <= 1.0e-20)
+        {
+            continue;
+        }
+
+        halfSpace.normal.Normalize();
+        VoxelWalkability::CachePointNormalDot(halfSpace);
+        halfSpaces.push_back(halfSpace);
+    }
+
+    return halfSpaces;
+}
+
 VoxelPathPlannerOptions WorkbenchMainWindow::MakeVoxelOptions(
     PlannerMethod method) const
 {
@@ -999,12 +1225,16 @@ VoxelPathPlannerOptions WorkbenchMainWindow::MakeVoxelOptions(
         m_searchModeCombo->currentIndex() == 1 ?
             VoxelAStarSearchMode::FreeSpace :
             VoxelAStarSearchMode::ClearanceBand;
+    options.astarOptions.turnPenalty =
+        std::max(0.0, m_voxelSizeSpin->value() * 0.5);
+    options.restrictedHalfSpaces = ReadRestrictedHalfSpaces();
     options.smoothOptimizedPath =
         m_smoothPathCheck != nullptr && m_smoothPathCheck->isChecked();
     options.smoothPathSamplesPerSegment = 10;
     options.smoothPathSampleSpacing =
         std::max(0.1, m_voxelSizeSpin->value() * 0.5);
-    options.smoothPathMaxDeviation = 0.0;
+    options.smoothPathMaxDeviation =
+        std::max(m_voxelSizeSpin->value(), m_clearanceSpin->value());
 
     if (m_neighborTypeCombo->currentIndex() == 1)
     {

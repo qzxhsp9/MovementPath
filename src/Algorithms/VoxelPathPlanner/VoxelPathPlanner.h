@@ -184,6 +184,7 @@ struct VoxelPathPlannerOptions
     int smoothPathSamplesPerSegment = 8;
     double smoothPathSampleSpacing = 0.0;
     double smoothPathMaxDeviation = 0.0;
+    std::vector<VoxelRestrictedHalfSpace> restrictedHalfSpaces;
 };
 
 struct VoxelPathPlannerResult
