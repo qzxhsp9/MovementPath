@@ -344,12 +344,9 @@ void OcctViewWidget::DisplayVoxelBoxes(
 {
     EnsureViewer();
 
-    const std::size_t maxDisplayed = std::min<std::size_t>(
-        voxelCenters.size(),
-        256);
     const double half = voxelSize * 0.5;
 
-    for (std::size_t i = 0; i < maxDisplayed; ++i)
+    for (std::size_t i = 0; i < voxelCenters.size(); ++i)
     {
         const Vec& c = voxelCenters[i];
         const gp_Pnt minPoint(c.x - half, c.y - half, c.z - half);
