@@ -21,6 +21,8 @@ struct VoxelAStarOptions
 
     // 转折惩罚，越大越倾向少转弯。
     double turnPenalty = 0.0;
+    double endpointDirectionPenalty = 0.0;
+    int endpointDirectionRadius = 0;
 
     // Non-endpoint path cells must keep at least this center-to-surface
     // distance. This prevents clearance-band searches from using the inner
@@ -140,6 +142,14 @@ private:
         const VoxelIndex& prev,
         const VoxelIndex& curr,
         const VoxelIndex& next);
+
+    static double EndpointDirectionPenalty(
+        const VoxelSpace& space,
+        const VoxelIndex& startIndex,
+        const VoxelIndex& goalIndex,
+        const VoxelIndex& current,
+        const VoxelIndex& next,
+        const VoxelAStarOptions& options);
 
     static std::vector<VoxelIndex> ReconstructPath(
         const VoxelSpace& space,

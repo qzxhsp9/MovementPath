@@ -66,7 +66,7 @@ public:
     void ResetToInitialView();
 
     void SetPointPickCallback(
-        std::function<void(const gp_Pnt&)> callback);
+        std::function<void(const gp_Pnt&, const gp_Vec&)> callback);
 
 protected:
     QPaintEngine* paintEngine() const override;
@@ -96,7 +96,8 @@ private:
     TopoDS_Shape BuildTriangleMeshEdgeShape() const;
     bool PickModelPoint(
         const QPoint& screenPoint,
-        gp_Pnt& outPoint) const;
+        gp_Pnt& outPoint,
+        gp_Vec& outNormal) const;
 
     Handle(Aspect_DisplayConnection) m_displayConnection;
     Handle(OpenGl_GraphicDriver) m_graphicDriver;
@@ -114,7 +115,7 @@ private:
     std::vector<Handle(AIS_Shape)> m_overlays;
     std::vector<Handle(AIS_Shape)> m_endpointOverlays;
     std::vector<Handle(AIS_Shape)> m_worldAxisOverlays;
-    std::function<void(const gp_Pnt&)> m_pickCallback;
+    std::function<void(const gp_Pnt&, const gp_Vec&)> m_pickCallback;
     ViewDisplayMode m_displayMode = ViewDisplayMode::Shaded;
     QPoint m_lastMousePosition;
 };

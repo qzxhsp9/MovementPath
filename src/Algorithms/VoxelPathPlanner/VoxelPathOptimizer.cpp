@@ -391,10 +391,43 @@ std::vector<Vec> BuildCatmullRomSamples(
 
     for (std::size_t i = 0; i + 1 < controlPath.size(); ++i)
     {
-        const Vec& p0 = controlPath[i == 0 ? i : i - 1];
+        Vec endpointStartControl;
+        Vec endpointEndControl;
+        const Vec* p0Override = nullptr;
+        const Vec* p3Override = nullptr;
+
+        if (options.useEndpointDirections)
+        {
+            if (i == 0 && options.startDirection.SquareMagnitude() > kEpsilon)
+            {
+                Vec dir = options.startDirection;
+                dir.Normalize();
+                endpointStartControl =
+                    controlPath.front() -
+                    dir * controlPath.front().Distance(controlPath[1]);
+                p0Override = &endpointStartControl;
+            }
+
+            if (i + 2 >= controlPath.size() &&
+                options.goalDirection.SquareMagnitude() > kEpsilon)
+            {
+                Vec dir = options.goalDirection;
+                dir.Normalize();
+                endpointEndControl =
+                    controlPath.back() +
+                    dir * controlPath[controlPath.size() - 2].Distance(
+                        controlPath.back());
+                p3Override = &endpointEndControl;
+            }
+        }
+
+        const Vec& p0 = p0Override != nullptr ?
+            *p0Override :
+            controlPath[i == 0 ? i : i - 1];
         const Vec& p1 = controlPath[i];
         const Vec& p2 = controlPath[i + 1];
-        const Vec& p3 =
+        const Vec& p3 = p3Override != nullptr ?
+            *p3Override :
             controlPath[i + 2 < controlPath.size() ? i + 2 : i + 1];
         const std::size_t sampleCount =
             SmoothSegmentSampleCount(p1, p2, options);

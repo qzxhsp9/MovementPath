@@ -14,6 +14,7 @@
 #include <Poly_Triangulation.hxx>
 #include <Prs3d_LineAspect.hxx>
 #include <Quantity_Color.hxx>
+#include <TopAbs_Orientation.hxx>
 #include <TopAbs_ShapeEnum.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopLoc_Location.hxx>
@@ -144,6 +145,22 @@ bool IntersectRayTriangle(
     }
 
     outT = t;
+    return true;
+}
+
+bool ComputeTriangleNormal(
+    const gp_Pnt& a,
+    const gp_Pnt& b,
+    const gp_Pnt& c,
+    gp_Vec& outNormal)
+{
+    outNormal = gp_Vec(a, b).Crossed(gp_Vec(a, c));
+    if (outNormal.SquareMagnitude() <= 1.0e-20)
+    {
+        return false;
+    }
+
+    outNormal.Normalize();
     return true;
 }
 
@@ -387,7 +404,7 @@ void OcctViewWidget::ResetToInitialView()
 }
 
 void OcctViewWidget::SetPointPickCallback(
-    std::function<void(const gp_Pnt&)> callback)
+    std::function<void(const gp_Pnt&, const gp_Vec&)> callback)
 {
     m_pickCallback = std::move(callback);
 }
@@ -458,9 +475,10 @@ void OcctViewWidget::mouseDoubleClickEvent(QMouseEvent* event)
     }
 
     gp_Pnt pickedPoint;
-    if (PickModelPoint(event->pos(), pickedPoint))
+    gp_Vec pickedNormal;
+    if (PickModelPoint(event->pos(), pickedPoint, pickedNormal))
     {
-        m_pickCallback(pickedPoint);
+        m_pickCallback(pickedPoint, pickedNormal);
     }
 }
 
@@ -863,7 +881,8 @@ TopoDS_Shape OcctViewWidget::BuildTriangleMeshEdgeShape() const
 
 bool OcctViewWidget::PickModelPoint(
     const QPoint& screenPoint,
-    gp_Pnt& outPoint) const
+    gp_Pnt& outPoint,
+    gp_Vec& outNormal) const
 {
     if (m_view.IsNull() ||
         (m_modelShape.IsNull() && m_meshData.IsEmpty()))
@@ -897,6 +916,7 @@ bool OcctViewWidget::PickModelPoint(
 
     bool hit = false;
     double bestT = std::numeric_limits<double>::infinity();
+    gp_Vec bestNormal;
 
     if (!m_meshData.IsEmpty())
     {
@@ -912,7 +932,17 @@ bool OcctViewWidget::PickModelPoint(
                     t) &&
                 t < bestT)
             {
+                gp_Vec normal;
+                if (!ComputeTriangleNormal(
+                        m_meshData.points[static_cast<std::size_t>(tri[0])],
+                        m_meshData.points[static_cast<std::size_t>(tri[1])],
+                        m_meshData.points[static_cast<std::size_t>(tri[2])],
+                        normal))
+                {
+                    continue;
+                }
                 bestT = t;
+                bestNormal = normal;
                 hit = true;
             }
         }
@@ -951,7 +981,17 @@ bool OcctViewWidget::PickModelPoint(
                 if (IntersectRayTriangle(origin, direction, p1, p2, p3, t) &&
                     t < bestT)
                 {
+                    gp_Vec normal;
+                    if (!ComputeTriangleNormal(p1, p2, p3, normal))
+                    {
+                        continue;
+                    }
+                    if (face.Orientation() == TopAbs_REVERSED)
+                    {
+                        normal.Reverse();
+                    }
                     bestT = t;
+                    bestNormal = normal;
                     hit = true;
                 }
             }
@@ -964,6 +1004,7 @@ bool OcctViewWidget::PickModelPoint(
     }
 
     outPoint = origin.Translated(direction * bestT);
+    outNormal = bestNormal;
     return true;
 }
 

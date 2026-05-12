@@ -441,8 +441,8 @@ void WorkbenchMainWindow::BuildUi()
     connect(pickGoalButton, &QPushButton::clicked, this, [this]() {
         BeginPick(PointPickMode::GoalPoint);
     });
-    m_view->SetPointPickCallback([this](const gp_Pnt& point) {
-        ApplyPickedPoint(point);
+    m_view->SetPointPickCallback([this](const gp_Pnt& point, const gp_Vec& normal) {
+        ApplyPickedPoint(point, normal);
     });
 
     for (QDoubleSpinBox* spin : {
@@ -1115,7 +1115,9 @@ void WorkbenchMainWindow::BeginRestrictedRegionPointPick(std::size_t index)
     BeginPick(PointPickMode::RestrictedRegionPoint);
 }
 
-void WorkbenchMainWindow::ApplyPickedPoint(const gp_Pnt& point)
+void WorkbenchMainWindow::ApplyPickedPoint(
+    const gp_Pnt& point,
+    const gp_Vec& normal)
 {
     switch (m_pickMode)
     {
@@ -1123,11 +1125,13 @@ void WorkbenchMainWindow::ApplyPickedPoint(const gp_Pnt& point)
         m_startX->setValue(point.X());
         m_startY->setValue(point.Y());
         m_startZ->setValue(point.Z());
+        SetDirectionSpins(m_startDirX, m_startDirY, m_startDirZ, normal);
         break;
     case PointPickMode::GoalPoint:
         m_goalX->setValue(point.X());
         m_goalY->setValue(point.Y());
         m_goalZ->setValue(point.Z());
+        SetDirectionSpins(m_goalDirX, m_goalDirY, m_goalDirZ, normal);
         break;
     case PointPickMode::RestrictedRegionPoint:
         if (m_pickRestrictedRegionIndex >= m_restrictedRegions.size())
@@ -1308,6 +1312,9 @@ VoxelPathPlannerOptions WorkbenchMainWindow::MakeVoxelOptions(
             VoxelAStarSearchMode::ClearanceBand;
     options.astarOptions.turnPenalty =
         std::max(0.0, m_voxelSizeSpin->value() * 0.1);
+    options.astarOptions.endpointDirectionPenalty =
+        std::max(0.0, m_voxelSizeSpin->value() * 3.0);
+    options.astarOptions.endpointDirectionRadius = 6;
     options.restrictedHalfSpaces = ReadRestrictedHalfSpaces();
     options.smoothOptimizedPath =
         m_smoothPathCheck != nullptr && m_smoothPathCheck->isChecked();

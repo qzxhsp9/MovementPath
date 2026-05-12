@@ -200,6 +200,74 @@ double VoxelAStar::DirectionChangeSeverity(
     return 1.0 - cosTheta;
 }
 
+double VoxelAStar::EndpointDirectionPenalty(
+    const VoxelSpace& space,
+    const VoxelIndex& startIndex,
+    const VoxelIndex& goalIndex,
+    const VoxelIndex& current,
+    const VoxelIndex& next,
+    const VoxelAStarOptions& options)
+{
+    if (options.endpointDirectionPenalty <= 0.0 ||
+        options.endpointDirectionRadius <= 0)
+    {
+        return 0.0;
+    }
+
+    const Vec currentPoint = space.IndexToCenter(current);
+    const Vec nextPoint = space.IndexToCenter(next);
+    Vec move(currentPoint, nextPoint);
+
+    if (move.SquareMagnitude() <= 1.0e-20)
+    {
+        return 0.0;
+    }
+
+    move.Normalize();
+
+    auto ChebyshevDistance = [](const VoxelIndex& a, const VoxelIndex& b)
+        {
+            return std::max({
+                std::abs(a.x - b.x),
+                std::abs(a.y - b.y),
+                std::abs(a.z - b.z)
+            });
+        };
+
+    double penalty = 0.0;
+
+    if (options.useStartSnapDirection &&
+        ChebyshevDistance(current, startIndex) <=
+            options.endpointDirectionRadius)
+    {
+        Vec dir = options.startSnapDirection;
+        if (dir.SquareMagnitude() > 1.0e-20)
+        {
+            dir.Normalize();
+            const double misalignment =
+                1.0 - std::clamp(move.Dot(dir), -1.0, 1.0);
+            penalty += options.endpointDirectionPenalty * misalignment;
+        }
+    }
+
+    if (options.useGoalSnapDirection &&
+        ChebyshevDistance(next, goalIndex) <=
+            options.endpointDirectionRadius)
+    {
+        Vec dir = options.goalSnapDirection;
+        if (dir.SquareMagnitude() > 1.0e-20)
+        {
+            dir.Normalize();
+            dir = dir * -1.0;
+            const double misalignment =
+                1.0 - std::clamp(move.Dot(dir), -1.0, 1.0);
+            penalty += options.endpointDirectionPenalty * misalignment;
+        }
+    }
+
+    return penalty;
+}
+
 // ============================================================
 // 回溯路径
 // ============================================================
@@ -803,6 +871,14 @@ VoxelAStarResult VoxelAStar::Search(
                             neighborIndex);
                 }
             }
+
+            moveCost += EndpointDirectionPenalty(
+                space,
+                startIndex,
+                goalIndex,
+                openNode.index,
+                neighborIndex,
+                options);
 
             const double tentativeG =
                 currentCell->gCost + moveCost;

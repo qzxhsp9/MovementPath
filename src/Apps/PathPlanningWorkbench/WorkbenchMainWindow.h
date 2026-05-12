@@ -75,7 +75,7 @@ private:
     void UpdateEndpointOverlay();
     void BeginPick(PointPickMode mode);
     void BeginRestrictedRegionPointPick(std::size_t index);
-    void ApplyPickedPoint(const gp_Pnt& point);
+    void ApplyPickedPoint(const gp_Pnt& point, const gp_Vec& normal);
     void CycleStartDirection();
     void CycleGoalDirection();
     void AppendLog(const QString& line);

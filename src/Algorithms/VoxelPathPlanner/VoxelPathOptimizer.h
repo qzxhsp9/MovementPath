@@ -35,6 +35,9 @@ struct VoxelPathOptimizeOptions
     int curveSamplesPerSegment = 8;
     double curveSampleSpacing = 0.0;
     double maxCurveDeviation = 0.0;
+    bool useEndpointDirections = false;
+    Vec startDirection;
+    Vec goalDirection;
 
     // Lazy voxel state source. Full-bounds callers leave this empty because
     // every relevant voxel has already been classified.

@@ -717,6 +717,9 @@ VoxelPathPlannerOptions VoxelPathPlanner::MakeDefaultOptions()
     options.astarOptions.heuristicWeight = 1.0;
     options.astarOptions.turnPenalty =
         options.meshBuildOptions.voxelSize * 0.1;
+    options.astarOptions.endpointDirectionPenalty =
+        options.meshBuildOptions.voxelSize * 2.0;
+    options.astarOptions.endpointDirectionRadius = 4;
     options.astarOptions.snapStartGoalToWalkable = true;
     options.astarOptions.snapMaxRadius = 20;
     options.astarOptions.useStartSnapDirection = true;
@@ -932,6 +935,12 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
         scenario.goalDir.Y(),
         scenario.goalDir.Z()
     };
+    astarOptions.endpointDirectionPenalty =
+        std::max(
+            astarOptions.endpointDirectionPenalty,
+            options.meshBuildOptions.voxelSize * 2.0);
+    astarOptions.endpointDirectionRadius =
+        std::max(astarOptions.endpointDirectionRadius, 4);
 
     if (options.lazyBuildOptions.enabled)
     {
@@ -1079,6 +1088,10 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                         options.smoothPathSampleSpacing;
                     optOptions.maxCurveDeviation =
                         options.smoothPathMaxDeviation;
+                    optOptions.useEndpointDirections = true;
+                    optOptions.startDirection = astarOptions.startSnapDirection;
+                    optOptions.goalDirection =
+                        astarOptions.goalSnapDirection * -1.0;
                     optOptions.ensureCellBuilt =
                         [&lazyQuery](
                             VoxelSpace& space,
@@ -1447,6 +1460,9 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
     optOptions.curveSamplesPerSegment = options.smoothPathSamplesPerSegment;
     optOptions.curveSampleSpacing = options.smoothPathSampleSpacing;
     optOptions.maxCurveDeviation = options.smoothPathMaxDeviation;
+    optOptions.useEndpointDirections = true;
+    optOptions.startDirection = astarOptions.startSnapDirection;
+    optOptions.goalDirection = astarOptions.goalSnapDirection * -1.0;
 
     VoxelPathOptimizeResult optResult;
 
