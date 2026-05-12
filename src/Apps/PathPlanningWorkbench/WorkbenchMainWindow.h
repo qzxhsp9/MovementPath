@@ -46,7 +46,8 @@ enum class PointPickMode
 {
     None,
     StartPoint,
-    GoalPoint
+    GoalPoint,
+    RestrictedRegionPoint
 };
 
 struct RestrictedRegion
@@ -72,6 +73,7 @@ private:
     void SetPlanningUiBusy(bool busy);
     void UpdateEndpointOverlay();
     void BeginPick(PointPickMode mode);
+    void BeginRestrictedRegionPointPick(std::size_t index);
     void ApplyPickedPoint(const gp_Pnt& point);
     void CycleStartDirection();
     void CycleGoalDirection();
@@ -149,6 +151,7 @@ protected:
 
     ImportedModel m_model;
     PointPickMode m_pickMode = PointPickMode::None;
+    std::size_t m_pickRestrictedRegionIndex = 0;
     QFutureWatcher<VoxelPathPlannerResult>* m_planWatcher = nullptr;
     std::shared_ptr<std::atomic_bool> m_cancelRequested;
     VtkExportSettings m_vtkExportSettings;

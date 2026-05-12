@@ -620,17 +620,22 @@ void WorkbenchMainWindow::RefreshRestrictedRegionList()
         summary->setTextInteractionFlags(Qt::TextSelectableByMouse);
 
         QPushButton* editButton = new QPushButton("Edit", row);
+        QPushButton* pickButton = new QPushButton("Pick", row);
         QToolButton* removeButton = new QToolButton(row);
         removeButton->setIcon(style()->standardIcon(QStyle::SP_TrashIcon));
         removeButton->setToolTip("Remove region");
 
         rowLayout->addWidget(summary, 1);
         rowLayout->addWidget(editButton);
+        rowLayout->addWidget(pickButton);
         rowLayout->addWidget(removeButton);
         m_restrictedRegionListLayout->addWidget(row);
 
         connect(editButton, &QPushButton::clicked, this, [this, i]() {
             EditRestrictedRegion(i);
+        });
+        connect(pickButton, &QPushButton::clicked, this, [this, i]() {
+            BeginRestrictedRegionPointPick(i);
         });
         connect(removeButton, &QToolButton::clicked, this, [this, i]() {
             RemoveRestrictedRegion(i);
@@ -1045,6 +1050,17 @@ void WorkbenchMainWindow::BeginPick(PointPickMode mode)
     AppendLog("Double-click a model surface to set the selected point.");
 }
 
+void WorkbenchMainWindow::BeginRestrictedRegionPointPick(std::size_t index)
+{
+    if (index >= m_restrictedRegions.size())
+    {
+        return;
+    }
+
+    m_pickRestrictedRegionIndex = index;
+    BeginPick(PointPickMode::RestrictedRegionPoint);
+}
+
 void WorkbenchMainWindow::ApplyPickedPoint(const gp_Pnt& point)
 {
     switch (m_pickMode)
@@ -1058,6 +1074,17 @@ void WorkbenchMainWindow::ApplyPickedPoint(const gp_Pnt& point)
         m_goalX->setValue(point.X());
         m_goalY->setValue(point.Y());
         m_goalZ->setValue(point.Z());
+        break;
+    case PointPickMode::RestrictedRegionPoint:
+        if (m_pickRestrictedRegionIndex >= m_restrictedRegions.size())
+        {
+            m_pickMode = PointPickMode::None;
+            return;
+        }
+        m_restrictedRegions[m_pickRestrictedRegionIndex].point =
+            Vec(point.X(), point.Y(), point.Z());
+        RefreshRestrictedRegionList();
+        NotifyPlanningInputChanged();
         break;
     case PointPickMode::None:
         return;
