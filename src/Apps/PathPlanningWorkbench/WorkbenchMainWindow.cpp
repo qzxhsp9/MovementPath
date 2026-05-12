@@ -285,8 +285,17 @@ void WorkbenchMainWindow::BuildUi()
     m_angularDeflectionSpin->setRange(0.001, 3.1416);
     m_angularDeflectionSpin->setDecimals(4);
     m_angularDeflectionSpin->setValue(0.5);
-    importLayout->addRow("Linear deflection", m_linearDeflectionSpin);
-    importLayout->addRow("Angular deflection", m_angularDeflectionSpin);
+
+    QWidget* deflectionWidget = new QWidget(importGroup);
+    QGridLayout* deflectionLayout = new QGridLayout(deflectionWidget);
+    deflectionLayout->setContentsMargins(0, 0, 0, 0);
+    deflectionLayout->addWidget(new QLabel("Linear", deflectionWidget), 0, 0);
+    deflectionLayout->addWidget(m_linearDeflectionSpin, 0, 1);
+    deflectionLayout->addWidget(new QLabel("Angular", deflectionWidget), 0, 2);
+    deflectionLayout->addWidget(m_angularDeflectionSpin, 0, 3);
+    deflectionLayout->setColumnStretch(1, 1);
+    deflectionLayout->setColumnStretch(3, 1);
+    importLayout->addRow(deflectionWidget);
     importLayout->addRow(applyDiscretizationButton);
     panelLayout->addWidget(importGroup);
 
