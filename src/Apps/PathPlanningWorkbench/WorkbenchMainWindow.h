@@ -6,6 +6,7 @@
 #include "GeometryQueryPathPlanner.h"
 #include "VoxelPathPlanner.h"
 
+#include <QElapsedTimer>
 #include <QFutureWatcher>
 #include <QMainWindow>
 
@@ -152,6 +153,7 @@ protected:
     std::size_t m_pickRestrictedRegionIndex = 0;
     QFutureWatcher<VoxelPathPlannerResult>* m_planWatcher = nullptr;
     std::shared_ptr<std::atomic_bool> m_cancelRequested;
+    QElapsedTimer m_planTimer;
     VtkExportSettings m_vtkExportSettings;
     double m_runningVoxelSize = 1.0;
 };

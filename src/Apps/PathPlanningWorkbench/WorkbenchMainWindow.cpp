@@ -30,8 +30,6 @@
 #include <QtConcurrent/QtConcurrentRun>
 
 #include <algorithm>
-#include <iomanip>
-#include <sstream>
 #include <utility>
 
 namespace path_planning_workbench
@@ -476,6 +474,27 @@ QString ToRestrictedRegionSummary(
         .arg(region.normal.z, 0, 'g', 4);
 }
 
+QString FormatDuration(double milliseconds)
+{
+    if (milliseconds >= 1000.0)
+    {
+        return QString("%1 s").arg(milliseconds / 1000.0, 0, 'f', 3);
+    }
+
+    return QString("%1 ms").arg(milliseconds, 0, 'f', 2);
+}
+
+double TotalProfileDuration(const VoxelPlanningProfile& profile)
+{
+    return profile.shapeMeshExportMs +
+        profile.triangulationMs +
+        profile.spatialIndexBuildMs +
+        profile.voxelBuildMs +
+        profile.astarMs +
+        profile.optimizeMs +
+        profile.vtkExportMs;
+}
+
 void WorkbenchMainWindow::NotifyPlanningInputChanged()
 {
     UpdateEndpointOverlay();
@@ -752,17 +771,22 @@ void WorkbenchMainWindow::ComputePath()
 
     const PlannerMethod method = ReadPlannerMethod();
 
-    AppendLog("Preparing path computation...");
+    AppendLog("Path computation preparing.");
     const std::vector<VoxelRestrictedHalfSpace> restrictedHalfSpaces =
         ReadRestrictedHalfSpaces();
-    AppendLog(QString("Planner: %1, search=%2, neighbors=%3, voxelSize=%4, clearance=%5, snapRadius=%6, restrictedRegions=%7, linearDeflection=%8, angularDeflection=%9")
+    AppendLog(QString("Planner: %1.")
         .arg(m_plannerCombo->currentText())
+    );
+    AppendLog(QString("Search: %1, neighbors=%2.")
         .arg(m_searchModeCombo->currentText())
-        .arg(m_neighborTypeCombo->currentText())
+        .arg(m_neighborTypeCombo->currentText()));
+    AppendLog(QString("Voxel: size=%1, clearance=%2, snap=%3.")
         .arg(m_voxelSizeSpin->value())
         .arg(m_clearanceSpin->value())
-        .arg(m_snapRadiusSpin->value())
-        .arg(restrictedHalfSpaces.size())
+        .arg(m_snapRadiusSpin->value()));
+    AppendLog(QString("Regions: %1.")
+        .arg(restrictedHalfSpaces.size()));
+    AppendLog(QString("Discretization: linear=%1, angular=%2.")
         .arg(m_linearDeflectionSpin->value())
         .arg(m_angularDeflectionSpin->value()));
     QApplication::processEvents();
@@ -806,10 +830,11 @@ void WorkbenchMainWindow::ComputePath()
     };
 
     m_runningVoxelSize = options.meshBuildOptions.voxelSize;
-    AppendLog("Voxel planner started...");
+    AppendLog("Path computation started.");
     QApplication::processEvents();
 
     SetPlanningUiBusy(true);
+    m_planTimer.start();
 
     m_planWatcher->setFuture(QtConcurrent::run(
         [scenario, options]()
@@ -920,37 +945,48 @@ void WorkbenchMainWindow::OnPathComputationFinished()
     m_cancelRequested.reset();
 
     const VoxelPathPlannerResult result = m_planWatcher->result();
-    AppendLog("Voxel planner finished.");
+    const double wallMs =
+        m_planTimer.isValid() ? static_cast<double>(m_planTimer.elapsed()) : 0.0;
+    AppendLog("Path computation finished.");
 
     if (wasCancelled)
     {
         AppendLog("Path computation was cancelled.");
+        if (wallMs > 0.0)
+        {
+            AppendLog(QString("Time: wall=%1.")
+                .arg(FormatDuration(wallMs)));
+        }
         return;
     }
 
-    std::ostringstream ss;
-    ss << "Voxel plan "
-        << (result.success ? "succeeded" : "failed")
-        << ", mode=" << result.profile.buildRegionMode
-        << ", triangles=" << result.profile.triangleCount
-        << ", rawPath=" << result.profile.rawPathCount
-        << ", optimizedPath=" << result.profile.optimizedPathCount;
-    if (result.profile.smoothingRequested)
-    {
-        ss << ", smoothedPath=" << result.profile.smoothedPathPointCount
-            << ", smoothing="
-            << (result.profile.smoothingSucceeded ? "accepted" : "rejected");
-    }
-    ss
-        << ", cost=" << std::fixed << std::setprecision(3)
-        << result.profile.totalCost;
-    AppendLog(QString::fromStdString(ss.str()));
+    AppendLog(QString("Result: %1.")
+        .arg(result.success ? "succeeded" : "failed"));
+    AppendLog(QString("Mode: %1.")
+        .arg(QString::fromStdString(result.profile.buildRegionMode)));
+    AppendLog(QString("Cost: %1.")
+        .arg(result.profile.totalCost, 0, 'f', 3));
+    AppendLog(QString("Mesh: triangles=%1, cells=%2.")
+        .arg(result.profile.triangleCount)
+        .arg(result.profile.storedCellCount));
+    AppendLog(QString("Voxels: occupied=%1, safety=%2.")
+        .arg(result.profile.occupiedCount)
+        .arg(result.profile.clearanceBandCount));
+    AppendLog(QString("Path: raw=%1, optimized=%2.")
+        .arg(result.profile.rawPathCount)
+        .arg(result.profile.optimizedPathCount));
 
     if (result.profile.smoothingRequested &&
         result.profile.optimizedPathCount > 2 &&
         !result.profile.smoothingSucceeded)
     {
-        AppendLog("Curve smoothing rejected by voxel constraints; displaying optimized polyline.");
+        AppendLog("Smoothing: rejected by voxel constraints.");
+    }
+    else if (result.profile.smoothingRequested)
+    {
+        AppendLog(QString("Smoothing: %1, points=%2.")
+            .arg(result.profile.smoothingSucceeded ? "accepted" : "not applied")
+            .arg(result.profile.smoothedPathPointCount));
     }
 
     if (!result.success)
@@ -975,6 +1011,42 @@ void WorkbenchMainWindow::OnPathComputationFinished()
             .arg(result.profile.astarSucceeded ? "true" : "false")
             .arg(result.profile.buildAttemptCount)
             .arg(ToText(result.finalSearchBounds)));
+    }
+
+    AppendLog(QString("Timing: wall=%1.")
+        .arg(FormatDuration(wallMs)));
+    AppendLog(QString("Timing: measured modules=%1.")
+        .arg(FormatDuration(TotalProfileDuration(result.profile))));
+    if (result.profile.shapeMeshExportMs > 0.0)
+    {
+        AppendLog(QString("Timing: shape mesh export=%1.")
+            .arg(FormatDuration(result.profile.shapeMeshExportMs)));
+    }
+    AppendLog(QString("Timing: triangulation=%1.")
+        .arg(FormatDuration(result.profile.triangulationMs)));
+    AppendLog(QString("Timing: spatial index=%1.")
+        .arg(FormatDuration(result.profile.spatialIndexBuildMs)));
+    AppendLog(QString("Timing: voxel build=%1.")
+        .arg(FormatDuration(result.profile.voxelBuildMs)));
+    if (result.profile.lazyBuildEnabled)
+    {
+        AppendLog(QString("Timing: lazy query=%1.")
+            .arg(FormatDuration(result.profile.lazyVoxelQueryMs)));
+        AppendLog(QString("Timing: lazy candidate query=%1.")
+            .arg(FormatDuration(result.profile.lazyCandidateQueryMs)));
+        AppendLog(QString("Timing: lazy candidate filter=%1.")
+            .arg(FormatDuration(result.profile.lazyCandidateFilterMs)));
+        AppendLog(QString("Timing: lazy voxel evaluation=%1.")
+            .arg(FormatDuration(result.profile.lazyVoxelMarkMs)));
+    }
+    AppendLog(QString("Timing: A* search=%1.")
+        .arg(FormatDuration(result.profile.astarMs)));
+    AppendLog(QString("Timing: optimization=%1.")
+        .arg(FormatDuration(result.profile.optimizeMs)));
+    if (result.profile.vtkExportMs > 0.0)
+    {
+        AppendLog(QString("Timing: VTK export=%1.")
+            .arg(FormatDuration(result.profile.vtkExportMs)));
     }
 
     const std::vector<Vec> pathPoints =
