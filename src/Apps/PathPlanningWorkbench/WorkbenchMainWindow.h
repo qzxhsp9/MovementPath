@@ -117,9 +117,7 @@ protected:
     QLabel* m_modelLabel = nullptr;
     QComboBox* m_displayModeCombo = nullptr;
     QComboBox* m_plannerCombo = nullptr;
-    QCheckBox* m_showKeyVoxelsCheck = nullptr;
-    QCheckBox* m_showOccupiedVoxelsCheck = nullptr;
-    QCheckBox* m_showClearanceVoxelsCheck = nullptr;
+    QCheckBox* m_showPathVoxelsCheck = nullptr;
     QCheckBox* m_realtimeCheck = nullptr;
     QComboBox* m_searchModeCombo = nullptr;
     QComboBox* m_neighborTypeCombo = nullptr;

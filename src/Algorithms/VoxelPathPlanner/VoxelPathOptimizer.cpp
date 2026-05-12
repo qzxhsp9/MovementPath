@@ -437,6 +437,41 @@ bool ValidateSmoothedPath(
 
     return true;
 }
+
+void AddUniqueControlPath(
+    std::vector<std::vector<Vec>>& controlPaths,
+    std::vector<Vec> controlPath)
+{
+    if (controlPath.size() < 2)
+    {
+        return;
+    }
+
+    for (const std::vector<Vec>& existing : controlPaths)
+    {
+        if (existing.size() != controlPath.size())
+        {
+            continue;
+        }
+
+        bool same = true;
+        for (std::size_t i = 0; i < existing.size(); ++i)
+        {
+            if (existing[i].Distance(controlPath[i]) > 1.0e-9)
+            {
+                same = false;
+                break;
+            }
+        }
+
+        if (same)
+        {
+            return;
+        }
+    }
+
+    controlPaths.push_back(std::move(controlPath));
+}
 }
 
 // ============================================================
@@ -1071,19 +1106,48 @@ VoxelPathOptimizeResult VoxelPathOptimizer::Optimize(
     }
     else if (options.enableCurveSmoothing)
     {
-        int smoothingLineCheckCount = 0;
-        std::vector<Vec> smoothed =
-            SmoothPointPath(
-                space,
-                result.pointPath,
-                options,
-                smoothingLineCheckCount);
-        result.smoothingLineCheckCount = smoothingLineCheckCount;
+        std::vector<std::vector<Vec>> controlPaths;
+        AddUniqueControlPath(controlPaths, result.pointPath);
+        AddUniqueControlPath(controlPaths, ConvertToPoints(space, workingPath));
+        AddUniqueControlPath(controlPaths, ConvertToPoints(space, inputPath));
 
-        if (!smoothed.empty())
+        std::vector<Vec> bestSmoothed;
+        double bestSeverity = std::numeric_limits<double>::max();
+        int bestSmoothingLineCheckCount = 0;
+
+        for (const std::vector<Vec>& controlPath : controlPaths)
         {
-            result.pointPath = smoothed;
+            int smoothingLineCheckCount = 0;
+            std::vector<Vec> smoothed =
+                SmoothPointPath(
+                    space,
+                    controlPath,
+                    options,
+                    smoothingLineCheckCount);
+
+            result.smoothingLineCheckCount += smoothingLineCheckCount;
+
+            if (smoothed.empty())
+            {
+                continue;
+            }
+
+            const double severity = MaxDirectionChangeSeverity(smoothed);
+            if (severity < bestSeverity ||
+                (std::abs(severity - bestSeverity) <= 1.0e-9 &&
+                    smoothed.size() > bestSmoothed.size()))
+            {
+                bestSmoothed = std::move(smoothed);
+                bestSeverity = severity;
+                bestSmoothingLineCheckCount = smoothingLineCheckCount;
+            }
+        }
+
+        if (!bestSmoothed.empty())
+        {
+            result.pointPath = bestSmoothed;
             result.smoothedPointCount = result.pointPath.size();
+            result.smoothingLineCheckCount = bestSmoothingLineCheckCount;
             result.smoothingSucceeded = true;
         }
     }

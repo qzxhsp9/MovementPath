@@ -199,8 +199,9 @@ struct VoxelPathPlannerResult
     VoxelPlanningProfile profile;
     VoxelAStarResult astarResult;
     VoxelPathOptimizeResult optimizeResult;
-    std::vector<Vec> occupiedVoxelCenters;
-    std::vector<Vec> clearanceVoxelCenters;
+    std::vector<Vec> pathFreeVoxelCenters;
+    std::vector<Vec> pathClearanceVoxelCenters;
+    std::vector<Vec> pathOccupiedVoxelCenters;
     VoxelBounds finalSearchBounds;
     bool hasFinalSearchBounds = false;
 };

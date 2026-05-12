@@ -79,17 +79,6 @@ std::vector<Vec> ToPathPoints(const std::vector<Vec>& points)
     return points;
 }
 
-std::vector<Vec> ToVoxelCenters(
-    const std::vector<Vec>& pathPoints)
-{
-    if (pathPoints.size() <= 2)
-    {
-        return pathPoints;
-    }
-
-    return std::vector<Vec>(pathPoints.begin() + 1, pathPoints.end() - 1);
-}
-
 QString ToText(VoxelAStarFailReason reason)
 {
     switch (reason)
@@ -281,18 +270,9 @@ void WorkbenchMainWindow::BuildUi()
     m_displayModeCombo->addItem("Shaded");
     m_displayModeCombo->addItem("Wireframe");
     m_displayModeCombo->addItem("Mesh");
-    m_showKeyVoxelsCheck = new QCheckBox("Key voxels");
-    m_showOccupiedVoxelsCheck = new QCheckBox("Occupied");
-    m_showClearanceVoxelsCheck = new QCheckBox("Safety");
-    QWidget* voxelDisplayOptions = new QWidget();
-    QHBoxLayout* voxelDisplayLayout = new QHBoxLayout(voxelDisplayOptions);
-    voxelDisplayLayout->setContentsMargins(0, 0, 0, 0);
-    voxelDisplayLayout->addWidget(m_showKeyVoxelsCheck);
-    voxelDisplayLayout->addWidget(m_showOccupiedVoxelsCheck);
-    voxelDisplayLayout->addWidget(m_showClearanceVoxelsCheck);
-    voxelDisplayLayout->addStretch(1);
+    m_showPathVoxelsCheck = new QCheckBox("Path voxels");
     displayLayout->addRow("Mode", m_displayModeCombo);
-    displayLayout->addRow("Voxels", voxelDisplayOptions);
+    displayLayout->addRow("Voxels", m_showPathVoxelsCheck);
     panelLayout->addWidget(displayGroup);
 
     QGroupBox* importGroup = new QGroupBox("Discretization");
@@ -994,27 +974,20 @@ void WorkbenchMainWindow::OnPathComputationFinished()
             ToPathPoints(result.optimizeResult.pointPath);
     m_view->DisplayPath(pathPoints);
 
-    if (m_showKeyVoxelsCheck->isChecked())
-    {
-        m_view->DisplayKeyVoxels(
-            ToVoxelCenters(pathPoints),
-            m_runningVoxelSize);
-    }
-
-    if (m_showOccupiedVoxelsCheck->isChecked())
+    if (m_showPathVoxelsCheck->isChecked())
     {
         m_view->DisplayVoxelBoxes(
-            result.occupiedVoxelCenters,
+            result.pathFreeVoxelCenters,
             m_runningVoxelSize,
-            Quantity_Color(0.95, 0.15, 0.05, Quantity_TOC_RGB));
-    }
-
-    if (m_showClearanceVoxelsCheck->isChecked())
-    {
+            Quantity_Color(0.05, 0.45, 1.0, Quantity_TOC_RGB));
         m_view->DisplayVoxelBoxes(
-            result.clearanceVoxelCenters,
+            result.pathClearanceVoxelCenters,
             m_runningVoxelSize,
             Quantity_Color(0.0, 0.85, 0.65, Quantity_TOC_RGB));
+        m_view->DisplayVoxelBoxes(
+            result.pathOccupiedVoxelCenters,
+            m_runningVoxelSize,
+            Quantity_Color(0.95, 0.15, 0.05, Quantity_TOC_RGB));
     }
 }
 
@@ -1253,7 +1226,7 @@ VoxelPathPlannerOptions WorkbenchMainWindow::MakeVoxelOptions(
             VoxelAStarSearchMode::FreeSpace :
             VoxelAStarSearchMode::ClearanceBand;
     options.astarOptions.turnPenalty =
-        std::max(0.0, m_voxelSizeSpin->value() * 0.5);
+        std::max(0.0, m_voxelSizeSpin->value() * 0.1);
     options.restrictedHalfSpaces = ReadRestrictedHalfSpaces();
     options.smoothOptimizedPath =
         m_smoothPathCheck != nullptr && m_smoothPathCheck->isChecked();
@@ -1291,10 +1264,8 @@ VoxelPathPlannerOptions WorkbenchMainWindow::MakeVoxelOptions(
     options.runOptions.debugNeighborhood = false;
     options.runOptions.verbose = false;
     options.runOptions.collectVoxelOverlayCenters =
-        (m_showOccupiedVoxelsCheck != nullptr &&
-            m_showOccupiedVoxelsCheck->isChecked()) ||
-        (m_showClearanceVoxelsCheck != nullptr &&
-            m_showClearanceVoxelsCheck->isChecked());
+        m_showPathVoxelsCheck != nullptr &&
+        m_showPathVoxelsCheck->isChecked();
     options.runOptions.maxVoxelOverlayCentersPerState = 0;
 
     if (method == PlannerMethod::VoxelLazy)

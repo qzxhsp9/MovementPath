@@ -88,68 +88,39 @@ bool PrepareRestrictedHalfSpaces(
     return true;
 }
 
-void CollectVoxelOverlayCenters(
+void CollectPathVoxelOverlayCenters(
     const VoxelSpace& voxelSpace,
     std::size_t maxPerState,
-    const VoxelBounds* filterBounds,
+    const std::vector<VoxelIndex>& path,
     VoxelPathPlannerResult& result)
 {
-    result.occupiedVoxelCenters.clear();
-    result.clearanceVoxelCenters.clear();
-
-    for (const auto& kv : voxelSpace.Cells())
-    {
-        if (filterBounds != nullptr &&
-            filterBounds->IsValid() &&
-            !filterBounds->Contains(kv.first))
-        {
-            continue;
-        }
-
-        if (kv.second.state == VoxelState::Occupied &&
-            (maxPerState == 0 ||
-                result.occupiedVoxelCenters.size() < maxPerState))
-        {
-            result.occupiedVoxelCenters.push_back(
-                voxelSpace.IndexToCenter(kv.first));
-        }
-        else if (kv.second.state == VoxelState::ClearanceBand &&
-            (maxPerState == 0 ||
-                result.clearanceVoxelCenters.size() < maxPerState))
-        {
-            result.clearanceVoxelCenters.push_back(
-                voxelSpace.IndexToCenter(kv.first));
-        }
-
-        if (maxPerState > 0 &&
-            result.occupiedVoxelCenters.size() >= maxPerState &&
-            result.clearanceVoxelCenters.size() >= maxPerState)
-        {
-            break;
-        }
-    }
-}
-
-bool ComputePathBounds(
-    const std::vector<VoxelIndex>& path,
-    int padding,
-    VoxelBounds& outBounds)
-{
-    if (path.empty())
-    {
-        return false;
-    }
-
-    outBounds.minIndex = path.front();
-    outBounds.maxIndex = path.front();
+    result.pathFreeVoxelCenters.clear();
+    result.pathClearanceVoxelCenters.clear();
+    result.pathOccupiedVoxelCenters.clear();
 
     for (const VoxelIndex& index : path)
     {
-        ExpandBoundsToInclude(outBounds, index);
-    }
+        const VoxelState state = voxelSpace.GetCellState(index);
+        std::vector<Vec>* target = nullptr;
 
-    ExpandBoundsByVoxelRadius(outBounds, padding);
-    return outBounds.IsValid();
+        if (state == VoxelState::Occupied)
+        {
+            target = &result.pathOccupiedVoxelCenters;
+        }
+        else if (state == VoxelState::ClearanceBand)
+        {
+            target = &result.pathClearanceVoxelCenters;
+        }
+        else
+        {
+            target = &result.pathFreeVoxelCenters;
+        }
+
+        if (maxPerState == 0 || target->size() < maxPerState)
+        {
+            target->push_back(voxelSpace.IndexToCenter(index));
+        }
+    }
 }
 
 void CollectVoxelOverlayCentersIfRequested(
@@ -163,20 +134,14 @@ void CollectVoxelOverlayCentersIfRequested(
         return;
     }
 
-    VoxelBounds pathBounds;
-    const VoxelBounds* filterBounds = nullptr;
-
-    if (path != nullptr &&
-        ComputePathBounds(*path, 1, pathBounds))
+    if (path != nullptr)
     {
-        filterBounds = &pathBounds;
+        CollectPathVoxelOverlayCenters(
+            voxelSpace,
+            options.runOptions.maxVoxelOverlayCentersPerState,
+            *path,
+            result);
     }
-
-    CollectVoxelOverlayCenters(
-        voxelSpace,
-        options.runOptions.maxVoxelOverlayCentersPerState,
-        filterBounds,
-        result);
 }
 
 bool IsBroaderNeighborType(
@@ -1179,15 +1144,15 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                     result.success = true;
                     result.lazyAttemptCost = lazyAStarResult.totalCost;
 
-                    VoxelVtkExporter::MarkPathToVoxelSpace(
-                        lazyVoxelSpace,
-                        optResult.voxelPath
-                    );
                     CollectVoxelOverlayCentersIfRequested(
                         lazyVoxelSpace,
                         options,
                         &optResult.voxelPath,
                         result);
+                    VoxelVtkExporter::MarkPathToVoxelSpace(
+                        lazyVoxelSpace,
+                        optResult.voxelPath
+                    );
 
                     if (options.runOptions.exportVtk)
                     {
@@ -1520,15 +1485,15 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
             << optResult.lineCheckCount << std::endl;
     }
 
-    VoxelVtkExporter::MarkPathToVoxelSpace(
-        voxelSpace,
-        optResult.voxelPath
-    );
     CollectVoxelOverlayCentersIfRequested(
         voxelSpace,
         options,
         &optResult.voxelPath,
         result);
+    VoxelVtkExporter::MarkPathToVoxelSpace(
+        voxelSpace,
+        optResult.voxelPath
+    );
 
     if (options.runOptions.exportVtk)
     {
