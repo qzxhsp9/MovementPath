@@ -362,7 +362,8 @@ std::size_t SignificantTurnCount(const std::vector<Vec>& path)
 
 double SmoothedPathQualityScore(
     const std::vector<Vec>& path,
-    double voxelSize)
+    double voxelSize,
+    const VoxelPathOptimizeOptions& options)
 {
     if (path.size() < 2)
     {
@@ -377,10 +378,13 @@ double SmoothedPathQualityScore(
     const double turnScale = std::max(voxelSize, directDistance * 0.01);
 
     return length +
-        static_cast<double>(SignificantTurnCount(path)) * turnScale * 3.0 +
-        TotalDirectionChangeSeverity(path) * turnScale * 2.0 +
-        MaxDirectionChangeSeverity(path) * turnScale * 6.0 +
-        detour * directDistance * 1.5;
+        static_cast<double>(SignificantTurnCount(path)) * turnScale *
+            options.smoothingSignificantTurnWeight +
+        TotalDirectionChangeSeverity(path) * turnScale *
+            options.smoothingTotalTurnWeight +
+        MaxDirectionChangeSeverity(path) * turnScale *
+            options.smoothingMaxTurnWeight +
+        detour * directDistance * options.smoothingDetourWeight;
 }
 
 std::vector<Vec> BuildCatmullRomSamples(
@@ -1345,7 +1349,10 @@ VoxelPathOptimizeResult VoxelPathOptimizer::Optimize(
             }
 
             const double score =
-                SmoothedPathQualityScore(smoothed, space.GetVoxelSize());
+                SmoothedPathQualityScore(
+                    smoothed,
+                    space.GetVoxelSize(),
+                    options);
             if (score < bestScore ||
                 (std::abs(score - bestScore) <= 1.0e-9 &&
                     smoothed.size() > bestSmoothed.size()))

@@ -35,6 +35,10 @@ struct VoxelPathOptimizeOptions
     int curveSamplesPerSegment = 8;
     double curveSampleSpacing = 0.0;
     double maxCurveDeviation = 0.0;
+    double smoothingSignificantTurnWeight = 3.0;
+    double smoothingTotalTurnWeight = 2.0;
+    double smoothingMaxTurnWeight = 6.0;
+    double smoothingDetourWeight = 1.5;
     bool useEndpointDirections = false;
     Vec startDirection;
     Vec goalDirection;

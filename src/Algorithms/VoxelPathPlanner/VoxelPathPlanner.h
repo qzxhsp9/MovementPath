@@ -84,6 +84,22 @@ struct VoxelPlanningProfile
 
     double totalCost = 0.0;
 
+    double rawPathLength = 0.0;
+    double rawPathDetourRatio = 0.0;
+    std::size_t rawPathTurnCount = 0;
+    double rawPathTotalTurnSeverity = 0.0;
+    double rawPathMaxTurnSeverity = 0.0;
+    double rawStartDirectionAlignment = 0.0;
+    double rawGoalDirectionAlignment = 0.0;
+
+    double finalPathLength = 0.0;
+    double finalPathDetourRatio = 0.0;
+    std::size_t finalPathTurnCount = 0;
+    double finalPathTotalTurnSeverity = 0.0;
+    double finalPathMaxTurnSeverity = 0.0;
+    double finalStartDirectionAlignment = 0.0;
+    double finalGoalDirectionAlignment = 0.0;
+
     std::string buildRegionMode;
     std::string scenarioName;
     int buildAttemptCount = 0;
@@ -184,6 +200,10 @@ struct VoxelPathPlannerOptions
     int smoothPathSamplesPerSegment = 8;
     double smoothPathSampleSpacing = 0.0;
     double smoothPathMaxDeviation = 0.0;
+    double smoothingSignificantTurnWeight = 3.0;
+    double smoothingTotalTurnWeight = 2.0;
+    double smoothingMaxTurnWeight = 6.0;
+    double smoothingDetourWeight = 1.5;
     std::vector<VoxelRestrictedHalfSpace> restrictedHalfSpaces;
 };
 

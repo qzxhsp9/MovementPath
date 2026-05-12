@@ -50,6 +50,56 @@ QDoubleSpinBox* MakeCoordinateSpin(double value = 0.0)
     return spin;
 }
 
+QDoubleSpinBox* MakeTuningDoubleSpin(
+    double value,
+    double minimum,
+    double maximum,
+    int decimals = 4,
+    double singleStep = 0.1)
+{
+    QDoubleSpinBox* spin = new QDoubleSpinBox();
+    spin->setRange(minimum, maximum);
+    spin->setDecimals(decimals);
+    spin->setSingleStep(singleStep);
+    spin->setValue(value);
+    return spin;
+}
+
+void SetDefaultTooltip(
+    QWidget* widget,
+    const QString& variableName,
+    const QString& description,
+    double defaultValue)
+{
+    widget->setToolTip(QString("%1\n变量名: %2\n默认值: %3")
+        .arg(description)
+        .arg(variableName)
+        .arg(defaultValue, 0, 'g', 8));
+}
+
+void SetDefaultTooltip(
+    QWidget* widget,
+    const QString& variableName,
+    const QString& description,
+    int defaultValue)
+{
+    widget->setToolTip(QString("%1\n变量名: %2\n默认值: %3")
+        .arg(description)
+        .arg(variableName)
+        .arg(defaultValue));
+}
+
+QSpinBox* MakeTuningIntSpin(
+    int value,
+    int minimum,
+    int maximum)
+{
+    QSpinBox* spin = new QSpinBox();
+    spin->setRange(minimum, maximum);
+    spin->setValue(value);
+    return spin;
+}
+
 QWidget* MakeVectorEditor(
     QDoubleSpinBox*& x,
     QDoubleSpinBox*& y,
@@ -256,6 +306,8 @@ void WorkbenchMainWindow::BuildUi()
     m_stopButton = new QPushButton("Stop Computation");
     QPushButton* vtkExportSettingsButton =
         new QPushButton("VTK Export Settings");
+    QPushButton* pathTuningSettingsButton =
+        new QPushButton("Path Tuning Settings");
     m_stopButton->setEnabled(false);
     m_modelLabel = new QLabel("No model loaded");
 
@@ -383,6 +435,7 @@ void WorkbenchMainWindow::BuildUi()
     plannerLayout->addRow("Lazy timeout ms", m_lazyTimeBudgetSpin);
     plannerLayout->addRow(m_smoothPathCheck);
     plannerLayout->addRow(m_realtimeCheck);
+    plannerLayout->addRow(pathTuningSettingsButton);
     plannerLayout->addRow(vtkExportSettingsButton);
     plannerLayout->addRow(m_computeButton);
     plannerLayout->addRow(m_stopButton);
@@ -412,6 +465,9 @@ void WorkbenchMainWindow::BuildUi()
     });
     connect(vtkExportSettingsButton, &QPushButton::clicked, this, [this]() {
         OpenVtkExportSettings();
+    });
+    connect(pathTuningSettingsButton, &QPushButton::clicked, this, [this]() {
+        OpenPathTuningSettings();
     });
     connect(addRestrictedRegionButton, &QPushButton::clicked, this, [this]() {
         AddRestrictedRegion();
@@ -784,6 +840,18 @@ void WorkbenchMainWindow::ComputePath()
         .arg(m_voxelSizeSpin->value())
         .arg(m_clearanceSpin->value())
         .arg(m_snapRadiusSpin->value()));
+    AppendLog(QString("Tuning: heuristic=%1, bounds=%2, turn=%3v, endpoint=%4v/%5, shortcut=%6.")
+        .arg(m_pathTuningSettings.heuristicWeight)
+        .arg(m_pathTuningSettings.searchBoundsExtraRadius)
+        .arg(m_pathTuningSettings.turnPenaltyVoxelMultiplier)
+        .arg(m_pathTuningSettings.endpointDirectionPenaltyVoxelMultiplier)
+        .arg(m_pathTuningSettings.endpointDirectionRadius)
+        .arg(m_pathTuningSettings.optimizerMaxShortcutLookAhead));
+    AppendLog(QString("Smoothing score: sigTurn=%1, totalTurn=%2, maxTurn=%3, detour=%4.")
+        .arg(m_pathTuningSettings.smoothingSignificantTurnWeight)
+        .arg(m_pathTuningSettings.smoothingTotalTurnWeight)
+        .arg(m_pathTuningSettings.smoothingMaxTurnWeight)
+        .arg(m_pathTuningSettings.smoothingDetourWeight));
     AppendLog(QString("Regions: %1.")
         .arg(restrictedHalfSpaces.size()));
     AppendLog(QString("Discretization: linear=%1, angular=%2.")
@@ -858,6 +926,232 @@ void WorkbenchMainWindow::StopPathComputation()
             AppendLog("Stop already requested; still waiting for current blocking step to return...");
         }
     }
+}
+
+void WorkbenchMainWindow::OpenPathTuningSettings()
+{
+    QDialog dialog(this);
+    dialog.setWindowTitle("路径调试参数");
+
+    QVBoxLayout* dialogLayout = new QVBoxLayout(&dialog);
+
+    const PathTuningSettings defaults;
+
+    QGroupBox* astarGroup = new QGroupBox("A* 搜索代价", &dialog);
+    QFormLayout* astarLayout = new QFormLayout(astarGroup);
+    QDoubleSpinBox* heuristicWeight = MakeTuningDoubleSpin(
+        m_pathTuningSettings.heuristicWeight,
+        0.0,
+        1000.0);
+    SetDefaultTooltip(
+        heuristicWeight,
+        "heuristicWeight",
+        "启发式距离权重。值越大越偏向直奔终点，值过大可能牺牲最优性。",
+        defaults.heuristicWeight);
+    QSpinBox* searchBoundsExtraRadius = MakeTuningIntSpin(
+        m_pathTuningSettings.searchBoundsExtraRadius,
+        0,
+        1000000);
+    SetDefaultTooltip(
+        searchBoundsExtraRadius,
+        "searchBoundsExtraRadius",
+        "在模型包围盒和起终点外额外扩展的搜索体素半径。",
+        defaults.searchBoundsExtraRadius);
+    QDoubleSpinBox* turnPenaltyMultiplier = MakeTuningDoubleSpin(
+        m_pathTuningSettings.turnPenaltyVoxelMultiplier,
+        0.0,
+        1000.0);
+    SetDefaultTooltip(
+        turnPenaltyMultiplier,
+        "turnPenaltyVoxelMultiplier",
+        "A* 转弯惩罚系数，最终惩罚为该值乘以体素尺寸。",
+        defaults.turnPenaltyVoxelMultiplier);
+    QDoubleSpinBox* endpointPenaltyMultiplier = MakeTuningDoubleSpin(
+        m_pathTuningSettings.endpointDirectionPenaltyVoxelMultiplier,
+        0.0,
+        1000.0);
+    SetDefaultTooltip(
+        endpointPenaltyMultiplier,
+        "endpointDirectionPenaltyVoxelMultiplier",
+        "起点/终点附近方向偏离惩罚系数，最终惩罚为该值乘以体素尺寸。",
+        defaults.endpointDirectionPenaltyVoxelMultiplier);
+    QSpinBox* endpointDirectionRadius = MakeTuningIntSpin(
+        m_pathTuningSettings.endpointDirectionRadius,
+        0,
+        1000000);
+    SetDefaultTooltip(
+        endpointDirectionRadius,
+        "endpointDirectionRadius",
+        "起点/终点方向约束影响的体素半径。",
+        defaults.endpointDirectionRadius);
+    astarLayout->addRow("启发式权重", heuristicWeight);
+    astarLayout->addRow("搜索边界额外半径", searchBoundsExtraRadius);
+    astarLayout->addRow("转弯惩罚 x 体素", turnPenaltyMultiplier);
+    astarLayout->addRow(
+        "端点方向惩罚 x 体素",
+        endpointPenaltyMultiplier);
+    astarLayout->addRow("端点方向影响半径", endpointDirectionRadius);
+    dialogLayout->addWidget(astarGroup);
+
+    QGroupBox* shortcutGroup = new QGroupBox("拉直与平滑", &dialog);
+    QFormLayout* shortcutLayout = new QFormLayout(shortcutGroup);
+    QSpinBox* maxShortcutLookAhead = MakeTuningIntSpin(
+        m_pathTuningSettings.optimizerMaxShortcutLookAhead,
+        0,
+        1000000);
+    SetDefaultTooltip(
+        maxShortcutLookAhead,
+        "optimizerMaxShortcutLookAhead",
+        "Line-of-sight 拉直时向前尝试跳过的最大路径点数，0 表示不限。",
+        defaults.optimizerMaxShortcutLookAhead);
+    QSpinBox* smoothSamplesPerSegment = MakeTuningIntSpin(
+        m_pathTuningSettings.smoothPathSamplesPerSegment,
+        0,
+        1000000);
+    SetDefaultTooltip(
+        smoothSamplesPerSegment,
+        "smoothPathSamplesPerSegment",
+        "曲线平滑每段至少采样的点数，0 会关闭曲线采样。",
+        defaults.smoothPathSamplesPerSegment);
+    QDoubleSpinBox* smoothSpacingMin = MakeTuningDoubleSpin(
+        m_pathTuningSettings.smoothPathSampleSpacingMin,
+        0.0,
+        1000000.0);
+    SetDefaultTooltip(
+        smoothSpacingMin,
+        "smoothPathSampleSpacingMin",
+        "曲线采样间距下限。",
+        defaults.smoothPathSampleSpacingMin);
+    QDoubleSpinBox* smoothSpacingVoxelMultiplier = MakeTuningDoubleSpin(
+        m_pathTuningSettings.smoothPathSampleSpacingVoxelMultiplier,
+        0.0,
+        1000000.0);
+    SetDefaultTooltip(
+        smoothSpacingVoxelMultiplier,
+        "smoothPathSampleSpacingVoxelMultiplier",
+        "曲线采样间距按体素尺寸计算的倍率。",
+        defaults.smoothPathSampleSpacingVoxelMultiplier);
+    QDoubleSpinBox* maxDeviationVoxelMultiplier = MakeTuningDoubleSpin(
+        m_pathTuningSettings.smoothPathMaxDeviationVoxelMultiplier,
+        0.0,
+        1000000.0);
+    SetDefaultTooltip(
+        maxDeviationVoxelMultiplier,
+        "smoothPathMaxDeviationVoxelMultiplier",
+        "平滑曲线允许偏离控制折线的距离，按体素尺寸计算的倍率。",
+        defaults.smoothPathMaxDeviationVoxelMultiplier);
+    QDoubleSpinBox* maxDeviationClearanceMultiplier = MakeTuningDoubleSpin(
+        m_pathTuningSettings.smoothPathMaxDeviationClearanceMultiplier,
+        0.0,
+        1000000.0);
+    SetDefaultTooltip(
+        maxDeviationClearanceMultiplier,
+        "smoothPathMaxDeviationClearanceMultiplier",
+        "平滑曲线允许偏离控制折线的距离，按安全距离计算的倍率。",
+        defaults.smoothPathMaxDeviationClearanceMultiplier);
+    shortcutLayout->addRow("最大拉直前视点数", maxShortcutLookAhead);
+    shortcutLayout->addRow("每段采样点数", smoothSamplesPerSegment);
+    shortcutLayout->addRow("采样间距下限", smoothSpacingMin);
+    shortcutLayout->addRow(
+        "采样间距 x 体素",
+        smoothSpacingVoxelMultiplier);
+    shortcutLayout->addRow(
+        "最大偏离 x 体素",
+        maxDeviationVoxelMultiplier);
+    shortcutLayout->addRow(
+        "最大偏离 x 安全距离",
+        maxDeviationClearanceMultiplier);
+    dialogLayout->addWidget(shortcutGroup);
+
+    QGroupBox* scoreGroup = new QGroupBox("平滑评分权重", &dialog);
+    QFormLayout* scoreLayout = new QFormLayout(scoreGroup);
+    QDoubleSpinBox* significantTurnWeight = MakeTuningDoubleSpin(
+        m_pathTuningSettings.smoothingSignificantTurnWeight,
+        0.0,
+        1000000.0);
+    SetDefaultTooltip(
+        significantTurnWeight,
+        "smoothingSignificantTurnWeight",
+        "明显转弯数量的评分权重，值越大越倾向少拐弯。",
+        defaults.smoothingSignificantTurnWeight);
+    QDoubleSpinBox* totalTurnWeight = MakeTuningDoubleSpin(
+        m_pathTuningSettings.smoothingTotalTurnWeight,
+        0.0,
+        1000000.0);
+    SetDefaultTooltip(
+        totalTurnWeight,
+        "smoothingTotalTurnWeight",
+        "总转向严重度的评分权重，值越大越倾向整体更顺。",
+        defaults.smoothingTotalTurnWeight);
+    QDoubleSpinBox* maxTurnWeight = MakeTuningDoubleSpin(
+        m_pathTuningSettings.smoothingMaxTurnWeight,
+        0.0,
+        1000000.0);
+    SetDefaultTooltip(
+        maxTurnWeight,
+        "smoothingMaxTurnWeight",
+        "最大单处转向严重度的评分权重，值越大越抑制局部急弯。",
+        defaults.smoothingMaxTurnWeight);
+    QDoubleSpinBox* detourWeight = MakeTuningDoubleSpin(
+        m_pathTuningSettings.smoothingDetourWeight,
+        0.0,
+        1000000.0);
+    SetDefaultTooltip(
+        detourWeight,
+        "smoothingDetourWeight",
+        "绕行率评分权重，值越大越倾向短路径。",
+        defaults.smoothingDetourWeight);
+    scoreLayout->addRow("明显转弯权重", significantTurnWeight);
+    scoreLayout->addRow("总转向权重", totalTurnWeight);
+    scoreLayout->addRow("最大转向权重", maxTurnWeight);
+    scoreLayout->addRow("绕行权重", detourWeight);
+    dialogLayout->addWidget(scoreGroup);
+
+    QDialogButtonBox* buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
+        &dialog);
+    dialogLayout->addWidget(buttons);
+
+    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+    if (dialog.exec() != QDialog::Accepted)
+    {
+        return;
+    }
+
+    m_pathTuningSettings.heuristicWeight = heuristicWeight->value();
+    m_pathTuningSettings.searchBoundsExtraRadius =
+        searchBoundsExtraRadius->value();
+    m_pathTuningSettings.turnPenaltyVoxelMultiplier =
+        turnPenaltyMultiplier->value();
+    m_pathTuningSettings.endpointDirectionPenaltyVoxelMultiplier =
+        endpointPenaltyMultiplier->value();
+    m_pathTuningSettings.endpointDirectionRadius =
+        endpointDirectionRadius->value();
+    m_pathTuningSettings.optimizerMaxShortcutLookAhead =
+        maxShortcutLookAhead->value();
+    m_pathTuningSettings.smoothPathSamplesPerSegment =
+        smoothSamplesPerSegment->value();
+    m_pathTuningSettings.smoothPathSampleSpacingMin =
+        smoothSpacingMin->value();
+    m_pathTuningSettings.smoothPathSampleSpacingVoxelMultiplier =
+        smoothSpacingVoxelMultiplier->value();
+    m_pathTuningSettings.smoothPathMaxDeviationVoxelMultiplier =
+        maxDeviationVoxelMultiplier->value();
+    m_pathTuningSettings.smoothPathMaxDeviationClearanceMultiplier =
+        maxDeviationClearanceMultiplier->value();
+    m_pathTuningSettings.smoothingSignificantTurnWeight =
+        significantTurnWeight->value();
+    m_pathTuningSettings.smoothingTotalTurnWeight =
+        totalTurnWeight->value();
+    m_pathTuningSettings.smoothingMaxTurnWeight =
+        maxTurnWeight->value();
+    m_pathTuningSettings.smoothingDetourWeight =
+        detourWeight->value();
+
+    AppendLog("Path tuning settings updated.");
+    NotifyPlanningInputChanged();
 }
 
 void WorkbenchMainWindow::OpenVtkExportSettings()
@@ -975,6 +1269,23 @@ void WorkbenchMainWindow::OnPathComputationFinished()
     AppendLog(QString("Path: raw=%1, optimized=%2.")
         .arg(result.profile.rawPathCount)
         .arg(result.profile.optimizedPathCount));
+    AppendLog(QString("Raw quality: length=%1, detour=%2%, turns=%3, totalTurn=%4, maxTurn=%5.")
+        .arg(result.profile.rawPathLength, 0, 'f', 3)
+        .arg(result.profile.rawPathDetourRatio * 100.0, 0, 'f', 2)
+        .arg(result.profile.rawPathTurnCount)
+        .arg(result.profile.rawPathTotalTurnSeverity, 0, 'f', 3)
+        .arg(result.profile.rawPathMaxTurnSeverity, 0, 'f', 3));
+    AppendLog(QString("Final quality: length=%1, detour=%2%, turns=%3, totalTurn=%4, maxTurn=%5.")
+        .arg(result.profile.finalPathLength, 0, 'f', 3)
+        .arg(result.profile.finalPathDetourRatio * 100.0, 0, 'f', 2)
+        .arg(result.profile.finalPathTurnCount)
+        .arg(result.profile.finalPathTotalTurnSeverity, 0, 'f', 3)
+        .arg(result.profile.finalPathMaxTurnSeverity, 0, 'f', 3));
+    AppendLog(QString("Endpoint alignment: raw start=%1, raw goal=%2, final start=%3, final goal=%4.")
+        .arg(result.profile.rawStartDirectionAlignment, 0, 'f', 3)
+        .arg(result.profile.rawGoalDirectionAlignment, 0, 'f', 3)
+        .arg(result.profile.finalStartDirectionAlignment, 0, 'f', 3)
+        .arg(result.profile.finalGoalDirectionAlignment, 0, 'f', 3));
 
     if (result.profile.smoothingRequested &&
         result.profile.optimizedPathCount > 2 &&
@@ -1310,19 +1621,50 @@ VoxelPathPlannerOptions WorkbenchMainWindow::MakeVoxelOptions(
         m_searchModeCombo->currentIndex() == 1 ?
             VoxelAStarSearchMode::FreeSpace :
             VoxelAStarSearchMode::ClearanceBand;
+    options.astarOptions.heuristicWeight =
+        m_pathTuningSettings.heuristicWeight;
+    options.searchBoundsExtraRadius =
+        m_pathTuningSettings.searchBoundsExtraRadius;
     options.astarOptions.turnPenalty =
-        std::max(0.0, m_voxelSizeSpin->value() * 0.1);
+        std::max(
+            0.0,
+            m_voxelSizeSpin->value() *
+                m_pathTuningSettings.turnPenaltyVoxelMultiplier);
     options.astarOptions.endpointDirectionPenalty =
-        std::max(0.0, m_voxelSizeSpin->value() * 3.0);
-    options.astarOptions.endpointDirectionRadius = 6;
+        std::max(
+            0.0,
+            m_voxelSizeSpin->value() *
+                m_pathTuningSettings
+                    .endpointDirectionPenaltyVoxelMultiplier);
+    options.astarOptions.endpointDirectionRadius =
+        m_pathTuningSettings.endpointDirectionRadius;
+    options.optimizerMaxShortcutLookAhead =
+        m_pathTuningSettings.optimizerMaxShortcutLookAhead;
     options.restrictedHalfSpaces = ReadRestrictedHalfSpaces();
     options.smoothOptimizedPath =
         m_smoothPathCheck != nullptr && m_smoothPathCheck->isChecked();
-    options.smoothPathSamplesPerSegment = 10;
+    options.smoothPathSamplesPerSegment =
+        m_pathTuningSettings.smoothPathSamplesPerSegment;
     options.smoothPathSampleSpacing =
-        std::max(0.1, m_voxelSizeSpin->value() * 0.5);
+        std::max(
+            m_pathTuningSettings.smoothPathSampleSpacingMin,
+            m_voxelSizeSpin->value() *
+                m_pathTuningSettings.smoothPathSampleSpacingVoxelMultiplier);
     options.smoothPathMaxDeviation =
-        std::max(m_voxelSizeSpin->value(), m_clearanceSpin->value());
+        std::max(
+            m_voxelSizeSpin->value() *
+                m_pathTuningSettings.smoothPathMaxDeviationVoxelMultiplier,
+            m_clearanceSpin->value() *
+                m_pathTuningSettings
+                    .smoothPathMaxDeviationClearanceMultiplier);
+    options.smoothingSignificantTurnWeight =
+        m_pathTuningSettings.smoothingSignificantTurnWeight;
+    options.smoothingTotalTurnWeight =
+        m_pathTuningSettings.smoothingTotalTurnWeight;
+    options.smoothingMaxTurnWeight =
+        m_pathTuningSettings.smoothingMaxTurnWeight;
+    options.smoothingDetourWeight =
+        m_pathTuningSettings.smoothingDetourWeight;
 
     if (m_neighborTypeCombo->currentIndex() == 1)
     {

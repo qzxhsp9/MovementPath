@@ -57,6 +57,25 @@ struct RestrictedRegion
     Vec normal = Vec(0.0, 0.0, 1.0);
 };
 
+struct PathTuningSettings
+{
+    double heuristicWeight = 1.0;
+    int searchBoundsExtraRadius = 10;
+    double turnPenaltyVoxelMultiplier = 0.1;
+    double endpointDirectionPenaltyVoxelMultiplier = 3.0;
+    int endpointDirectionRadius = 6;
+    int optimizerMaxShortcutLookAhead = 200;
+    int smoothPathSamplesPerSegment = 10;
+    double smoothPathSampleSpacingMin = 0.1;
+    double smoothPathSampleSpacingVoxelMultiplier = 0.5;
+    double smoothPathMaxDeviationVoxelMultiplier = 1.0;
+    double smoothPathMaxDeviationClearanceMultiplier = 1.0;
+    double smoothingSignificantTurnWeight = 3.0;
+    double smoothingTotalTurnWeight = 2.0;
+    double smoothingMaxTurnWeight = 6.0;
+    double smoothingDetourWeight = 1.5;
+};
+
 class WorkbenchMainWindow final : public QMainWindow
 {
 public:
@@ -70,6 +89,7 @@ private:
     void ComputePath();
     void StopPathComputation();
     void OpenVtkExportSettings();
+    void OpenPathTuningSettings();
     void OnPathComputationFinished();
     void SetPlanningUiBusy(bool busy);
     void UpdateEndpointOverlay();
@@ -155,6 +175,7 @@ protected:
     std::shared_ptr<std::atomic_bool> m_cancelRequested;
     QElapsedTimer m_planTimer;
     VtkExportSettings m_vtkExportSettings;
+    PathTuningSettings m_pathTuningSettings;
     double m_runningVoxelSize = 1.0;
 };
 

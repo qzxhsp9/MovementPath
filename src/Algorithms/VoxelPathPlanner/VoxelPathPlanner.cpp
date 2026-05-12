@@ -88,6 +88,130 @@ bool PrepareRestrictedHalfSpaces(
     return true;
 }
 
+struct PathQualityDiagnostics
+{
+    double length = 0.0;
+    double detourRatio = 0.0;
+    std::size_t turnCount = 0;
+    double totalTurnSeverity = 0.0;
+    double maxTurnSeverity = 0.0;
+    double startDirectionAlignment = 0.0;
+    double goalDirectionAlignment = 0.0;
+};
+
+double DirectionChangeSeverity(
+    const Vec& prev,
+    const Vec& current,
+    const Vec& next)
+{
+    Vec a(prev, current);
+    Vec b(current, next);
+
+    if (a.SquareMagnitude() <= 1.0e-20 ||
+        b.SquareMagnitude() <= 1.0e-20)
+    {
+        return 0.0;
+    }
+
+    a.Normalize();
+    b.Normalize();
+    return 1.0 - std::clamp(a.Dot(b), -1.0, 1.0);
+}
+
+double DirectionAlignment(
+    const Vec& pathDirection,
+    const Vec& expectedDirection)
+{
+    if (pathDirection.SquareMagnitude() <= 1.0e-20 ||
+        expectedDirection.SquareMagnitude() <= 1.0e-20)
+    {
+        return 0.0;
+    }
+
+    Vec pathDir = pathDirection;
+    Vec expectedDir = expectedDirection;
+    pathDir.Normalize();
+    expectedDir.Normalize();
+    return std::clamp(pathDir.Dot(expectedDir), -1.0, 1.0);
+}
+
+PathQualityDiagnostics ComputePathQualityDiagnostics(
+    const std::vector<Vec>& path,
+    const Vec& startDirection,
+    const Vec& goalDirection)
+{
+    PathQualityDiagnostics diagnostics;
+
+    if (path.size() < 2)
+    {
+        return diagnostics;
+    }
+
+    for (std::size_t i = 1; i < path.size(); ++i)
+    {
+        diagnostics.length += path[i - 1].Distance(path[i]);
+    }
+
+    const double directDistance = path.front().Distance(path.back());
+    if (directDistance > 1.0e-12)
+    {
+        diagnostics.detourRatio =
+            std::max(0.0, diagnostics.length / directDistance - 1.0);
+    }
+
+    for (std::size_t i = 1; i + 1 < path.size(); ++i)
+    {
+        const double severity =
+            DirectionChangeSeverity(path[i - 1], path[i], path[i + 1]);
+        diagnostics.totalTurnSeverity += severity;
+        diagnostics.maxTurnSeverity =
+            std::max(diagnostics.maxTurnSeverity, severity);
+        if (severity > 0.02)
+        {
+            ++diagnostics.turnCount;
+        }
+    }
+
+    diagnostics.startDirectionAlignment =
+        DirectionAlignment(Vec(path.front(), path[1]), startDirection);
+    diagnostics.goalDirectionAlignment =
+        DirectionAlignment(
+            Vec(path[path.size() - 2], path.back()),
+            goalDirection * -1.0);
+
+    return diagnostics;
+}
+
+void CopyRawPathDiagnosticsToProfile(
+    const PathQualityDiagnostics& diagnostics,
+    VoxelPlanningProfile& profile)
+{
+    profile.rawPathLength = diagnostics.length;
+    profile.rawPathDetourRatio = diagnostics.detourRatio;
+    profile.rawPathTurnCount = diagnostics.turnCount;
+    profile.rawPathTotalTurnSeverity = diagnostics.totalTurnSeverity;
+    profile.rawPathMaxTurnSeverity = diagnostics.maxTurnSeverity;
+    profile.rawStartDirectionAlignment =
+        diagnostics.startDirectionAlignment;
+    profile.rawGoalDirectionAlignment =
+        diagnostics.goalDirectionAlignment;
+}
+
+void CopyFinalPathDiagnosticsToProfile(
+    const PathQualityDiagnostics& diagnostics,
+    VoxelPlanningProfile& profile)
+{
+    profile.finalPathLength = diagnostics.length;
+    profile.finalPathDetourRatio = diagnostics.detourRatio;
+    profile.finalPathTurnCount = diagnostics.turnCount;
+    profile.finalPathTotalTurnSeverity = diagnostics.totalTurnSeverity;
+    profile.finalPathMaxTurnSeverity = diagnostics.maxTurnSeverity;
+    profile.finalStartDirectionAlignment =
+        diagnostics.startDirectionAlignment;
+    profile.finalGoalDirectionAlignment =
+        diagnostics.goalDirectionAlignment;
+}
+
 void CollectPathVoxelOverlayCenters(
     const VoxelSpace& voxelSpace,
     std::size_t maxPerState,
@@ -1044,6 +1168,12 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                     lazyAStarResult.pointPath,
                     startPoint3D,
                     goalPoint3D);
+                CopyRawPathDiagnosticsToProfile(
+                    ComputePathQualityDiagnostics(
+                        lazyAStarResult.pointPath,
+                        astarOptions.startSnapDirection,
+                        astarOptions.goalSnapDirection),
+                    profile);
                 result.astarResult = lazyAStarResult;
 
                 CountVoxelStates(
@@ -1088,6 +1218,14 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                         options.smoothPathSampleSpacing;
                     optOptions.maxCurveDeviation =
                         options.smoothPathMaxDeviation;
+                    optOptions.smoothingSignificantTurnWeight =
+                        options.smoothingSignificantTurnWeight;
+                    optOptions.smoothingTotalTurnWeight =
+                        options.smoothingTotalTurnWeight;
+                    optOptions.smoothingMaxTurnWeight =
+                        options.smoothingMaxTurnWeight;
+                    optOptions.smoothingDetourWeight =
+                        options.smoothingDetourWeight;
                     optOptions.useEndpointDirections = true;
                     optOptions.startDirection = astarOptions.startSnapDirection;
                     optOptions.goalDirection =
@@ -1153,6 +1291,12 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                         optResult.pointPath,
                         startPoint3D,
                         goalPoint3D);
+                    CopyFinalPathDiagnosticsToProfile(
+                        ComputePathQualityDiagnostics(
+                            optResult.pointPath,
+                            astarOptions.startSnapDirection,
+                            astarOptions.goalSnapDirection),
+                        profile);
                     result.optimizeResult = optResult;
                     result.success = true;
                     result.lazyAttemptCost = lazyAStarResult.totalCost;
@@ -1460,6 +1604,14 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
     optOptions.curveSamplesPerSegment = options.smoothPathSamplesPerSegment;
     optOptions.curveSampleSpacing = options.smoothPathSampleSpacing;
     optOptions.maxCurveDeviation = options.smoothPathMaxDeviation;
+    optOptions.smoothingSignificantTurnWeight =
+        options.smoothingSignificantTurnWeight;
+    optOptions.smoothingTotalTurnWeight =
+        options.smoothingTotalTurnWeight;
+    optOptions.smoothingMaxTurnWeight =
+        options.smoothingMaxTurnWeight;
+    optOptions.smoothingDetourWeight =
+        options.smoothingDetourWeight;
     optOptions.useEndpointDirections = true;
     optOptions.startDirection = astarOptions.startSnapDirection;
     optOptions.goalDirection = astarOptions.goalSnapDirection * -1.0;
@@ -1486,6 +1638,12 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
         optResult.pointPath,
         startPoint3D,
         goalPoint3D);
+    CopyFinalPathDiagnosticsToProfile(
+        ComputePathQualityDiagnostics(
+            optResult.pointPath,
+            astarOptions.startSnapDirection,
+            astarOptions.goalSnapDirection),
+        profile);
     result.optimizeResult = optResult;
 
     if (options.runOptions.verbose)
@@ -1539,6 +1697,12 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
         result.astarResult.pointPath,
         startPoint3D,
         goalPoint3D);
+    CopyRawPathDiagnosticsToProfile(
+        ComputePathQualityDiagnostics(
+            result.astarResult.pointPath,
+            astarOptions.startSnapDirection,
+            astarOptions.goalSnapDirection),
+        profile);
     return result;
 }
 
@@ -1574,6 +1738,32 @@ void VoxelPathPlanner::PrintProfile(
         << profile.optimizeMs << std::endl;
     std::cout << "VTK export ms: "
         << profile.vtkExportMs << std::endl;
+    std::cout << "Raw path length: "
+        << profile.rawPathLength << std::endl;
+    std::cout << "Raw path detour ratio: "
+        << profile.rawPathDetourRatio << std::endl;
+    std::cout << "Raw path turn count: "
+        << profile.rawPathTurnCount << std::endl;
+    std::cout << "Raw path total turn severity: "
+        << profile.rawPathTotalTurnSeverity << std::endl;
+    std::cout << "Raw path max turn severity: "
+        << profile.rawPathMaxTurnSeverity << std::endl;
+    std::cout << "Raw endpoint alignment: start="
+        << profile.rawStartDirectionAlignment
+        << ", goal=" << profile.rawGoalDirectionAlignment << std::endl;
+    std::cout << "Final path length: "
+        << profile.finalPathLength << std::endl;
+    std::cout << "Final path detour ratio: "
+        << profile.finalPathDetourRatio << std::endl;
+    std::cout << "Final path turn count: "
+        << profile.finalPathTurnCount << std::endl;
+    std::cout << "Final path total turn severity: "
+        << profile.finalPathTotalTurnSeverity << std::endl;
+    std::cout << "Final path max turn severity: "
+        << profile.finalPathMaxTurnSeverity << std::endl;
+    std::cout << "Final endpoint alignment: start="
+        << profile.finalStartDirectionAlignment
+        << ", goal=" << profile.finalGoalDirectionAlignment << std::endl;
 
     std::cout << "Build region mode: "
         << profile.buildRegionMode << std::endl;
