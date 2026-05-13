@@ -732,9 +732,9 @@ void WorkbenchMainWindow::RefreshRestrictedRegionList()
         QToolButton* removeButton = new QToolButton(actions);
         editButton->setIcon(style()->standardIcon(QStyle::SP_FileDialogDetailedView));
         editButton->setToolTip("Edit region");
-        pickButton->setIcon(style()->standardIcon(QStyle::SP_DialogOpenButton));
+        pickButton->setIcon(style()->standardIcon(QStyle::SP_DockWidgetCloseButton));
         pickButton->setToolTip("Pick point and normal from model surface");
-        removeButton->setIcon(style()->standardIcon(QStyle::SP_TrashIcon));
+        removeButton->setIcon(style()->standardIcon(QStyle::SP_LineEditClearButton));
         removeButton->setToolTip("Remove region");
         actionsLayout->addWidget(editButton);
         actionsLayout->addWidget(pickButton);
