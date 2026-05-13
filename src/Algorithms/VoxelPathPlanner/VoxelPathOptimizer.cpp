@@ -306,6 +306,79 @@ double DirectionChangeSeverity(
     return 1.0 - cosTheta;
 }
 
+double DirectionChangeSeverity(
+    const VoxelIndex& previous,
+    const VoxelIndex& current,
+    const VoxelIndex& next)
+{
+    return DirectionChangeSeverity(
+        Vec(
+            static_cast<double>(previous.x),
+            static_cast<double>(previous.y),
+            static_cast<double>(previous.z)),
+        Vec(
+            static_cast<double>(current.x),
+            static_cast<double>(current.y),
+            static_cast<double>(current.z)),
+        Vec(
+            static_cast<double>(next.x),
+            static_cast<double>(next.y),
+            static_cast<double>(next.z)));
+}
+
+double PathLengthBetween(
+    const VoxelSpace& space,
+    const std::vector<VoxelIndex>& path,
+    std::size_t from,
+    std::size_t to)
+{
+    double length = 0.0;
+
+    for (std::size_t i = from + 1; i <= to; ++i)
+    {
+        length += space.GetMoveCost(path[i - 1], path[i]);
+    }
+
+    return length;
+}
+
+double ShortcutScore(
+    const VoxelSpace& space,
+    const std::vector<VoxelIndex>& path,
+    const std::vector<VoxelIndex>& optimized,
+    std::size_t from,
+    std::size_t to,
+    double shortcutTurnPenalty)
+{
+    const double originalLength = PathLengthBetween(space, path, from, to);
+    const double shortcutLength = space.GetMoveCost(path[from], path[to]);
+    double score = shortcutLength - originalLength;
+
+    if (shortcutTurnPenalty <= 0.0)
+    {
+        return score;
+    }
+
+    double turnSeverity = 0.0;
+    if (optimized.size() >= 2)
+    {
+        turnSeverity += DirectionChangeSeverity(
+            optimized[optimized.size() - 2],
+            path[from],
+            path[to]);
+    }
+
+    if (to + 1 < path.size())
+    {
+        turnSeverity += DirectionChangeSeverity(
+            path[from],
+            path[to],
+            path[to + 1]);
+    }
+
+    return score + shortcutTurnPenalty * turnSeverity;
+}
+
 double MaxDirectionChangeSeverity(const std::vector<Vec>& path)
 {
     double maxSeverity = 0.0;
@@ -491,10 +564,11 @@ std::vector<Vec> BuildCatmullRomSamples(
 
 std::vector<Vec> BuildChaikinSamples(
     const std::vector<Vec>& controlPath,
-    int iterationCount)
+    int iterationCount,
+    double cutRatio = 0.25)
 {
     std::vector<Vec> smoothed = controlPath;
-    constexpr double cutRatio = 0.25;
+    cutRatio = std::clamp(cutRatio, 0.01, 0.49);
 
     for (int iteration = 0; iteration < iterationCount; ++iteration)
     {
@@ -830,6 +904,16 @@ std::vector<Vec> VoxelPathOptimizer::SmoothPointPath(
     for (int iterations = 5; iterations >= 1; --iterations)
     {
         candidates.push_back(BuildChaikinSamples(controlPath, iterations));
+    }
+
+    const double conservativeCuts[] = { 0.15, 0.10, 0.05 };
+    for (double cutRatio : conservativeCuts)
+    {
+        for (int iterations = 3; iterations >= 1; --iterations)
+        {
+            candidates.push_back(
+                BuildChaikinSamples(controlPath, iterations, cutRatio));
+        }
     }
 
     std::vector<Vec> best;
@@ -1260,6 +1344,7 @@ VoxelPathOptimizeResult VoxelPathOptimizer::Optimize(
 
     while (i + 1 < workingPath.size())
     {
+        double bestScore = std::numeric_limits<double>::max();
         const std::size_t lastIndex = workingPath.size() - 1;
 
         std::size_t maxJ = lastIndex;
@@ -1294,8 +1379,24 @@ VoxelPathOptimizeResult VoxelPathOptimizer::Optimize(
                 workingPath[j],
                 options))
             {
-                bestJ = j;
-                break;
+                if (options.shortcutTurnPenalty <= 0.0)
+                {
+                    bestJ = j;
+                    break;
+                }
+
+                const double score = ShortcutScore(
+                    space,
+                    workingPath,
+                    optimized,
+                    i,
+                    j,
+                    options.shortcutTurnPenalty);
+                if (score < bestScore)
+                {
+                    bestScore = score;
+                    bestJ = j;
+                }
             }
         }
 

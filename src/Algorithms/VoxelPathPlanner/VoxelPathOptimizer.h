@@ -30,6 +30,10 @@ struct VoxelPathOptimizeOptions
 
     // 是否执行直线可通行压缩
     bool enableLineOfSightShortcut = true;
+    // Same unit as A* turnPenalty. When positive, line-of-sight compression
+    // considers the entry/exit bend severity instead of always taking the
+    // farthest visible point.
+    double shortcutTurnPenalty = 0.0;
 
     bool enableCurveSmoothing = false;
     // Minimum number of samples generated per control segment.

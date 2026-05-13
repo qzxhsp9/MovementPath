@@ -152,6 +152,11 @@ public:
             return true;
         }
 
+        if (mode == VoxelAStarSearchMode::ClearanceBand)
+        {
+            return true;
+        }
+
         if (mode == VoxelAStarSearchMode::FreeSpace)
         {
             return true;

@@ -416,6 +416,27 @@ bool TestFreeSpaceTreatsFreeAndClearanceBandEqually()
 
     return ok;
 }
+
+bool TestClearanceBandIgnoresSecondClearanceFilter()
+{
+    VoxelSpace space(Vec(0.0, 0.0, 0.0), 1.0);
+    space.SetSearchBounds(VoxelBounds{
+        VoxelIndex(0, 0, 0),
+        VoxelIndex(0, 0, 0)
+    });
+
+    VoxelCell& cell = space.GetOrCreateCell(VoxelIndex(0, 0, 0));
+    cell.state = VoxelState::ClearanceBand;
+    cell.distanceToSurface = 0.25;
+
+    return Expect(
+        VoxelWalkability::IsIndexWalkableWithMinDistance(
+            space,
+            VoxelIndex(0, 0, 0),
+            VoxelAStarSearchMode::ClearanceBand,
+            1.0),
+        "ClearanceBand mode should not apply clearance a second time");
+}
 }
 
 int main()
@@ -434,6 +455,7 @@ int main()
     ok &= TestBrepScenarioHelpersHandleMissingFile();
     ok &= TestRestrictedHalfSpaceCanBlockSearch(boxScenario);
     ok &= TestFreeSpaceTreatsFreeAndClearanceBandEqually();
+    ok &= TestClearanceBandIgnoresSecondClearanceFilter();
 
     return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }

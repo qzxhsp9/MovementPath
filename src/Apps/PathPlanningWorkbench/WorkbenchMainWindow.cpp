@@ -939,6 +939,11 @@ void WorkbenchMainWindow::ComputePath()
         .arg(m_pathTuningSettings.endpointDirectionPenaltyVoxelMultiplier)
         .arg(m_pathTuningSettings.endpointDirectionRadius)
         .arg(m_pathTuningSettings.optimizerMaxShortcutLookAhead));
+    AppendLog(QString("Applied cost: turn=%1, endpoint=%2.")
+        .arg(m_voxelSizeSpin->value() *
+            m_pathTuningSettings.turnPenaltyVoxelMultiplier)
+        .arg(m_voxelSizeSpin->value() *
+            m_pathTuningSettings.endpointDirectionPenaltyVoxelMultiplier));
     AppendLog(QString("Smoothing score: sigTurn=%1, totalTurn=%2, maxTurn=%3, detour=%4.")
         .arg(m_pathTuningSettings.smoothingSignificantTurnWeight)
         .arg(m_pathTuningSettings.smoothingTotalTurnWeight)

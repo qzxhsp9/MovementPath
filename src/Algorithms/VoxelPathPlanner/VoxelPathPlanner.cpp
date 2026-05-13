@@ -1187,10 +1187,7 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
     VoxelAStarOptions astarOptions = options.astarOptions;
     astarOptions.shouldCancel = options.runOptions.shouldCancel;
     astarOptions.restrictedHalfSpaces = restrictedHalfSpaces;
-    astarOptions.minTravelDistanceToSurface =
-        astarOptions.searchMode == VoxelAStarSearchMode::ClearanceBand ?
-            options.meshBuildOptions.clearance :
-            0.0;
+    astarOptions.minTravelDistanceToSurface = 0.0;
     astarOptions.startSnapDirection = {
         scenario.startDir.X(),
         scenario.startDir.Y(),
@@ -1335,11 +1332,9 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
 
                     VoxelPathOptimizeOptions optOptions;
                     optOptions.searchMode = astarOptions.searchMode;
-                    optOptions.minTravelDistanceToSurface =
-                        astarOptions.searchMode ==
-                            VoxelAStarSearchMode::ClearanceBand ?
-                            options.meshBuildOptions.clearance :
-                            0.0;
+                    optOptions.minTravelDistanceToSurface = 0.0;
+                    optOptions.shortcutTurnPenalty =
+                        astarOptions.turnPenalty;
                     optOptions.restrictedHalfSpaces = restrictedHalfSpaces;
                     optOptions.removeCollinear = true;
                     optOptions.enableLineOfSightShortcut = true;
@@ -1760,10 +1755,8 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
 
     VoxelPathOptimizeOptions optOptions;
     optOptions.searchMode = astarOptions.searchMode;
-    optOptions.minTravelDistanceToSurface =
-        astarOptions.searchMode == VoxelAStarSearchMode::ClearanceBand ?
-            options.meshBuildOptions.clearance :
-            0.0;
+    optOptions.minTravelDistanceToSurface = 0.0;
+    optOptions.shortcutTurnPenalty = astarOptions.turnPenalty;
     optOptions.restrictedHalfSpaces = restrictedHalfSpaces;
     optOptions.removeCollinear = true;
     optOptions.enableLineOfSightShortcut = true;
