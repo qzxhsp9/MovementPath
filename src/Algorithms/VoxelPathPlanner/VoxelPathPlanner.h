@@ -193,13 +193,31 @@ struct VoxelPathPlannerOptions
     VoxelAStarOptions astarOptions;
     VoxelPlanningRunOptions runOptions;
 
+    // Optional immutable FullMeshBounds voxel snapshot. It is used only by
+    // FullMeshBounds runs; lazy runs intentionally ignore it.
+    bool useCachedFullBoundsVoxelSpace = false;
+    VoxelSpace cachedFullBoundsVoxelSpace;
+    VoxelMeshBuildResult cachedFullBoundsBuildResult;
+
+    // Extra voxel radius added to the model/search bounds after endpoints are
+    // included. Larger values allow wider detours but increase A* work.
     int searchBoundsExtraRadius = 10;
     int debugNeighborhoodRadius = 10;
+    // Maximum number of future control points tested by line-of-sight
+    // shortcutting. 0 means unlimited.
     int optimizerMaxShortcutLookAhead = 200;
+    // Enables post-A* curve smoothing. The smoothed path is accepted only if
+    // sampled points and sampled segments stay out of occupied/restricted
+    // voxels.
     bool smoothOptimizedPath = false;
     int smoothPathSamplesPerSegment = 8;
     double smoothPathSampleSpacing = 0.0;
+    // Maximum allowed distance from a smoothed sample to its control polyline.
+    // 0 disables the deviation limit.
     double smoothPathMaxDeviation = 0.0;
+    // Weights used to rank valid smoothing candidates. Length is always part
+    // of the score; these terms bias the result toward fewer turns, lower
+    // curvature spikes, and less detour.
     double smoothingSignificantTurnWeight = 3.0;
     double smoothingTotalTurnWeight = 2.0;
     double smoothingMaxTurnWeight = 6.0;
@@ -219,6 +237,14 @@ struct VoxelPathPlannerResult
     VoxelPlanningProfile profile;
     VoxelAStarResult astarResult;
     VoxelPathOptimizeResult optimizeResult;
+    // Path used by the Workbench display. Unlike optimizeResult.pointPath,
+    // this is validated as a full start-point to goal-point polyline for UI
+    // rendering and voxel overlay. Occupied voxels are allowed only for the
+    // endpoint voxels.
+    std::vector<Vec> displayPathPoints;
+    bool hasReusableFullBoundsVoxelSpace = false;
+    VoxelSpace reusableFullBoundsVoxelSpace;
+    VoxelMeshBuildResult reusableFullBoundsBuildResult;
     std::vector<Vec> pathFreeVoxelCenters;
     std::vector<Vec> pathClearanceVoxelCenters;
     std::vector<Vec> pathOccupiedVoxelCenters;

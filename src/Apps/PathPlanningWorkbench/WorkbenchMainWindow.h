@@ -130,6 +130,10 @@ protected:
     VoxelPathPlannerOptions MakeVoxelOptions(
         PlannerMethod method) const;
     std::vector<VoxelRestrictedHalfSpace> ReadRestrictedHalfSpaces() const;
+    void ClearPlanningCaches();
+    bool EnsurePlannerTriangleCache();
+    bool HasUsableFullBoundsVoxelCache(
+        const VoxelPathPlannerOptions& options) const;
 
     OcctViewWidget* m_view = nullptr;
     QPlainTextEdit* m_log = nullptr;
@@ -169,6 +173,15 @@ protected:
     std::vector<RestrictedRegion> m_restrictedRegions;
 
     ImportedModel m_model;
+    std::vector<MeshTriangle> m_cachedPlannerTriangles;
+    bool m_hasCachedPlannerTriangles = false;
+    double m_cachedTriangleLinearDeflection = 0.0;
+    double m_cachedTriangleAngularDeflection = 0.0;
+    bool m_hasCachedFullBoundsVoxelSpace = false;
+    VoxelSpace m_cachedFullBoundsVoxelSpace;
+    VoxelMeshBuildResult m_cachedFullBoundsBuildResult;
+    double m_cachedFullBoundsVoxelSize = 0.0;
+    double m_cachedFullBoundsClearance = 0.0;
     PointPickMode m_pickMode = PointPickMode::None;
     std::size_t m_pickRestrictedRegionIndex = 0;
     QFutureWatcher<VoxelPathPlannerResult>* m_planWatcher = nullptr;
@@ -177,6 +190,8 @@ protected:
     VtkExportSettings m_vtkExportSettings;
     PathTuningSettings m_pathTuningSettings;
     double m_runningVoxelSize = 1.0;
+    double m_runningClearance = 0.0;
+    PlannerMethod m_runningPlannerMethod = PlannerMethod::VoxelFullBounds;
 };
 
 } // namespace path_planning_workbench

@@ -351,7 +351,7 @@ std::size_t SignificantTurnCount(const std::vector<Vec>& path)
 
     for (std::size_t i = 1; i + 1 < path.size(); ++i)
     {
-        if (DirectionChangeSeverity(path[i - 1], path[i], path[i + 1]) > 0.02)
+        if (DirectionChangeSeverity(path[i - 1], path[i], path[i + 1]) > 0.2)
         {
             ++count;
         }
@@ -385,6 +385,45 @@ double SmoothedPathQualityScore(
         MaxDirectionChangeSeverity(path) * turnScale *
             options.smoothingMaxTurnWeight +
         detour * directDistance * options.smoothingDetourWeight;
+}
+
+std::vector<Vec> DensifyPointPath(
+    const std::vector<Vec>& path,
+    const VoxelPathOptimizeOptions& options,
+    double voxelSize)
+{
+    if (path.size() < 2)
+    {
+        return path;
+    }
+
+    const double spacing =
+        options.curveSampleSpacing > 0.0 ?
+            options.curveSampleSpacing :
+            std::max(voxelSize * 0.25, kEpsilon);
+
+    std::vector<Vec> dense;
+    dense.push_back(path.front());
+
+    for (std::size_t i = 1; i < path.size(); ++i)
+    {
+        const Vec& from = path[i - 1];
+        const Vec& to = path[i];
+        const double length = from.Distance(to);
+        const int sampleCount = std::max(
+            1,
+            static_cast<int>(std::ceil(length / spacing)));
+
+        for (int sample = 1; sample <= sampleCount; ++sample)
+        {
+            const double t =
+                static_cast<double>(sample) /
+                static_cast<double>(sampleCount);
+            dense.push_back(from * (1.0 - t) + to * t);
+        }
+    }
+
+    return dense;
 }
 
 std::vector<Vec> BuildCatmullRomSamples(
@@ -1371,7 +1410,10 @@ VoxelPathOptimizeResult VoxelPathOptimizer::Optimize(
                 result.voxelPath = bestControlVoxelPath;
                 result.outputCount = result.voxelPath.size();
             }
-            result.pointPath = bestSmoothed;
+            result.pointPath = DensifyPointPath(
+                bestSmoothed,
+                options,
+                space.GetVoxelSize());
             result.smoothedPointCount = result.pointPath.size();
             result.smoothingLineCheckCount = bestSmoothingLineCheckCount;
             result.smoothingSucceeded = true;

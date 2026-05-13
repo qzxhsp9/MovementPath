@@ -304,8 +304,9 @@ void WorkbenchMainWindow::BuildUi()
         new QPushButton("Apply Discretization");
     m_computeButton = new QPushButton("Compute Path");
     m_stopButton = new QPushButton("Stop Computation");
-    QPushButton* vtkExportSettingsButton =
-        new QPushButton("VTK Export Settings");
+    QToolButton* vtkExportSettingsButton = new QToolButton();
+    vtkExportSettingsButton->setIcon(style()->standardIcon(QStyle::SP_FileDialogDetailedView));
+    vtkExportSettingsButton->setToolTip("VTK Export Settings");
     QPushButton* pathTuningSettingsButton =
         new QPushButton("Path Tuning Settings");
     m_stopButton->setEnabled(false);
@@ -321,8 +322,14 @@ void WorkbenchMainWindow::BuildUi()
     m_displayModeCombo->addItem("Wireframe");
     m_displayModeCombo->addItem("Mesh");
     m_showPathVoxelsCheck = new QCheckBox("Path voxels");
+    QWidget* voxelDisplayRow = new QWidget(displayGroup);
+    QHBoxLayout* voxelDisplayLayout = new QHBoxLayout(voxelDisplayRow);
+    voxelDisplayLayout->setContentsMargins(0, 0, 0, 0);
+    voxelDisplayLayout->addWidget(m_showPathVoxelsCheck);
+    voxelDisplayLayout->addStretch(1);
+    voxelDisplayLayout->addWidget(vtkExportSettingsButton);
     displayLayout->addRow("Mode", m_displayModeCombo);
-    displayLayout->addRow("Voxels", m_showPathVoxelsCheck);
+    displayLayout->addRow("Voxels", voxelDisplayRow);
     panelLayout->addWidget(displayGroup);
 
     QGroupBox* importGroup = new QGroupBox("Discretization");
@@ -436,7 +443,6 @@ void WorkbenchMainWindow::BuildUi()
     plannerLayout->addRow(m_smoothPathCheck);
     plannerLayout->addRow(m_realtimeCheck);
     plannerLayout->addRow(pathTuningSettingsButton);
-    plannerLayout->addRow(vtkExportSettingsButton);
     plannerLayout->addRow(m_computeButton);
     plannerLayout->addRow(m_stopButton);
     panelLayout->addWidget(plannerGroup);
@@ -753,6 +759,7 @@ void WorkbenchMainWindow::ImportModel()
     }
 
     m_model = model;
+    ClearPlanningCaches();
     m_modelLabel->setText(path);
     AppendLog("Imported: " + path);
     RefreshModelDisplay();
@@ -787,6 +794,7 @@ void WorkbenchMainWindow::ApplyDiscretization()
     }
 
     AppendLog("Discretization applied. Display and future path planning use the updated mesh.");
+    ClearPlanningCaches();
     RefreshModelDisplay();
     UpdateEndpointOverlay();
 }
@@ -806,6 +814,90 @@ void WorkbenchMainWindow::RefreshModelDisplay()
     {
         m_view->DisplayShape(m_model.shape, ReadDisplayMode());
     }
+}
+
+void WorkbenchMainWindow::ClearPlanningCaches()
+{
+    m_cachedPlannerTriangles.clear();
+    m_hasCachedPlannerTriangles = false;
+    m_cachedTriangleLinearDeflection = 0.0;
+    m_cachedTriangleAngularDeflection = 0.0;
+
+    m_cachedFullBoundsVoxelSpace.Clear();
+    m_cachedFullBoundsBuildResult = VoxelMeshBuildResult();
+    m_hasCachedFullBoundsVoxelSpace = false;
+    m_cachedFullBoundsVoxelSize = 0.0;
+    m_cachedFullBoundsClearance = 0.0;
+}
+
+bool WorkbenchMainWindow::EnsurePlannerTriangleCache()
+{
+    if (m_model.kind == ImportedModelKind::Unknown)
+    {
+        return false;
+    }
+
+    const double linearDeflection = m_linearDeflectionSpin->value();
+    const double angularDeflection = m_angularDeflectionSpin->value();
+    const bool cacheMatches =
+        m_hasCachedPlannerTriangles &&
+        m_cachedTriangleLinearDeflection == linearDeflection &&
+        m_cachedTriangleAngularDeflection == angularDeflection;
+
+    if (cacheMatches)
+    {
+        AppendLog(QString("Using cached model mesh: %1 triangles.")
+            .arg(m_cachedPlannerTriangles.size()));
+        return true;
+    }
+
+    m_cachedPlannerTriangles.clear();
+    m_hasCachedPlannerTriangles = false;
+    m_hasCachedFullBoundsVoxelSpace = false;
+    m_cachedFullBoundsVoxelSpace.Clear();
+    m_cachedFullBoundsBuildResult = VoxelMeshBuildResult();
+
+    if (m_model.kind == ImportedModelKind::Mesh)
+    {
+        m_cachedPlannerTriangles = ToPlannerTriangles(m_model.mesh);
+    }
+    else
+    {
+        if (!VoxelMeshBuilder::BuildShapeTriangulation(
+                m_model.shape,
+                linearDeflection,
+                angularDeflection,
+                m_cachedPlannerTriangles))
+        {
+            AppendLog("Build cached model mesh failed.");
+            return false;
+        }
+    }
+
+    if (m_cachedPlannerTriangles.empty())
+    {
+        AppendLog("Cached model mesh does not contain valid triangles.");
+        return false;
+    }
+
+    m_cachedTriangleLinearDeflection = linearDeflection;
+    m_cachedTriangleAngularDeflection = angularDeflection;
+    m_hasCachedPlannerTriangles = true;
+    AppendLog(QString("Cached model mesh: %1 triangles.")
+        .arg(m_cachedPlannerTriangles.size()));
+    return true;
+}
+
+bool WorkbenchMainWindow::HasUsableFullBoundsVoxelCache(
+    const VoxelPathPlannerOptions& options) const
+{
+    return m_hasCachedFullBoundsVoxelSpace &&
+        m_cachedFullBoundsVoxelSpace.IsValid() &&
+        m_cachedFullBoundsBuildResult.success &&
+        m_cachedFullBoundsVoxelSize ==
+            options.meshBuildOptions.voxelSize &&
+        m_cachedFullBoundsClearance ==
+            options.meshBuildOptions.clearance;
 }
 
 void WorkbenchMainWindow::ComputePath()
@@ -867,27 +959,34 @@ void WorkbenchMainWindow::ComputePath()
 
     VoxelPlanningScenario scenario;
     scenario.name = "workbench";
-    if (m_model.kind == ImportedModelKind::Mesh)
+    if (!EnsurePlannerTriangleCache())
     {
-        scenario.triangles = ToPlannerTriangles(m_model.mesh);
-        AppendLog(QString("Using VTK triangle mesh directly: %1 triangles.")
-            .arg(scenario.triangles.size()));
-        if (scenario.triangles.empty())
-        {
-            AppendLog("VTK mesh does not contain valid triangles.");
-            return;
-        }
+        return;
     }
-    else
-    {
-        scenario.shape = m_model.shape;
-    }
+    scenario.triangles = m_cachedPlannerTriangles;
     scenario.startPoint = ReadPoint(m_startX, m_startY, m_startZ);
     scenario.startDir = ReadDirection(m_startDirX, m_startDirY, m_startDirZ);
     scenario.goalPoint = ReadPoint(m_goalX, m_goalY, m_goalZ);
     scenario.goalDir = ReadDirection(m_goalDirX, m_goalDirY, m_goalDirZ);
 
     VoxelPathPlannerOptions options = MakeVoxelOptions(method);
+    if (method == PlannerMethod::VoxelFullBounds &&
+        HasUsableFullBoundsVoxelCache(options))
+    {
+        options.useCachedFullBoundsVoxelSpace = true;
+        options.cachedFullBoundsVoxelSpace = m_cachedFullBoundsVoxelSpace;
+        options.cachedFullBoundsBuildResult = m_cachedFullBoundsBuildResult;
+        AppendLog(QString("Using cached FullBounds voxel states: cells=%1.")
+            .arg(m_cachedFullBoundsVoxelSpace.CellCount()));
+    }
+    else if (method == PlannerMethod::VoxelFullBounds)
+    {
+        AppendLog("FullBounds voxel cache miss; building voxel states.");
+    }
+    else if (method == PlannerMethod::VoxelLazy)
+    {
+        AppendLog("Voxel lazy mode does not use FullBounds voxel cache.");
+    }
     m_cancelRequested = std::make_shared<std::atomic_bool>(false);
     const std::shared_ptr<std::atomic_bool> cancelRequested =
         m_cancelRequested;
@@ -898,6 +997,8 @@ void WorkbenchMainWindow::ComputePath()
     };
 
     m_runningVoxelSize = options.meshBuildOptions.voxelSize;
+    m_runningClearance = options.meshBuildOptions.clearance;
+    m_runningPlannerMethod = method;
     AppendLog("Path computation started.");
     QApplication::processEvents();
 
@@ -1256,6 +1357,21 @@ void WorkbenchMainWindow::OnPathComputationFinished()
 
     AppendLog(QString("Result: %1.")
         .arg(result.success ? "succeeded" : "failed"));
+    if (m_runningPlannerMethod == PlannerMethod::VoxelFullBounds &&
+        result.hasReusableFullBoundsVoxelSpace)
+    {
+        m_cachedFullBoundsVoxelSpace =
+            result.reusableFullBoundsVoxelSpace;
+        m_cachedFullBoundsBuildResult =
+            result.reusableFullBoundsBuildResult;
+        m_cachedFullBoundsVoxelSize =
+            m_runningVoxelSize;
+        m_cachedFullBoundsClearance =
+            m_runningClearance;
+        m_hasCachedFullBoundsVoxelSpace = true;
+        AppendLog(QString("Cached FullBounds voxel states: cells=%1.")
+            .arg(m_cachedFullBoundsVoxelSpace.CellCount()));
+    }
     AppendLog(QString("Mode: %1.")
         .arg(QString::fromStdString(result.profile.buildRegionMode)));
     AppendLog(QString("Cost: %1.")
@@ -1360,9 +1476,14 @@ void WorkbenchMainWindow::OnPathComputationFinished()
             .arg(FormatDuration(result.profile.vtkExportMs)));
     }
 
+    if (!result.success)
+    {
+        return;
+    }
+
     const std::vector<Vec> pathPoints =
-        result.optimizeResult.pointPath.empty() ?
-            ToPathPoints(result.astarResult.pointPath) :
+        !result.displayPathPoints.empty() ?
+            ToPathPoints(result.displayPathPoints) :
             ToPathPoints(result.optimizeResult.pointPath);
     m_view->DisplayPath(pathPoints);
 

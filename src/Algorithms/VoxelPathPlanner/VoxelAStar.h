@@ -17,11 +17,18 @@ struct VoxelAStarOptions
     // 默认按你的当前需求：路径应在安全距离层中
     VoxelAStarSearchMode searchMode = VoxelAStarSearchMode::ClearanceBand;
 
+    // Multiplier applied to the Euclidean heuristic. 1.0 keeps normal A*
+    // behavior; values above 1.0 make search greedier and may reduce optimality.
     double heuristicWeight = 1.0;
 
     // 转折惩罚，越大越倾向少转弯。
+    // Added when the move direction changes between two A* steps.
     double turnPenalty = 0.0;
+    // Added near the endpoints when movement deviates from the configured
+    // start direction or the reverse goal direction.
     double endpointDirectionPenalty = 0.0;
+    // Chebyshev voxel radius around each endpoint where endpoint direction
+    // penalty is active. 0 disables this term.
     int endpointDirectionRadius = 0;
 
     // Non-endpoint path cells must keep at least this center-to-surface

@@ -13,6 +13,7 @@
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -247,6 +248,21 @@ void CollectPathVoxelOverlayCenters(
     }
 }
 
+void AddOriginalEndpointsToPath(
+    std::vector<Vec>& points,
+    const Vec& startPoint,
+    const Vec& goalPoint);
+
+std::vector<Vec> BuildDisplayPathPoints(
+    const std::vector<Vec>& plannedPath,
+    const Vec& startPoint,
+    const Vec& goalPoint)
+{
+    std::vector<Vec> displayPath = plannedPath;
+    AddOriginalEndpointsToPath(displayPath, startPoint, goalPoint);
+    return displayPath;
+}
+
 void CollectVoxelOverlayCentersIfRequested(
     const VoxelSpace& voxelSpace,
     const VoxelPathPlannerOptions& options,
@@ -266,6 +282,123 @@ void CollectVoxelOverlayCentersIfRequested(
             *path,
             result);
     }
+}
+
+std::vector<VoxelIndex> ConvertPointPathToVoxelPath(
+    const VoxelSpace& voxelSpace,
+    const std::vector<Vec>& points)
+{
+    std::vector<VoxelIndex> voxelPath;
+
+    if (points.empty() || !voxelSpace.IsValid())
+    {
+        return voxelPath;
+    }
+
+    const double spacing =
+        std::max(voxelSpace.GetVoxelSize() * 0.5, 1.0e-6);
+
+    auto AddIndex = [&voxelSpace, &voxelPath](const Vec& point)
+    {
+        const VoxelIndex index = voxelSpace.WorldToIndex(point);
+        if (voxelPath.empty() || !(voxelPath.back() == index))
+        {
+            voxelPath.push_back(index);
+        }
+    };
+
+    AddIndex(points.front());
+
+    for (std::size_t i = 1; i < points.size(); ++i)
+    {
+        const Vec& from = points[i - 1];
+        const Vec& to = points[i];
+        const double length = from.Distance(to);
+        const int sampleCount = std::max(
+            1,
+            static_cast<int>(std::ceil(length / spacing)));
+
+        for (int sample = 1; sample <= sampleCount; ++sample)
+        {
+            const double t =
+                static_cast<double>(sample) /
+                static_cast<double>(sampleCount);
+            AddIndex(from * (1.0 - t) + to * t);
+        }
+    }
+
+    return voxelPath;
+}
+
+std::vector<VoxelIndex> BuildDisplayVoxelPath(
+    const VoxelSpace& voxelSpace,
+    const std::vector<Vec>& plannedPath,
+    const Vec& startPoint,
+    const Vec& goalPoint)
+{
+    std::vector<VoxelIndex> voxelPath;
+
+    if (!voxelSpace.IsValid())
+    {
+        return voxelPath;
+    }
+
+    voxelPath.push_back(voxelSpace.WorldToIndex(startPoint));
+
+    const std::vector<VoxelIndex> plannedVoxelPath =
+        ConvertPointPathToVoxelPath(voxelSpace, plannedPath);
+    voxelPath.insert(
+        voxelPath.end(),
+        plannedVoxelPath.begin(),
+        plannedVoxelPath.end());
+
+    voxelPath.push_back(voxelSpace.WorldToIndex(goalPoint));
+
+    std::vector<VoxelIndex> uniquePath;
+    std::unordered_set<VoxelIndex, VoxelIndexHash> seen;
+    uniquePath.reserve(voxelPath.size());
+
+    for (const VoxelIndex& index : voxelPath)
+    {
+        if (seen.insert(index).second)
+        {
+            uniquePath.push_back(index);
+        }
+    }
+
+    return uniquePath;
+}
+
+void CollectPointPathVoxelOverlayCentersIfRequested(
+    const VoxelSpace& voxelSpace,
+    const VoxelPathPlannerOptions& options,
+    const std::vector<Vec>& pointPath,
+    VoxelPathPlannerResult& result)
+{
+    if (!options.runOptions.collectVoxelOverlayCenters)
+    {
+        return;
+    }
+
+    const std::vector<VoxelIndex> voxelPath =
+        ConvertPointPathToVoxelPath(voxelSpace, pointPath);
+    std::unordered_set<VoxelIndex, VoxelIndexHash> seen;
+    std::vector<VoxelIndex> uniquePath;
+    uniquePath.reserve(voxelPath.size());
+
+    for (const VoxelIndex& index : voxelPath)
+    {
+        if (seen.insert(index).second)
+        {
+            uniquePath.push_back(index);
+        }
+    }
+
+    CollectPathVoxelOverlayCenters(
+        voxelSpace,
+        options.runOptions.maxVoxelOverlayCentersPerState,
+        uniquePath,
+        result);
 }
 
 bool IsBroaderNeighborType(
@@ -779,6 +912,15 @@ bool InitializeLazyVoxelSpace(
     return true;
 }
 
+bool IsUsableCachedFullBoundsVoxelSpace(
+    const VoxelPathPlannerOptions& options)
+{
+    return options.useCachedFullBoundsVoxelSpace &&
+        options.cachedFullBoundsVoxelSpace.IsValid() &&
+        options.cachedFullBoundsVoxelSpace.HasSearchBounds() &&
+        options.cachedFullBoundsBuildResult.success;
+}
+
 void CopyLazyQueryStatsToProfile(
     const LazyVoxelStateQueryStats& stats,
     VoxelPlanningProfile& profile)
@@ -1059,13 +1201,6 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
         scenario.goalDir.Y(),
         scenario.goalDir.Z()
     };
-    astarOptions.endpointDirectionPenalty =
-        std::max(
-            astarOptions.endpointDirectionPenalty,
-            options.meshBuildOptions.voxelSize * 2.0);
-    astarOptions.endpointDirectionRadius =
-        std::max(astarOptions.endpointDirectionRadius, 4);
-
     if (options.lazyBuildOptions.enabled)
     {
         if (IsCancelled(options))
@@ -1287,28 +1422,38 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                         options.smoothOptimizedPath;
                     profile.smoothingSucceeded =
                         optResult.smoothingSucceeded;
-                    AddOriginalEndpointsToPath(
-                        optResult.pointPath,
-                        startPoint3D,
-                        goalPoint3D);
+                    const std::vector<Vec> displayPath =
+                        BuildDisplayPathPoints(
+                            optResult.pointPath,
+                            startPoint3D,
+                            goalPoint3D);
                     CopyFinalPathDiagnosticsToProfile(
                         ComputePathQualityDiagnostics(
-                            optResult.pointPath,
+                            displayPath,
                             astarOptions.startSnapDirection,
                             astarOptions.goalSnapDirection),
                         profile);
-                    result.optimizeResult = optResult;
+                    result.displayPathPoints = displayPath;
                     result.success = true;
                     result.lazyAttemptCost = lazyAStarResult.totalCost;
 
-                    CollectVoxelOverlayCentersIfRequested(
-                        lazyVoxelSpace,
-                        options,
-                        &optResult.voxelPath,
-                        result);
+                    const std::vector<VoxelIndex> finalVoxelPath =
+                        BuildDisplayVoxelPath(
+                            lazyVoxelSpace,
+                            optResult.pointPath,
+                            startPoint3D,
+                            goalPoint3D);
+                    if (options.runOptions.collectVoxelOverlayCenters)
+                    {
+                        CollectPathVoxelOverlayCenters(
+                            lazyVoxelSpace,
+                            options.runOptions.maxVoxelOverlayCentersPerState,
+                            finalVoxelPath,
+                            result);
+                    }
                     VoxelVtkExporter::MarkPathToVoxelSpace(
                         lazyVoxelSpace,
-                        optResult.voxelPath
+                        finalVoxelPath
                     );
 
                     if (options.runOptions.exportVtk)
@@ -1327,15 +1472,22 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                         );
 
                         VoxelVtkExporter::ExportPathPolylineToVtk(
-                            optResult.pointPath,
+                            displayPath,
                             options.runOptions.optimizedPathPolylineVtkPath
                         );
                     }
+
+                    AddOriginalEndpointsToPath(
+                        optResult.pointPath,
+                        startPoint3D,
+                        goalPoint3D);
+                    result.optimizeResult = optResult;
 
                     if (options.lazyBuildOptions.maxCostRegressionRatio > 0.0)
                     {
                         VoxelPathPlannerOptions baselineOptions = options;
                         baselineOptions.lazyBuildOptions.enabled = false;
+                        baselineOptions.useCachedFullBoundsVoxelSpace = false;
 
                         VoxelPathPlannerResult baselineResult =
                             VoxelPathPlanner::Plan(
@@ -1392,6 +1544,7 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
         {
             VoxelPathPlannerOptions fallbackOptions = options;
             fallbackOptions.lazyBuildOptions.enabled = false;
+            fallbackOptions.useCachedFullBoundsVoxelSpace = false;
 
             VoxelPathPlannerResult fallbackResult =
                 VoxelPathPlanner::Plan(scenario, fallbackOptions);
@@ -1411,6 +1564,8 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
     VoxelAStarResult astarResult;
     VoxelMeshBuildResult buildResult;
     VoxelSpace voxelSpace;
+    const bool canUseCachedFullBoundsVoxelSpace =
+        IsUsableCachedFullBoundsVoxelSpace(options);
 
     constexpr int maxAttemptCount = 1;
 
@@ -1432,6 +1587,12 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                 << std::endl;
         }
 
+        if (canUseCachedFullBoundsVoxelSpace)
+        {
+            voxelSpace = options.cachedFullBoundsVoxelSpace;
+            buildResult = options.cachedFullBoundsBuildResult;
+        }
+        else
         {
             ScopedTimer timer(profile.voxelBuildMs);
             buildResult =
@@ -1461,6 +1622,13 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
         }
 
         CopyBuildStatsToProfile(buildResult, voxelSpace, profile);
+
+        result.hasReusableFullBoundsVoxelSpace = true;
+        result.reusableFullBoundsVoxelSpace =
+            canUseCachedFullBoundsVoxelSpace ?
+                options.cachedFullBoundsVoxelSpace :
+                voxelSpace;
+        result.reusableFullBoundsBuildResult = buildResult;
 
         if (options.runOptions.debugNeighborhood)
         {
@@ -1634,17 +1802,18 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
     profile.smoothingLineCheckCount = optResult.smoothingLineCheckCount;
     profile.smoothingRequested = options.smoothOptimizedPath;
     profile.smoothingSucceeded = optResult.smoothingSucceeded;
-    AddOriginalEndpointsToPath(
-        optResult.pointPath,
-        startPoint3D,
-        goalPoint3D);
+    const std::vector<Vec> displayPath =
+        BuildDisplayPathPoints(
+            optResult.pointPath,
+            startPoint3D,
+            goalPoint3D);
     CopyFinalPathDiagnosticsToProfile(
         ComputePathQualityDiagnostics(
-            optResult.pointPath,
+            displayPath,
             astarOptions.startSnapDirection,
             astarOptions.goalSnapDirection),
         profile);
-    result.optimizeResult = optResult;
+    result.displayPathPoints = displayPath;
 
     if (options.runOptions.verbose)
     {
@@ -1659,14 +1828,23 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
             << optResult.lineCheckCount << std::endl;
     }
 
-    CollectVoxelOverlayCentersIfRequested(
-        voxelSpace,
-        options,
-        &optResult.voxelPath,
-        result);
+    const std::vector<VoxelIndex> finalVoxelPath =
+        BuildDisplayVoxelPath(
+            voxelSpace,
+            optResult.pointPath,
+            startPoint3D,
+            goalPoint3D);
+    if (options.runOptions.collectVoxelOverlayCenters)
+    {
+        CollectPathVoxelOverlayCenters(
+            voxelSpace,
+            options.runOptions.maxVoxelOverlayCentersPerState,
+            finalVoxelPath,
+            result);
+    }
     VoxelVtkExporter::MarkPathToVoxelSpace(
         voxelSpace,
-        optResult.voxelPath
+        finalVoxelPath
     );
 
     if (options.runOptions.exportVtk)
@@ -1685,11 +1863,16 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
         );
 
         VoxelVtkExporter::ExportPathPolylineToVtk(
-            optResult.pointPath,
+            displayPath,
             options.runOptions.optimizedPathPolylineVtkPath
         );
     }
 
+    AddOriginalEndpointsToPath(
+        optResult.pointPath,
+        startPoint3D,
+        goalPoint3D);
+    result.optimizeResult = optResult;
     profile.storedCellCount = voxelSpace.CellCount();
     result.success = true;
     result.astarResult = astarResult;

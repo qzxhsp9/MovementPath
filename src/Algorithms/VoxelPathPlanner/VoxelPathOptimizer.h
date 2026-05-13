@@ -32,9 +32,17 @@ struct VoxelPathOptimizeOptions
     bool enableLineOfSightShortcut = true;
 
     bool enableCurveSmoothing = false;
+    // Minimum number of samples generated per control segment.
     int curveSamplesPerSegment = 8;
+    // Target spacing for generated/densified curve samples. 0 uses a
+    // voxel-size-derived default.
     double curveSampleSpacing = 0.0;
+    // Maximum distance a smoothed sample may move away from the control
+    // polyline. 0 disables this guard.
     double maxCurveDeviation = 0.0;
+    // Valid smoothing candidates are ranked by length plus these weighted
+    // shape terms. Higher turn weights prefer straighter, smoother curves;
+    // higher detour weight prefers shorter curves.
     double smoothingSignificantTurnWeight = 3.0;
     double smoothingTotalTurnWeight = 2.0;
     double smoothingMaxTurnWeight = 6.0;
