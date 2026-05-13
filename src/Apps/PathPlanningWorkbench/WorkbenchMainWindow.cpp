@@ -308,7 +308,7 @@ void WorkbenchMainWindow::BuildUi()
     vtkExportSettingsButton->setIcon(style()->standardIcon(QStyle::SP_FileDialogDetailedView));
     vtkExportSettingsButton->setToolTip("VTK Export Settings");
     QPushButton* pathTuningSettingsButton =
-        new QPushButton("Path Tuning Settings");
+        new QPushButton("Path Settings");
     m_stopButton->setEnabled(false);
     m_modelLabel = new QLabel("No model loaded");
 
@@ -432,6 +432,12 @@ void WorkbenchMainWindow::BuildUi()
     m_neighborTypeCombo->setCurrentIndex(2);
     m_smoothPathCheck = new QCheckBox("Smooth path");
     m_smoothPathCheck->setChecked(true);
+    QWidget* smoothPathRow = new QWidget(plannerGroup);
+    QHBoxLayout* smoothPathLayout = new QHBoxLayout(smoothPathRow);
+    smoothPathLayout->setContentsMargins(0, 0, 0, 0);
+    smoothPathLayout->addWidget(m_smoothPathCheck);
+    smoothPathLayout->addStretch(1);
+    smoothPathLayout->addWidget(pathTuningSettingsButton);
     m_realtimeCheck = new QCheckBox("Realtime after input changes");
     plannerLayout->addRow("Method", m_plannerCombo);
     plannerLayout->addRow("Search", m_searchModeCombo);
@@ -440,9 +446,8 @@ void WorkbenchMainWindow::BuildUi()
     plannerLayout->addRow("Clearance", m_clearanceSpin);
     plannerLayout->addRow("Snap radius", m_snapRadiusSpin);
     plannerLayout->addRow("Lazy timeout ms", m_lazyTimeBudgetSpin);
-    plannerLayout->addRow(m_smoothPathCheck);
+    plannerLayout->addRow(smoothPathRow);
     plannerLayout->addRow(m_realtimeCheck);
-    plannerLayout->addRow(pathTuningSettingsButton);
     plannerLayout->addRow(m_computeButton);
     plannerLayout->addRow(m_stopButton);
     panelLayout->addWidget(plannerGroup);
@@ -1037,7 +1042,7 @@ void WorkbenchMainWindow::StopPathComputation()
 void WorkbenchMainWindow::OpenPathTuningSettings()
 {
     QDialog dialog(this);
-    dialog.setWindowTitle("路径调试参数");
+    dialog.setWindowTitle("Path Settings");
 
     QVBoxLayout* dialogLayout = new QVBoxLayout(&dialog);
 
@@ -1119,6 +1124,15 @@ void WorkbenchMainWindow::OpenPathTuningSettings()
         "smoothPathSamplesPerSegment",
         "曲线平滑每段至少采样的点数，0 会关闭曲线采样。",
         defaults.smoothPathSamplesPerSegment);
+    QSpinBox* displaySamplesPerSegment = MakeTuningIntSpin(
+        m_pathTuningSettings.displayPathSamplesPerSegment,
+        1,
+        1000000);
+    SetDefaultTooltip(
+        displaySamplesPerSegment,
+        "displayPathSamplesPerSegment",
+        "displayPointPath samples per smoothed control segment. Only affects Workbench visual density.",
+        defaults.displayPathSamplesPerSegment);
     QDoubleSpinBox* smoothSpacingMin = MakeTuningDoubleSpin(
         m_pathTuningSettings.smoothPathSampleSpacingMin,
         0.0,
@@ -1161,6 +1175,10 @@ void WorkbenchMainWindow::OpenPathTuningSettings()
     shortcutLayout->addRow(
         "采样间距 x 体素",
         smoothSpacingVoxelMultiplier);
+    shortcutLayout->insertRow(
+        2,
+        "displayPointPath samples",
+        displaySamplesPerSegment);
     shortcutLayout->addRow(
         "最大偏离 x 体素",
         maxDeviationVoxelMultiplier);
@@ -1239,6 +1257,8 @@ void WorkbenchMainWindow::OpenPathTuningSettings()
         maxShortcutLookAhead->value();
     m_pathTuningSettings.smoothPathSamplesPerSegment =
         smoothSamplesPerSegment->value();
+    m_pathTuningSettings.displayPathSamplesPerSegment =
+        displaySamplesPerSegment->value();
     m_pathTuningSettings.smoothPathSampleSpacingMin =
         smoothSpacingMin->value();
     m_pathTuningSettings.smoothPathSampleSpacingVoxelMultiplier =
@@ -1256,7 +1276,7 @@ void WorkbenchMainWindow::OpenPathTuningSettings()
     m_pathTuningSettings.smoothingDetourWeight =
         detourWeight->value();
 
-    AppendLog("Path tuning settings updated.");
+    AppendLog("Path settings updated.");
     NotifyPlanningInputChanged();
 }
 
@@ -1771,6 +1791,8 @@ VoxelPathPlannerOptions WorkbenchMainWindow::MakeVoxelOptions(
         m_smoothPathCheck != nullptr && m_smoothPathCheck->isChecked();
     options.smoothPathSamplesPerSegment =
         m_pathTuningSettings.smoothPathSamplesPerSegment;
+    options.displayPathSamplesPerSegment =
+        m_pathTuningSettings.displayPathSamplesPerSegment;
     options.smoothPathSampleSpacing =
         std::max(
             m_pathTuningSettings.smoothPathSampleSpacingMin,

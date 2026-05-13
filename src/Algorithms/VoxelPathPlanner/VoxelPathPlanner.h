@@ -211,6 +211,7 @@ struct VoxelPathPlannerOptions
     // voxels.
     bool smoothOptimizedPath = false;
     int smoothPathSamplesPerSegment = 8;
+    int displayPathSamplesPerSegment = 48;
     double smoothPathSampleSpacing = 0.0;
     // Maximum allowed distance from a smoothed sample to its control polyline.
     // 0 disables the deviation limit.

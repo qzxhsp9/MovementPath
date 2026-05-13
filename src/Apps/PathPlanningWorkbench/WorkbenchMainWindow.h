@@ -66,6 +66,7 @@ struct PathTuningSettings
     int endpointDirectionRadius = 6;
     int optimizerMaxShortcutLookAhead = 200;
     int smoothPathSamplesPerSegment = 10;
+    int displayPathSamplesPerSegment = 48;
     double smoothPathSampleSpacingMin = 0.1;
     double smoothPathSampleSpacingVoxelMultiplier = 0.5;
     double smoothPathMaxDeviationVoxelMultiplier = 1.0;

@@ -1344,6 +1344,8 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                         options.smoothOptimizedPath;
                     optOptions.curveSamplesPerSegment =
                         options.smoothPathSamplesPerSegment;
+                    optOptions.displayCurveSamplesPerSegment =
+                        options.displayPathSamplesPerSegment;
                     optOptions.curveSampleSpacing =
                         options.smoothPathSampleSpacing;
                     optOptions.maxCurveDeviation =
@@ -1417,9 +1419,13 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                         options.smoothOptimizedPath;
                     profile.smoothingSucceeded =
                         optResult.smoothingSucceeded;
+                    const std::vector<Vec>& displaySource =
+                        optResult.displayPointPath.empty() ?
+                            optResult.pointPath :
+                            optResult.displayPointPath;
                     const std::vector<Vec> displayPath =
                         BuildDisplayPathPoints(
-                            optResult.pointPath,
+                            displaySource,
                             startPoint3D,
                             goalPoint3D);
                     CopyFinalPathDiagnosticsToProfile(
@@ -1763,6 +1769,8 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
     optOptions.maxShortcutLookAhead = options.optimizerMaxShortcutLookAhead;
     optOptions.enableCurveSmoothing = options.smoothOptimizedPath;
     optOptions.curveSamplesPerSegment = options.smoothPathSamplesPerSegment;
+    optOptions.displayCurveSamplesPerSegment =
+        options.displayPathSamplesPerSegment;
     optOptions.curveSampleSpacing = options.smoothPathSampleSpacing;
     optOptions.maxCurveDeviation = options.smoothPathMaxDeviation;
     optOptions.smoothingSignificantTurnWeight =
@@ -1795,9 +1803,13 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
     profile.smoothingLineCheckCount = optResult.smoothingLineCheckCount;
     profile.smoothingRequested = options.smoothOptimizedPath;
     profile.smoothingSucceeded = optResult.smoothingSucceeded;
+    const std::vector<Vec>& displaySource =
+        optResult.displayPointPath.empty() ?
+            optResult.pointPath :
+            optResult.displayPointPath;
     const std::vector<Vec> displayPath =
         BuildDisplayPathPoints(
-            optResult.pointPath,
+            displaySource,
             startPoint3D,
             goalPoint3D);
     CopyFinalPathDiagnosticsToProfile(

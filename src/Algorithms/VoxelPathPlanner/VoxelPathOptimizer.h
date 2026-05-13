@@ -38,6 +38,9 @@ struct VoxelPathOptimizeOptions
     bool enableCurveSmoothing = false;
     // Minimum number of samples generated per control segment.
     int curveSamplesPerSegment = 8;
+    // Minimum number of samples generated per control segment for UI display.
+    // 0 uses curveSamplesPerSegment.
+    int displayCurveSamplesPerSegment = 0;
     // Target spacing for generated/densified curve samples. 0 uses a
     // voxel-size-derived default.
     double curveSampleSpacing = 0.0;
@@ -69,6 +72,7 @@ struct VoxelPathOptimizeResult
 {
     std::vector<VoxelIndex> voxelPath;
     std::vector<Vec> pointPath;
+    std::vector<Vec> displayPointPath;
 
     std::size_t inputCount = 0;
     std::size_t afterCollinearCount = 0;

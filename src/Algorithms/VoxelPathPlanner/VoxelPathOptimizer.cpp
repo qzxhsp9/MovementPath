@@ -1467,6 +1467,7 @@ VoxelPathOptimizeResult VoxelPathOptimizer::Optimize(
             ConvertToPoints(space, inputPath));
 
         std::vector<Vec> bestSmoothed;
+        std::vector<Vec> bestControlPointPath;
         std::vector<VoxelIndex> bestControlVoxelPath;
         double bestScore = std::numeric_limits<double>::max();
         int bestSmoothingLineCheckCount = 0;
@@ -1498,6 +1499,7 @@ VoxelPathOptimizeResult VoxelPathOptimizer::Optimize(
                     smoothed.size() > bestSmoothed.size()))
             {
                 bestSmoothed = std::move(smoothed);
+                bestControlPointPath = controlPath.pointPath;
                 bestControlVoxelPath = controlPath.voxelPath;
                 bestScore = score;
                 bestSmoothingLineCheckCount = smoothingLineCheckCount;
@@ -1515,6 +1517,20 @@ VoxelPathOptimizeResult VoxelPathOptimizer::Optimize(
                 bestSmoothed,
                 options,
                 space.GetVoxelSize());
+            if (!bestControlPointPath.empty())
+            {
+                VoxelPathOptimizeOptions displayOptions = options;
+                displayOptions.curveSamplesPerSegment =
+                    options.displayCurveSamplesPerSegment > 0 ?
+                        options.displayCurveSamplesPerSegment :
+                        options.curveSamplesPerSegment;
+                result.displayPointPath =
+                    BuildCatmullRomSamples(bestControlPointPath, displayOptions);
+            }
+            if (result.displayPointPath.empty())
+            {
+                result.displayPointPath = bestSmoothed;
+            }
             result.smoothedPointCount = result.pointPath.size();
             result.smoothingLineCheckCount = bestSmoothingLineCheckCount;
             result.smoothingSucceeded = true;
