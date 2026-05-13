@@ -527,18 +527,12 @@ void WorkbenchMainWindow::BuildUi()
     RefreshRestrictedRegionList();
 }
 
-QString ToRestrictedRegionSummary(
-    const RestrictedRegion& region,
-    int index)
+QString ToVectorText(const Vec& value)
 {
-    return QString("Region %1  P(%2, %3, %4)  N(%5, %6, %7)")
-        .arg(index + 1)
-        .arg(region.point.x, 0, 'g', 4)
-        .arg(region.point.y, 0, 'g', 4)
-        .arg(region.point.z, 0, 'g', 4)
-        .arg(region.normal.x, 0, 'g', 4)
-        .arg(region.normal.y, 0, 'g', 4)
-        .arg(region.normal.z, 0, 'g', 4);
+    return QString("(%1, %2, %3)")
+        .arg(value.x, 0, 'g', 4)
+        .arg(value.y, 0, 'g', 4)
+        .arg(value.z, 0, 'g', 4);
 }
 
 QString FormatDuration(double milliseconds)
@@ -681,35 +675,86 @@ void WorkbenchMainWindow::RefreshRestrictedRegionList()
         delete item;
     }
 
+    if (m_restrictedRegions.empty())
+    {
+        return;
+    }
+
+    QWidget* header = new QWidget();
+    QGridLayout* headerLayout = new QGridLayout(header);
+    headerLayout->setContentsMargins(0, 0, 0, 0);
+    headerLayout->setHorizontalSpacing(14);
+    QLabel* indexHeader = new QLabel("Index", header);
+    QLabel* pointHeader = new QLabel("Plane point", header);
+    QLabel* normalHeader = new QLabel("Blocked normal", header);
+    QLabel* actionsHeader = new QLabel("Actions", header);
+    indexHeader->setAlignment(Qt::AlignCenter);
+    pointHeader->setAlignment(Qt::AlignCenter);
+    normalHeader->setAlignment(Qt::AlignCenter);
+    actionsHeader->setAlignment(Qt::AlignCenter);
+    headerLayout->addWidget(indexHeader, 0, 0);
+    headerLayout->addWidget(pointHeader, 0, 1);
+    headerLayout->addWidget(normalHeader, 0, 2);
+    headerLayout->addWidget(actionsHeader, 0, 3);
+    headerLayout->setColumnStretch(0, 1);
+    headerLayout->setColumnStretch(1, 5);
+    headerLayout->setColumnStretch(2, 5);
+    headerLayout->setColumnStretch(3, 2);
+    m_restrictedRegionListLayout->addWidget(header);
+
     for (std::size_t i = 0; i < m_restrictedRegions.size(); ++i)
     {
         QWidget* row = new QWidget();
-        QHBoxLayout* rowLayout = new QHBoxLayout(row);
+        QGridLayout* rowLayout = new QGridLayout(row);
         rowLayout->setContentsMargins(0, 0, 0, 0);
+        rowLayout->setHorizontalSpacing(14);
 
-        QLabel* summary = new QLabel(
-            ToRestrictedRegionSummary(
-                m_restrictedRegions[i],
-                static_cast<int>(i)),
+        QLabel* indexLabel = new QLabel(QString::number(i + 1), row);
+        QLabel* pointLabel = new QLabel(
+            ToVectorText(m_restrictedRegions[i].point),
             row);
-        summary->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        QLabel* normalLabel = new QLabel(
+            ToVectorText(m_restrictedRegions[i].normal),
+            row);
+        QWidget* actions = new QWidget(row);
+        QHBoxLayout* actionsLayout = new QHBoxLayout(actions);
+        actionsLayout->setContentsMargins(0, 0, 0, 0);
+        actionsLayout->setSpacing(2);
 
-        QPushButton* editButton = new QPushButton("Edit", row);
-        QPushButton* pickButton = new QPushButton("Pick", row);
-        QToolButton* removeButton = new QToolButton(row);
+        pointLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        normalLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        indexLabel->setAlignment(Qt::AlignCenter);
+        pointLabel->setAlignment(Qt::AlignCenter);
+        normalLabel->setAlignment(Qt::AlignCenter);
+
+        QToolButton* editButton = new QToolButton(actions);
+        QToolButton* pickButton = new QToolButton(actions);
+        QToolButton* removeButton = new QToolButton(actions);
+        editButton->setIcon(style()->standardIcon(QStyle::SP_FileDialogDetailedView));
+        editButton->setToolTip("Edit region");
+        pickButton->setIcon(style()->standardIcon(QStyle::SP_DialogOpenButton));
+        pickButton->setToolTip("Pick point and normal from model surface");
         removeButton->setIcon(style()->standardIcon(QStyle::SP_TrashIcon));
         removeButton->setToolTip("Remove region");
+        actionsLayout->addWidget(editButton);
+        actionsLayout->addWidget(pickButton);
+        actionsLayout->addWidget(removeButton);
+        actionsLayout->setAlignment(Qt::AlignCenter);
 
-        rowLayout->addWidget(summary, 1);
-        rowLayout->addWidget(editButton);
-        rowLayout->addWidget(pickButton);
-        rowLayout->addWidget(removeButton);
+        rowLayout->addWidget(indexLabel, 0, 0);
+        rowLayout->addWidget(pointLabel, 0, 1);
+        rowLayout->addWidget(normalLabel, 0, 2);
+        rowLayout->addWidget(actions, 0, 3);
+        rowLayout->setColumnStretch(0, 1);
+        rowLayout->setColumnStretch(1, 5);
+        rowLayout->setColumnStretch(2, 5);
+        rowLayout->setColumnStretch(3, 2);
         m_restrictedRegionListLayout->addWidget(row);
 
-        connect(editButton, &QPushButton::clicked, this, [this, i]() {
+        connect(editButton, &QToolButton::clicked, this, [this, i]() {
             EditRestrictedRegion(i);
         });
-        connect(pickButton, &QPushButton::clicked, this, [this, i]() {
+        connect(pickButton, &QToolButton::clicked, this, [this, i]() {
             BeginRestrictedRegionPointPick(i);
         });
         connect(removeButton, &QToolButton::clicked, this, [this, i]() {
@@ -1598,6 +1643,8 @@ void WorkbenchMainWindow::ApplyPickedPoint(
         }
         m_restrictedRegions[m_pickRestrictedRegionIndex].point =
             Vec(point.X(), point.Y(), point.Z());
+        m_restrictedRegions[m_pickRestrictedRegionIndex].normal =
+            Vec(normal.X(), normal.Y(), normal.Z());
         RefreshRestrictedRegionList();
         NotifyPlanningInputChanged();
         break;
