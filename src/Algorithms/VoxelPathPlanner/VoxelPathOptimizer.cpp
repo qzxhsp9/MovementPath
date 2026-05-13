@@ -284,6 +284,76 @@ bool IsLineCollisionFree(
     return true;
 }
 
+bool IsPointInEndpointExemptZone(
+    const Vec& point,
+    const VoxelPathOptimizeOptions& options)
+{
+    if (!options.useRealEndpointsForSmoothing ||
+        options.endpointCollisionExemptRadius <= 0.0)
+    {
+        return false;
+    }
+
+    return point.Distance(options.realStartPoint) <
+            options.endpointCollisionExemptRadius ||
+        point.Distance(options.realGoalPoint) <
+            options.endpointCollisionExemptRadius;
+}
+
+bool IsSmoothedSampleCollisionFree(
+    const VoxelSpace& space,
+    const Vec& point,
+    const VoxelPathOptimizeOptions& options)
+{
+    if (VoxelWalkability::IsPointRestricted(
+            point,
+            options.restrictedHalfSpaces))
+    {
+        return false;
+    }
+
+    if (IsPointInEndpointExemptZone(point, options))
+    {
+        return true;
+    }
+
+    return IsIndexCollisionFree(
+        space,
+        space.WorldToIndex(point),
+        options.restrictedHalfSpaces);
+}
+
+bool IsSmoothedSegmentCollisionFree(
+    const VoxelSpace& space,
+    const Vec& from,
+    const Vec& to,
+    const VoxelPathOptimizeOptions& options)
+{
+    const double voxelSize = space.GetVoxelSize();
+    if (voxelSize <= 0.0)
+    {
+        return false;
+    }
+
+    const double length = from.Distance(to);
+    const int sampleCount = std::max(
+        1,
+        static_cast<int>(std::ceil(length / std::max(voxelSize * 0.5, kEpsilon))));
+
+    for (int sample = 1; sample <= sampleCount; ++sample)
+    {
+        const double t =
+            static_cast<double>(sample) / static_cast<double>(sampleCount);
+        const Vec point = from * (1.0 - t) + to * t;
+        if (!IsSmoothedSampleCollisionFree(space, point, options))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 double DirectionChangeSeverity(
     const Vec& previous,
     const Vec& current,
@@ -617,18 +687,7 @@ bool ValidateSmoothedPath(
             return false;
         }
 
-        if (VoxelWalkability::IsPointRestricted(
-                candidate[i],
-                options.restrictedHalfSpaces))
-        {
-            return false;
-        }
-
-        const VoxelIndex index = space.WorldToIndex(candidate[i]);
-        if (!IsIndexCollisionFree(
-                space,
-                index,
-                options.restrictedHalfSpaces))
+        if (!IsSmoothedSampleCollisionFree(space, candidate[i], options))
         {
             return false;
         }
@@ -637,12 +696,11 @@ bool ValidateSmoothedPath(
         {
             ++lineCheckCount;
 
-            const VoxelIndex prevIndex = space.WorldToIndex(candidate[i - 1]);
-            if (!IsLineCollisionFree(
+            if (!IsSmoothedSegmentCollisionFree(
                     space,
-                    prevIndex,
-                    index,
-                    options.restrictedHalfSpaces))
+                    candidate[i - 1],
+                    candidate[i],
+                    options))
             {
                 return false;
             }
@@ -695,6 +753,31 @@ void AddUniqueControlPathCandidate(
         std::move(voxelPath),
         std::move(pointPath)
     });
+}
+
+std::vector<Vec> BuildSmoothingControlPath(
+    const std::vector<Vec>& path,
+    const VoxelPathOptimizeOptions& options)
+{
+    if (!options.useRealEndpointsForSmoothing || path.empty())
+    {
+        return path;
+    }
+
+    std::vector<Vec> controlPath = path;
+    constexpr double epsilon = 1.0e-9;
+
+    if (controlPath.front().Distance(options.realStartPoint) > epsilon)
+    {
+        controlPath.insert(controlPath.begin(), options.realStartPoint);
+    }
+
+    if (controlPath.back().Distance(options.realGoalPoint) > epsilon)
+    {
+        controlPath.push_back(options.realGoalPoint);
+    }
+
+    return controlPath;
 }
 
 std::vector<VoxelIndex> BuildLineOfSightShortcutPath(
@@ -1324,8 +1407,10 @@ VoxelPathOptimizeResult VoxelPathOptimizer::Optimize(
 
     result.afterCollinearCount = workingPath.size();
 
-    if (!options.enableLineOfSightShortcut ||
-        workingPath.size() <= 2)
+    if ((!options.enableLineOfSightShortcut ||
+        workingPath.size() <= 2) &&
+        !(options.enableCurveSmoothing &&
+            options.useRealEndpointsForSmoothing))
     {
         result.voxelPath = workingPath;
         result.pointPath = ConvertToPoints(space, result.voxelPath);
@@ -1421,7 +1506,9 @@ VoxelPathOptimizeResult VoxelPathOptimizer::Optimize(
     result.outputCount = result.voxelPath.size();
     result.smoothedPointCount = result.pointPath.size();
 
-    if (options.enableCurveSmoothing && result.pointPath.size() <= 2)
+    if (options.enableCurveSmoothing &&
+        result.pointPath.size() <= 2 &&
+        !options.useRealEndpointsForSmoothing)
     {
         result.smoothingSucceeded = true;
     }
@@ -1475,10 +1562,12 @@ VoxelPathOptimizeResult VoxelPathOptimizer::Optimize(
         for (const ControlPathCandidate& controlPath : controlPaths)
         {
             int smoothingLineCheckCount = 0;
+            const std::vector<Vec> smoothingControlPath =
+                BuildSmoothingControlPath(controlPath.pointPath, options);
             std::vector<Vec> smoothed =
                 SmoothPointPath(
                     space,
-                    controlPath.pointPath,
+                    smoothingControlPath,
                     options,
                     smoothingLineCheckCount);
 
@@ -1499,7 +1588,7 @@ VoxelPathOptimizeResult VoxelPathOptimizer::Optimize(
                     smoothed.size() > bestSmoothed.size()))
             {
                 bestSmoothed = std::move(smoothed);
-                bestControlPointPath = controlPath.pointPath;
+                bestControlPointPath = smoothingControlPath;
                 bestControlVoxelPath = controlPath.voxelPath;
                 bestScore = score;
                 bestSmoothingLineCheckCount = smoothingLineCheckCount;
@@ -1526,10 +1615,22 @@ VoxelPathOptimizeResult VoxelPathOptimizer::Optimize(
                         options.curveSamplesPerSegment;
                 result.displayPointPath =
                     BuildCatmullRomSamples(bestControlPointPath, displayOptions);
+                if (options.useRealEndpointsForSmoothing &&
+                    !result.displayPointPath.empty())
+                {
+                    result.displayPointPath.front() = options.realStartPoint;
+                    result.displayPointPath.back() = options.realGoalPoint;
+                }
             }
             if (result.displayPointPath.empty())
             {
                 result.displayPointPath = bestSmoothed;
+                if (options.useRealEndpointsForSmoothing &&
+                    !result.displayPointPath.empty())
+                {
+                    result.displayPointPath.front() = options.realStartPoint;
+                    result.displayPointPath.back() = options.realGoalPoint;
+                }
             }
             result.smoothedPointCount = result.pointPath.size();
             result.smoothingLineCheckCount = bestSmoothingLineCheckCount;

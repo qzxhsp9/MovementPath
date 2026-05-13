@@ -57,6 +57,10 @@ struct VoxelPathOptimizeOptions
     bool useEndpointDirections = false;
     Vec startDirection;
     Vec goalDirection;
+    bool useRealEndpointsForSmoothing = false;
+    Vec realStartPoint;
+    Vec realGoalPoint;
+    double endpointCollisionExemptRadius = 0.0;
 
     // Lazy voxel state source. Full-bounds callers leave this empty because
     // every relevant voxel has already been classified.

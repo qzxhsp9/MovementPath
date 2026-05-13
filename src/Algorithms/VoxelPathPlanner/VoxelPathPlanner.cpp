@@ -1362,6 +1362,13 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                     optOptions.startDirection = astarOptions.startSnapDirection;
                     optOptions.goalDirection =
                         astarOptions.goalSnapDirection * -1.0;
+                    optOptions.useRealEndpointsForSmoothing = true;
+                    optOptions.realStartPoint = startPoint3D;
+                    optOptions.realGoalPoint = goalPoint3D;
+                    optOptions.endpointCollisionExemptRadius =
+                        std::max(
+                            options.meshBuildOptions.clearance,
+                            options.meshBuildOptions.voxelSize);
                     optOptions.ensureCellBuilt =
                         [&lazyQuery](
                             VoxelSpace& space,
@@ -1784,6 +1791,13 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
     optOptions.useEndpointDirections = true;
     optOptions.startDirection = astarOptions.startSnapDirection;
     optOptions.goalDirection = astarOptions.goalSnapDirection * -1.0;
+    optOptions.useRealEndpointsForSmoothing = true;
+    optOptions.realStartPoint = startPoint3D;
+    optOptions.realGoalPoint = goalPoint3D;
+    optOptions.endpointCollisionExemptRadius =
+        std::max(
+            options.meshBuildOptions.clearance,
+            options.meshBuildOptions.voxelSize);
 
     VoxelPathOptimizeResult optResult;
 

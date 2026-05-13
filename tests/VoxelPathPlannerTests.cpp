@@ -17,6 +17,16 @@ bool IsNear(
         std::abs(p.z - q.Z()) <= tolerance;
 }
 
+bool IsNear(
+    const Vec& p,
+    const Vec& q,
+    double tolerance = 1.0e-9)
+{
+    return std::abs(p.x - q.x) <= tolerance &&
+        std::abs(p.y - q.y) <= tolerance &&
+        std::abs(p.z - q.z) <= tolerance;
+}
+
 bool TestBaselinePlannerDefaultBehavior(
     const VoxelPlanningScenario& scenario,
     VoxelPathPlannerResult& baselineResult)
@@ -437,6 +447,52 @@ bool TestClearanceBandIgnoresSecondClearanceFilter()
             1.0),
         "ClearanceBand mode should not apply clearance a second time");
 }
+
+bool TestSmoothingAllowsOccupiedRealEndpoints()
+{
+    VoxelSpace space(Vec(0.0, 0.0, 0.0), 1.0);
+    space.SetSearchBounds(VoxelBounds{
+        VoxelIndex(0, 0, 0),
+        VoxelIndex(6, 0, 0)
+    });
+    space.SetCellState(VoxelIndex(0, 0, 0), VoxelState::Occupied);
+    space.SetCellState(VoxelIndex(6, 0, 0), VoxelState::Occupied);
+
+    std::vector<VoxelIndex> path{
+        VoxelIndex(1, 0, 0),
+        VoxelIndex(2, 0, 0),
+        VoxelIndex(3, 0, 0),
+        VoxelIndex(4, 0, 0),
+        VoxelIndex(5, 0, 0)
+    };
+
+    VoxelPathOptimizeOptions options;
+    options.searchMode = VoxelAStarSearchMode::FreeSpace;
+    options.enableCurveSmoothing = true;
+    options.curveSamplesPerSegment = 4;
+    options.useEndpointDirections = true;
+    options.startDirection = Vec(1.0, 0.0, 0.0);
+    options.goalDirection = Vec(1.0, 0.0, 0.0);
+    options.useRealEndpointsForSmoothing = true;
+    options.realStartPoint = Vec(0.2, 0.5, 0.5);
+    options.realGoalPoint = Vec(6.2, 0.5, 0.5);
+    options.endpointCollisionExemptRadius = 1.0;
+
+    const VoxelPathOptimizeResult result =
+        VoxelPathOptimizer::Optimize(space, path, options);
+
+    bool ok = true;
+    ok &= Expect(
+        result.smoothingSucceeded,
+        "smoothing should allow occupied samples near real endpoints");
+    ok &= Expect(
+        !result.displayPointPath.empty() &&
+            IsNear(result.displayPointPath.front(), options.realStartPoint) &&
+            IsNear(result.displayPointPath.back(), options.realGoalPoint),
+        "smoothed display path should use real endpoints");
+
+    return ok;
+}
 }
 
 int main()
@@ -456,6 +512,7 @@ int main()
     ok &= TestRestrictedHalfSpaceCanBlockSearch(boxScenario);
     ok &= TestFreeSpaceTreatsFreeAndClearanceBandEqually();
     ok &= TestClearanceBandIgnoresSecondClearanceFilter();
+    ok &= TestSmoothingAllowsOccupiedRealEndpoints();
 
     return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }
