@@ -439,6 +439,11 @@ void WorkbenchMainWindow::BuildUi()
     smoothPathLayout->addStretch(1);
     smoothPathLayout->addWidget(pathTuningSettingsButton);
     m_realtimeCheck = new QCheckBox("Realtime after input changes");
+    QWidget* computeRow = new QWidget(plannerGroup);
+    QHBoxLayout* computeLayout = new QHBoxLayout(computeRow);
+    computeLayout->setContentsMargins(0, 0, 0, 0);
+    computeLayout->addWidget(m_computeButton);
+    computeLayout->addWidget(m_stopButton);
     plannerLayout->addRow("Method", m_plannerCombo);
     plannerLayout->addRow("Search", m_searchModeCombo);
     plannerLayout->addRow("Neighbors", m_neighborTypeCombo);
@@ -448,8 +453,7 @@ void WorkbenchMainWindow::BuildUi()
     plannerLayout->addRow("Lazy timeout ms", m_lazyTimeBudgetSpin);
     plannerLayout->addRow(smoothPathRow);
     plannerLayout->addRow(m_realtimeCheck);
-    plannerLayout->addRow(m_computeButton);
-    plannerLayout->addRow(m_stopButton);
+    plannerLayout->addRow(computeRow);
     panelLayout->addWidget(plannerGroup);
 
     m_log = new QPlainTextEdit();
@@ -1151,6 +1155,13 @@ void WorkbenchMainWindow::OpenPathTuningSettings()
 
     QGroupBox* shortcutGroup = new QGroupBox("拉直与平滑", &dialog);
     QFormLayout* shortcutLayout = new QFormLayout(shortcutGroup);
+    QCheckBox* showAStarPointSet =
+        new QCheckBox("显示 A* 搜索结果（点集）", shortcutGroup);
+    showAStarPointSet->setChecked(m_pathTuningSettings.showAStarPointSet);
+    QCheckBox* showSmoothControlPoints =
+        new QCheckBox("显示平滑路径控制点", shortcutGroup);
+    showSmoothControlPoints->setChecked(
+        m_pathTuningSettings.showSmoothControlPoints);
     QSpinBox* maxShortcutLookAhead = MakeTuningIntSpin(
         m_pathTuningSettings.optimizerMaxShortcutLookAhead,
         0,
@@ -1176,7 +1187,7 @@ void WorkbenchMainWindow::OpenPathTuningSettings()
     SetDefaultTooltip(
         displaySamplesPerSegment,
         "displayPathSamplesPerSegment",
-        "displayPointPath samples per smoothed control segment. Only affects Workbench visual density.",
+        "平滑路径显示曲线每段采样点数，仅影响界面显示密度。",
         defaults.displayPathSamplesPerSegment);
     QDoubleSpinBox* smoothSpacingMin = MakeTuningDoubleSpin(
         m_pathTuningSettings.smoothPathSampleSpacingMin,
@@ -1214,16 +1225,15 @@ void WorkbenchMainWindow::OpenPathTuningSettings()
         "smoothPathMaxDeviationClearanceMultiplier",
         "平滑曲线允许偏离控制折线的距离，按安全距离计算的倍率。",
         defaults.smoothPathMaxDeviationClearanceMultiplier);
+    shortcutLayout->addRow(showAStarPointSet);
+    shortcutLayout->addRow(showSmoothControlPoints);
     shortcutLayout->addRow("最大拉直前视点数", maxShortcutLookAhead);
     shortcutLayout->addRow("每段采样点数", smoothSamplesPerSegment);
+    shortcutLayout->addRow("显示路径每段采样点数", displaySamplesPerSegment);
     shortcutLayout->addRow("采样间距下限", smoothSpacingMin);
     shortcutLayout->addRow(
         "采样间距 x 体素",
         smoothSpacingVoxelMultiplier);
-    shortcutLayout->insertRow(
-        2,
-        "displayPointPath samples",
-        displaySamplesPerSegment);
     shortcutLayout->addRow(
         "最大偏离 x 体素",
         maxDeviationVoxelMultiplier);
@@ -1304,6 +1314,9 @@ void WorkbenchMainWindow::OpenPathTuningSettings()
         smoothSamplesPerSegment->value();
     m_pathTuningSettings.displayPathSamplesPerSegment =
         displaySamplesPerSegment->value();
+    m_pathTuningSettings.showAStarPointSet = showAStarPointSet->isChecked();
+    m_pathTuningSettings.showSmoothControlPoints =
+        showSmoothControlPoints->isChecked();
     m_pathTuningSettings.smoothPathSampleSpacingMin =
         smoothSpacingMin->value();
     m_pathTuningSettings.smoothPathSampleSpacingVoxelMultiplier =
@@ -1556,6 +1569,24 @@ void WorkbenchMainWindow::OnPathComputationFinished()
             ToPathPoints(result.displayPathPoints) :
             ToPathPoints(result.optimizeResult.pointPath);
     m_view->DisplayPath(pathPoints);
+
+    const double pointMarkerRadius = std::max(m_runningVoxelSize * 0.18, 0.5);
+    if (m_pathTuningSettings.showAStarPointSet)
+    {
+        m_view->DisplayPointMarkers(
+            ToPathPoints(result.astarResult.pointPath),
+            Quantity_Color(0.2, 0.55, 1.0, Quantity_TOC_RGB),
+            pointMarkerRadius);
+    }
+    if (m_pathTuningSettings.showSmoothControlPoints &&
+        result.profile.smoothingSucceeded &&
+        !result.optimizeResult.controlPointPath.empty())
+    {
+        m_view->DisplayPointMarkers(
+            ToPathPoints(result.optimizeResult.controlPointPath),
+            Quantity_Color(1.0, 0.1, 0.85, Quantity_TOC_RGB),
+            std::max(m_runningVoxelSize * 0.22, 0.6));
+    }
 
     if (m_showPathVoxelsCheck->isChecked())
     {

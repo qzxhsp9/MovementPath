@@ -44,6 +44,76 @@ double DistancePointToPolyline(
     return best;
 }
 
+void PushDistinctPoint(std::vector<Vec>& points, const Vec& point)
+{
+    if (points.empty() || points.back().Distance(point) > 1.0e-9)
+    {
+        points.push_back(point);
+    }
+}
+
+bool TryNormalize(Vec& direction)
+{
+    if (direction.SquareMagnitude() <= kEpsilon)
+    {
+        return false;
+    }
+
+    direction.Normalize();
+    return true;
+}
+
+double EndpointGuideDistance(
+    const Vec& endpoint,
+    const Vec& nearestSearchPoint,
+    const VoxelPathOptimizeOptions& options)
+{
+    const double searchPointDistance = endpoint.Distance(nearestSearchPoint);
+    double guideDistance = searchPointDistance * 0.5;
+
+    if (options.endpointCollisionExemptRadius > kEpsilon)
+    {
+        guideDistance = options.endpointCollisionExemptRadius * 0.75;
+        if (searchPointDistance > kEpsilon)
+        {
+            guideDistance = std::min(guideDistance, searchPointDistance);
+        }
+    }
+
+    return std::max(guideDistance, 1.0e-6);
+}
+
+bool ShouldSkipEndpointSearchPoint(
+    const Vec& endpoint,
+    const Vec& endpointToPathDirection,
+    const Vec& point,
+    double guideDistance)
+{
+    const Vec offset = point - endpoint;
+    const double distanceSquared = offset.SquareMagnitude();
+    if (distanceSquared <= kEpsilon)
+    {
+        return true;
+    }
+
+    const double projection = offset.Dot(endpointToPathDirection);
+    const double perpendicularSquared =
+        std::max(0.0, distanceSquared - projection * projection);
+    const double perpendicularDistance = std::sqrt(perpendicularSquared);
+    const double distance = std::sqrt(distanceSquared);
+    const double lateralTolerance = std::max(guideDistance * 0.35, 1.0e-6);
+
+    // Search endpoints are only connectivity anchors. If they are near the
+    // real endpoint or do not advance along the requested tangent, keeping
+    // them as smoothing controls bends the curve away from the endpoint
+    // direction. The guide distance is only a filtering scale; it is not
+    // inserted as an actual curve control point.
+    return distance <= guideDistance * 1.25 ||
+        projection <= guideDistance * 0.25 ||
+        (distance <= guideDistance * 3.0 &&
+            perpendicularDistance > lateralTolerance);
+}
+
 Vec CentripetalCatmullRom(
     const Vec& p0,
     const Vec& p1,
@@ -764,17 +834,74 @@ std::vector<Vec> BuildSmoothingControlPath(
         return path;
     }
 
-    std::vector<Vec> controlPath = path;
     constexpr double epsilon = 1.0e-9;
+    std::size_t startIndex = 0;
+    std::size_t endIndex = path.size();
+    std::vector<Vec> controlPath;
+    controlPath.reserve(path.size() + 4);
 
-    if (controlPath.front().Distance(options.realStartPoint) > epsilon)
+    PushDistinctPoint(controlPath, options.realStartPoint);
+
+    if (options.useEndpointDirections)
     {
-        controlPath.insert(controlPath.begin(), options.realStartPoint);
+        Vec startDirection = options.startDirection;
+        if (TryNormalize(startDirection))
+        {
+            const double startGuideDistance =
+                EndpointGuideDistance(
+                    options.realStartPoint,
+                    path.front(),
+                    options);
+
+            while (startIndex < endIndex &&
+                ShouldSkipEndpointSearchPoint(
+                    options.realStartPoint,
+                    startDirection,
+                    path[startIndex],
+                    startGuideDistance))
+            {
+                ++startIndex;
+            }
+        }
     }
 
-    if (controlPath.back().Distance(options.realGoalPoint) > epsilon)
+    Vec goalDirection = options.goalDirection;
+    const bool hasGoalDirection =
+        options.useEndpointDirections && TryNormalize(goalDirection);
+    Vec goalToPathDirection;
+    double goalGuideDistance = 0.0;
+
+    if (hasGoalDirection)
     {
-        controlPath.push_back(options.realGoalPoint);
+        goalToPathDirection = goalDirection * -1.0;
+        goalGuideDistance =
+            EndpointGuideDistance(
+                options.realGoalPoint,
+                path.back(),
+                options);
+
+        while (endIndex > startIndex &&
+            ShouldSkipEndpointSearchPoint(
+                options.realGoalPoint,
+                goalToPathDirection,
+                path[endIndex - 1],
+                goalGuideDistance))
+        {
+            --endIndex;
+        }
+    }
+
+    for (std::size_t i = startIndex; i < endIndex; ++i)
+    {
+        PushDistinctPoint(controlPath, path[i]);
+    }
+
+    PushDistinctPoint(controlPath, options.realGoalPoint);
+
+    if (controlPath.size() == 1 && path.front().Distance(path.back()) > epsilon)
+    {
+        PushDistinctPoint(controlPath, path.back());
+        PushDistinctPoint(controlPath, options.realGoalPoint);
     }
 
     return controlPath;
@@ -1608,6 +1735,7 @@ VoxelPathOptimizeResult VoxelPathOptimizer::Optimize(
                 space.GetVoxelSize());
             if (!bestControlPointPath.empty())
             {
+                result.controlPointPath = bestControlPointPath;
                 VoxelPathOptimizeOptions displayOptions = options;
                 displayOptions.curveSamplesPerSegment =
                     options.displayCurveSamplesPerSegment > 0 ?

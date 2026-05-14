@@ -493,6 +493,71 @@ bool TestSmoothingAllowsOccupiedRealEndpoints()
 
     return ok;
 }
+
+bool TestSmoothingEndpointGuideIgnoresOffsetSearchEndpoint()
+{
+    VoxelSpace space(Vec(0.0, 0.0, 0.0), 1.0);
+    space.SetSearchBounds(VoxelBounds{
+        VoxelIndex(0, 0, 0),
+        VoxelIndex(5, 2, 0)
+    });
+
+    for (int x = 0; x <= 5; ++x)
+    {
+        for (int y = 0; y <= 2; ++y)
+        {
+            space.SetCellState(VoxelIndex(x, y, 0), VoxelState::Free);
+        }
+    }
+
+    std::vector<VoxelIndex> path{
+        VoxelIndex(0, 2, 0),
+        VoxelIndex(2, 0, 0),
+        VoxelIndex(4, 0, 0),
+        VoxelIndex(5, 0, 0)
+    };
+
+    VoxelPathOptimizeOptions options;
+    options.searchMode = VoxelAStarSearchMode::FreeSpace;
+    options.enableCurveSmoothing = true;
+    options.curveSamplesPerSegment = 8;
+    options.displayCurveSamplesPerSegment = 8;
+    options.useEndpointDirections = true;
+    options.startDirection = Vec(1.0, 0.0, 0.0);
+    options.goalDirection = Vec(1.0, 0.0, 0.0);
+    options.useRealEndpointsForSmoothing = true;
+    options.realStartPoint = Vec(0.5, 0.5, 0.5);
+    options.realGoalPoint = Vec(5.5, 0.5, 0.5);
+    options.endpointCollisionExemptRadius = 2.0;
+
+    const VoxelPathOptimizeResult result =
+        VoxelPathOptimizer::Optimize(space, path, options);
+
+    bool ok = true;
+    ok &= Expect(
+        result.smoothingSucceeded,
+        "smoothing should succeed with offset search endpoints");
+    ok &= Expect(
+        result.displayPointPath.size() > 2,
+        "smoothed display path should contain curve samples");
+    ok &= Expect(
+        !result.displayPointPath.empty() &&
+            IsNear(result.displayPointPath.front(), options.realStartPoint) &&
+            IsNear(result.displayPointPath.back(), options.realGoalPoint),
+        "smoothed display path should preserve real endpoints");
+
+    if (result.displayPointPath.size() > 1)
+    {
+        const Vec firstStep(
+            result.displayPointPath.front(),
+            result.displayPointPath[1]);
+        ok &= Expect(
+            firstStep.x > 0.0 && std::abs(firstStep.y) < 1.0e-6,
+            "smoothed path should leave the real start along startDirection");
+    }
+
+    return ok;
+}
 }
 
 int main()
@@ -513,6 +578,7 @@ int main()
     ok &= TestFreeSpaceTreatsFreeAndClearanceBandEqually();
     ok &= TestClearanceBandIgnoresSecondClearanceFilter();
     ok &= TestSmoothingAllowsOccupiedRealEndpoints();
+    ok &= TestSmoothingEndpointGuideIgnoresOffsetSearchEndpoint();
 
     return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }

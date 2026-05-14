@@ -344,6 +344,25 @@ void OcctViewWidget::DisplayPath(
         4.0);
 }
 
+void OcctViewWidget::DisplayPointMarkers(
+    const std::vector<Vec>& points,
+    const Quantity_Color& color,
+    double radius)
+{
+    if (points.empty())
+    {
+        return;
+    }
+
+    EnsureViewer();
+    for (const Vec& point : points)
+    {
+        DisplayTransientShape(
+            BRepPrimAPI_MakeSphere(ToPoint(point), radius).Shape(),
+            color);
+    }
+}
+
 void OcctViewWidget::DisplayKeyVoxels(
     const std::vector<Vec>& voxelCenters,
     double voxelSize)

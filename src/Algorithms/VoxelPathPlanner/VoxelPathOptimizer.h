@@ -77,6 +77,7 @@ struct VoxelPathOptimizeResult
     std::vector<VoxelIndex> voxelPath;
     std::vector<Vec> pointPath;
     std::vector<Vec> displayPointPath;
+    std::vector<Vec> controlPointPath;
 
     std::size_t inputCount = 0;
     std::size_t afterCollinearCount = 0;

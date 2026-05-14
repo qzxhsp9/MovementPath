@@ -52,6 +52,11 @@ public:
     void DisplayPath(
         const std::vector<Vec>& points);
 
+    void DisplayPointMarkers(
+        const std::vector<Vec>& points,
+        const Quantity_Color& color,
+        double radius);
+
     void DisplayKeyVoxels(
         const std::vector<Vec>& voxelCenters,
         double voxelSize);

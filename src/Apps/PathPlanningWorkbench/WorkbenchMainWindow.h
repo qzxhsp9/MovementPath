@@ -75,6 +75,8 @@ struct PathTuningSettings
     double smoothingTotalTurnWeight = 2.0;
     double smoothingMaxTurnWeight = 6.0;
     double smoothingDetourWeight = 1.5;
+    bool showAStarPointSet = false;
+    bool showSmoothControlPoints = false;
 };
 
 class WorkbenchMainWindow final : public QMainWindow
