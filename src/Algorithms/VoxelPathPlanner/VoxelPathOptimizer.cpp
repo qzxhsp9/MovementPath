@@ -533,73 +533,6 @@ double MaxDirectionChangeSeverity(const std::vector<Vec>& path)
     return maxSeverity;
 }
 
-double PathLength(const std::vector<Vec>& path)
-{
-    double length = 0.0;
-
-    for (std::size_t i = 1; i < path.size(); ++i)
-    {
-        length += path[i - 1].Distance(path[i]);
-    }
-
-    return length;
-}
-
-double TotalDirectionChangeSeverity(const std::vector<Vec>& path)
-{
-    double totalSeverity = 0.0;
-
-    for (std::size_t i = 1; i + 1 < path.size(); ++i)
-    {
-        totalSeverity +=
-            DirectionChangeSeverity(path[i - 1], path[i], path[i + 1]);
-    }
-
-    return totalSeverity;
-}
-
-std::size_t SignificantTurnCount(const std::vector<Vec>& path)
-{
-    std::size_t count = 0;
-
-    for (std::size_t i = 1; i + 1 < path.size(); ++i)
-    {
-        if (DirectionChangeSeverity(path[i - 1], path[i], path[i + 1]) > 0.2)
-        {
-            ++count;
-        }
-    }
-
-    return count;
-}
-
-double SmoothedPathQualityScore(
-    const std::vector<Vec>& path,
-    double voxelSize,
-    const VoxelPathOptimizeOptions& options)
-{
-    if (path.size() < 2)
-    {
-        return std::numeric_limits<double>::max();
-    }
-
-    const double length = PathLength(path);
-    const double directDistance = std::max(
-        path.front().Distance(path.back()),
-        kEpsilon);
-    const double detour = std::max(0.0, length / directDistance - 1.0);
-    const double turnScale = std::max(voxelSize, directDistance * 0.01);
-
-    return length +
-        static_cast<double>(SignificantTurnCount(path)) * turnScale *
-            options.smoothingSignificantTurnWeight +
-        TotalDirectionChangeSeverity(path) * turnScale *
-            options.smoothingTotalTurnWeight +
-        MaxDirectionChangeSeverity(path) * turnScale *
-            options.smoothingMaxTurnWeight +
-        detour * directDistance * options.smoothingDetourWeight;
-}
-
 std::vector<Vec> DensifyPointPath(
     const std::vector<Vec>& path,
     const VoxelPathOptimizeOptions& options,
@@ -780,12 +713,6 @@ bool ValidateSmoothedPath(
     return true;
 }
 
-struct ControlPathCandidate
-{
-    std::vector<VoxelIndex> voxelPath;
-    std::vector<Vec> pointPath;
-};
-
 VoxelIndex Delta(
     const VoxelIndex& from,
     const VoxelIndex& to)
@@ -908,45 +835,6 @@ std::vector<VoxelIndex> BuildKeyTurnVoxelPath(
     return reduced;
 }
 
-void AddUniqueControlPathCandidate(
-    std::vector<ControlPathCandidate>& controlPaths,
-    std::vector<VoxelIndex> voxelPath,
-    std::vector<Vec> pointPath)
-{
-    if (pointPath.size() < 2)
-    {
-        return;
-    }
-
-    for (const ControlPathCandidate& existing : controlPaths)
-    {
-        if (existing.pointPath.size() != pointPath.size())
-        {
-            continue;
-        }
-
-        bool same = true;
-        for (std::size_t i = 0; i < existing.pointPath.size(); ++i)
-        {
-            if (existing.pointPath[i].Distance(pointPath[i]) > 1.0e-9)
-            {
-                same = false;
-                break;
-            }
-        }
-
-        if (same)
-        {
-            return;
-        }
-    }
-
-    controlPaths.push_back({
-        std::move(voxelPath),
-        std::move(pointPath)
-    });
-}
-
 std::vector<Vec> BuildSmoothingControlPath(
     const std::vector<Vec>& path,
     const VoxelPathOptimizeOptions& options)
@@ -1029,75 +917,6 @@ std::vector<Vec> BuildSmoothingControlPath(
     return controlPath;
 }
 
-std::vector<VoxelIndex> BuildLineOfSightShortcutPath(
-    VoxelSpace& space,
-    const std::vector<VoxelIndex>& inputPath,
-    const VoxelPathOptimizeOptions& options,
-    int maxShortcutLookAhead,
-    int& lineCheckCount)
-{
-    lineCheckCount = 0;
-
-    if (inputPath.size() <= 2)
-    {
-        return inputPath;
-    }
-
-    std::vector<VoxelIndex> optimized;
-    optimized.reserve(inputPath.size());
-    optimized.push_back(inputPath.front());
-
-    std::size_t i = 0;
-    while (i + 1 < inputPath.size())
-    {
-        const std::size_t lastIndex = inputPath.size() - 1;
-        std::size_t maxJ = lastIndex;
-
-        if (maxShortcutLookAhead > 0)
-        {
-            maxJ = std::min<std::size_t>(
-                lastIndex,
-                i + static_cast<std::size_t>(maxShortcutLookAhead));
-        }
-
-        std::size_t bestJ = i + 1;
-
-        for (std::size_t j = maxJ; j > i + 1; --j)
-        {
-            if (options.shouldCancel && options.shouldCancel())
-            {
-                return inputPath;
-            }
-
-            ++lineCheckCount;
-
-            if (VoxelPathOptimizer::IsLineWalkable(
-                    space,
-                    inputPath[i],
-                    inputPath[j],
-                    options))
-            {
-                bestJ = j;
-                break;
-            }
-        }
-
-        if (bestJ == i + 1)
-        {
-            ++lineCheckCount;
-            VoxelPathOptimizer::IsLineWalkable(
-                space,
-                inputPath[i],
-                inputPath[i + 1],
-                options);
-        }
-
-        optimized.push_back(inputPath[bestJ]);
-        i = bestJ;
-    }
-
-    return optimized;
-}
 }
 
 // ============================================================
@@ -1347,6 +1166,84 @@ std::vector<Vec> SmoothConservativeChaikinPath(
 
     lineCheckCount = bestLineCheckCount;
     return best;
+}
+
+namespace
+{
+struct SmoothingAttemptResult
+{
+    bool succeeded = false;
+    int lineCheckCount = 0;
+    std::vector<VoxelIndex> voxelPath;
+    std::vector<Vec> controlPointPath;
+    std::vector<Vec> smoothedPath;
+};
+
+SmoothingAttemptResult TryBuildSmoothedCandidate(
+    VoxelSpace& space,
+    const std::vector<VoxelIndex>& candidateVoxelPath,
+    const VoxelPathOptimizeOptions& options,
+    bool conservativeChaikinOnly)
+{
+    SmoothingAttemptResult attempt;
+    attempt.voxelPath = candidateVoxelPath;
+
+    const std::vector<Vec> candidatePointPath =
+        VoxelPathOptimizer::ConvertToPoints(space, candidateVoxelPath);
+    attempt.controlPointPath =
+        BuildSmoothingControlPath(candidatePointPath, options);
+
+    attempt.smoothedPath =
+        conservativeChaikinOnly ?
+            SmoothConservativeChaikinPath(
+                space,
+                attempt.controlPointPath,
+                options,
+                attempt.lineCheckCount) :
+            VoxelPathOptimizer::SmoothPointPath(
+                space,
+                attempt.controlPointPath,
+                options,
+                attempt.lineCheckCount);
+
+    attempt.succeeded = !attempt.smoothedPath.empty();
+    return attempt;
+}
+
+void AcceptSmoothedCandidate(
+    VoxelPathOptimizeResult& result,
+    const SmoothingAttemptResult& attempt,
+    const VoxelPathOptimizeOptions& options,
+    double voxelSize)
+{
+    result.voxelPath = attempt.voxelPath;
+    result.outputCount = result.voxelPath.size();
+    result.controlPointPath = attempt.controlPointPath;
+    result.pointPath = DensifyPointPath(
+        attempt.smoothedPath,
+        options,
+        voxelSize);
+
+    VoxelPathOptimizeOptions displayOptions = options;
+    displayOptions.curveSamplesPerSegment =
+        options.displayCurveSamplesPerSegment > 0 ?
+            options.displayCurveSamplesPerSegment :
+            options.curveSamplesPerSegment;
+    result.displayPointPath = DensifyPointPath(
+        attempt.smoothedPath,
+        displayOptions,
+        voxelSize);
+
+    if (options.useRealEndpointsForSmoothing &&
+        !result.displayPointPath.empty())
+    {
+        result.displayPointPath.front() = options.realStartPoint;
+        result.displayPointPath.back() = options.realGoalPoint;
+    }
+
+    result.smoothedPointCount = result.pointPath.size();
+    result.smoothingSucceeded = true;
+}
 }
 
 bool VoxelPathOptimizer::IsLineWalkable(
@@ -1819,79 +1716,15 @@ VoxelPathOptimizeResult VoxelPathOptimizer::Optimize(
     }
     else if (options.enableCurveSmoothing)
     {
-        auto TryAcceptSmoothedPath =
-            [&](const std::vector<VoxelIndex>& candidateVoxelPath,
-                bool conservativeChaikinOnly)
-            {
-                const std::vector<Vec> candidatePointPath =
-                    ConvertToPoints(space, candidateVoxelPath);
-                const std::vector<Vec> smoothingControlPath =
-                    BuildSmoothingControlPath(candidatePointPath, options);
+        SmoothingAttemptResult attempt =
+            TryBuildSmoothedCandidate(
+                space,
+                result.voxelPath,
+                options,
+                false);
+        result.smoothingLineCheckCount += attempt.lineCheckCount;
 
-                int smoothingLineCheckCount = 0;
-                std::vector<Vec> smoothed =
-                    conservativeChaikinOnly ?
-                        SmoothConservativeChaikinPath(
-                            space,
-                            smoothingControlPath,
-                            options,
-                            smoothingLineCheckCount) :
-                        SmoothPointPath(
-                            space,
-                            smoothingControlPath,
-                            options,
-                            smoothingLineCheckCount);
-                result.smoothingLineCheckCount += smoothingLineCheckCount;
-
-                if (smoothed.empty())
-                {
-                    return false;
-                }
-
-                result.voxelPath = candidateVoxelPath;
-                result.outputCount = result.voxelPath.size();
-                result.pointPath = DensifyPointPath(
-                    smoothed,
-                    options,
-                    space.GetVoxelSize());
-                result.controlPointPath = smoothingControlPath;
-
-                VoxelPathOptimizeOptions displayOptions = options;
-                displayOptions.curveSamplesPerSegment =
-                    options.displayCurveSamplesPerSegment > 0 ?
-                        options.displayCurveSamplesPerSegment :
-                        options.curveSamplesPerSegment;
-                result.displayPointPath =
-                    DensifyPointPath(
-                        smoothed,
-                        displayOptions,
-                        space.GetVoxelSize());
-                if (options.useRealEndpointsForSmoothing &&
-                    !result.displayPointPath.empty())
-                {
-                    result.displayPointPath.front() = options.realStartPoint;
-                    result.displayPointPath.back() = options.realGoalPoint;
-                }
-
-                if (result.displayPointPath.empty())
-                {
-                    result.displayPointPath = smoothed;
-                    if (options.useRealEndpointsForSmoothing &&
-                        !result.displayPointPath.empty())
-                    {
-                        result.displayPointPath.front() =
-                            options.realStartPoint;
-                        result.displayPointPath.back() =
-                            options.realGoalPoint;
-                    }
-                }
-
-                result.smoothedPointCount = result.pointPath.size();
-                result.smoothingSucceeded = true;
-                return true;
-            };
-
-        if (!TryAcceptSmoothedPath(result.voxelPath, false))
+        if (!attempt.succeeded)
         {
             int keyTurnLineCheckCount = 0;
             std::vector<VoxelIndex> keyTurnPath =
@@ -1901,11 +1734,36 @@ VoxelPathOptimizeResult VoxelPathOptimizer::Optimize(
                     options,
                     keyTurnLineCheckCount);
             result.lineCheckCount += keyTurnLineCheckCount;
-            if (keyTurnPath == result.voxelPath ||
-                !TryAcceptSmoothedPath(keyTurnPath, false))
+            if (keyTurnPath != result.voxelPath)
             {
-                TryAcceptSmoothedPath(inputPath, true);
+                attempt =
+                    TryBuildSmoothedCandidate(
+                        space,
+                        keyTurnPath,
+                        options,
+                        false);
+                result.smoothingLineCheckCount += attempt.lineCheckCount;
             }
+        }
+
+        if (!attempt.succeeded)
+        {
+            attempt =
+                TryBuildSmoothedCandidate(
+                    space,
+                    inputPath,
+                    options,
+                    true);
+            result.smoothingLineCheckCount += attempt.lineCheckCount;
+        }
+
+        if (attempt.succeeded)
+        {
+            AcceptSmoothedCandidate(
+                result,
+                attempt,
+                options,
+                space.GetVoxelSize());
         }
     }
 

@@ -6,60 +6,52 @@
 
 ```mermaid
 flowchart TD
-    A["A* 输出 raw voxel path"] --> B["RemoveCollinearVoxels<br/>删除连续同方向体素点"]
-    B --> C["Line-of-sight shortcut<br/>按可通行直线压缩路径"]
-    C --> D["主 control path<br/>optimized voxelPath"]
-    D --> E{"Smooth path 开启?"}
-    E -- "否" --> F["ConvertToPoints<br/>体素中心折线路径"]
-    E -- "是" --> G["对主 control path<br/>生成平滑曲线采样"]
-    G --> H["ValidateSmoothedPath<br/>采样点/采样段碰撞检查"]
-    H --> I{"主路径平滑成功?"}
-    I -- "是" --> K["DensifyPointPath<br/>生成优化后的点路径"]
-    I -- "否" --> J["生成 key-turn fallback<br/>仅保留关键转向点"]
-    J --> N["尝试 fallback 平滑"]
-    N --> O{"fallback 成功?"}
-    O -- "是" --> K
-    O -- "否" --> P["raw A* 保守 Chaikin fallback<br/>不使用 Catmull-Rom"]
-    P --> Q{"raw fallback 成功?"}
-    Q -- "是" --> K
-    Q -- "否" --> F
-    F --> L["BuildDisplayPathPoints<br/>拼回真实起点/终点"]
-    K --> L
-    L --> M["Workbench DisplayPath<br/>显示最终路径曲线/折线"]
+    A["path1 = A* raw voxel path"] --> B["path2 = RemoveCollinearVoxels(path1)<br/>删除连续同方向体素点"]
+    B --> C["path3 = Line-of-sight shortcut(path2)<br/>按可通行直线压缩路径"]
+    C --> D{"Smooth Path 开启?"}
+    D -- "否" --> E["输出 path2<br/>拼入真实起点/终点"]
+    D -- "是" --> F["构造 path3 平滑控制路径<br/>真实起点 + path3 + 真实终点<br/>施加起点/终点切向约束"]
+    F --> G{"path3 平滑成功?"}
+    G -- "是" --> H["输出 path3 平滑曲线"]
+    G -- "否" --> I["构造 path2 平滑控制路径<br/>真实起点 + path2 + 真实终点<br/>施加起点/终点切向约束"]
+    I --> J{"path2 平滑成功?"}
+    J -- "是" --> K["输出 path2 平滑曲线"]
+    J -- "否" --> L["构造 path1 平滑控制路径<br/>真实起点 + path1 + 真实终点<br/>施加起点/终点切向约束"]
+    L --> M{"path1 平滑成功?"}
+    M -- "是" --> N["输出 path1 平滑曲线"]
+    M -- "否" --> O["输出 path2<br/>拼入真实起点/终点"]
+    E --> P["Workbench DisplayPath"]
+    H --> P
+    K --> P
+    N --> P
+    O --> P
 ```
 
 ## A* 之后的路径
 
-A* 的输出是体素索引序列，记录在 `astarResult.voxelPath`。该路径已经满足当前搜索模式的可通行约束，但它通常包含很多相邻体素点，不适合直接作为曲线控制点。
+A* 的输出是体素索引序列，记为 `path1`，对应 `astarResult.voxelPath`。该路径已经满足当前搜索模式的可通行约束，但它通常包含很多相邻体素点，不适合直接作为曲线控制点。
 
 后处理首先执行：
 
-- `RemoveCollinearVoxels`：删除连续同方向移动中的中间体素点。
-- `Line-of-sight shortcut`：尝试从当前体素直接连到更远体素；直连必须通过 `IsLineWalkable` 校验。
+- `path2 = RemoveCollinearVoxels(path1)`：删除连续同方向移动中的中间体素点。
+- `path3 = Line-of-sight shortcut(path2)`：尝试从当前体素直接连到更远体素；直连必须通过 `IsLineWalkable` 校验。
 - `shortcutTurnPenalty`：当配置了转弯惩罚时，shortcut 不再总是选择最远可直连点，而会综合入口/出口转向严重程度。
 
-## 平滑控制路径来源
+## 平滑输出规则
 
-当前平滑阶段采用确定性顺序，而不是让多个候选同时评分竞争。
+当前按 `Smooth Path` 开关分两类输出：
 
-默认 control path 是 `optimized voxelPath`：
+- 未开启 `Smooth Path`：输出 `path2`，并拼入界面真实起点/终点。
+- 开启 `Smooth Path`：必须先尝试输出平滑曲线；只有所有平滑尝试失败时，才输出 `path2`，并拼入真实起点/终点。
 
-- A* 原始路径先经过 `RemoveCollinearVoxels`。
-- 再经过一次主 `Line-of-sight shortcut`。
-- 平滑优先只使用该 shortcut 后的路径。
+开启 `Smooth Path` 后的尝试顺序：
 
-只有当主 control path 的平滑结果没有通过校验时，才启用 `key-turn path` 作为 fallback。
+1. 构造 `真实起点 + path3 + 真实终点` 的平滑控制路径，并施加起点/终点切向约束，拟合平滑曲线。
+2. 如果失败，构造 `真实起点 + path2 + 真实终点` 的平滑控制路径，并施加起点/终点切向约束，拟合平滑曲线。
+3. 如果仍失败，构造 `真实起点 + path1 + 真实终点` 的平滑控制路径，并施加起点/终点切向约束，拟合平滑曲线。
+4. 如果最终仍失败，输出 `path2 + 真实起点/终点`。
 
-`key-turn path` 的提取规则：
-
-- 保留起点和终点。
-- 相邻体素以点或边连接时，保留对应位置作为关键点。
-- 即使是面连接，只要前后移动方向发生变化，也保留为关键点。
-- 两个关键点之间仍做 `IsLineWalkable` 校验；若直连失败，则回补该区间内的原始体素点。
-
-该 fallback 的目标是：主 shortcut 路径过稀导致平滑失败时，提供一个仍然较稀疏、但保留必要拓扑转角的备选路径。
-
-如果 `key-turn path` 仍然平滑失败，最后会使用 raw A* 路径做保守 Chaikin fallback。该兜底不使用 Catmull-Rom，避免完整 raw A* 路径被插值曲线逐点穿过后退化成沿 A* 折线摆动的曲线。
+这里的“构造平滑控制路径”发生在平滑之前，不是先对 `pathN` 平滑后再把真实端点接回去。真实起点和真实终点必须作为平滑曲线的两端点参与计算。
 
 ## 真实端点与端点方向
 
@@ -76,7 +68,7 @@ A* 搜索使用的是吸附到可通行体素附近的端点。最终显示和�
 
 ## 平滑生成与校验
 
-启用 `Smooth path` 后，优化器先对主 control path 尝试生成平滑结果；主路径失败时才尝试 `key-turn path` fallback；如果仍失败，再对 raw A* 路径做保守 Chaikin fallback。
+启用 `Smooth path` 后，优化器按上述顺序对候选路径尝试生成平滑结果。
 
 当前曲线生成方式：
 
@@ -103,14 +95,21 @@ A* 搜索使用的是吸附到可通行体素附近的端点。最终显示和�
 | Chaikin | 在 Catmull-Rom 校验失败或转角较差时作为备选 |
 | 最大方向变化 | 在有效候选中优先选择局部急弯更小的结果 |
 
-raw A* fallback 只使用保守 Chaikin 候选，不使用 Catmull-Rom。所有候选仍必须通过 `ValidateSmoothedPath`。
+所有候选仍必须通过 `ValidateSmoothedPath`。当前外层 control path 选择按固定顺序执行，不使用多候选综合评分来决定最终路径。
 
-以下平滑评分权重仍保留为参数，但当前外层 control path 选择已改为确定性 fallback 流程：
+## 代码职责
 
-- `smoothingSignificantTurnWeight`
-- `smoothingTotalTurnWeight`
-- `smoothingMaxTurnWeight`
-- `smoothingDetourWeight`
+平滑相关代码按“生成候选”和“接受结果”拆分，避免在尝试阶段直接改写最终结果。
+
+| 函数 | 职责 |
+|---|---|
+| `BuildSmoothingControlPath` | 将 `path2/path3` 的体素中心路径转换为平滑控制路径，并按需拼入真实起点/终点。 |
+| `SmoothPointPath` | 对候选路径尝试 Catmull-Rom 与 Chaikin 候选，并返回通过校验的最佳采样路径。 |
+| `TryBuildSmoothedCandidate` | 只构造并校验一个平滑候选，不写入 `VoxelPathOptimizeResult`。 |
+| `AcceptSmoothedCandidate` | 在候选成功后统一写入 `voxelPath`、`pointPath`、`displayPointPath`、`controlPointPath` 和 `smoothingSucceeded`。 |
+| `ValidateSmoothedPath` | 对平滑采样点和采样段做禁行区域、有交体素、最大偏离检查。 |
+
+`displayPointPath` 始终来自实际通过校验的 smoothed path。界面显示不会再根据 control path 重新生成另一条曲线。
 
 ## 最终显示路径
 
@@ -126,7 +125,7 @@ displaySource =
 
 Workbench 显示逻辑：
 
-- `DisplayPath` 显示 `result.displayPathPoints`。
+- `DisplayPath` 显示 `result.displayPathPoints`，该路径必须已经拼入真实起点/终点。
 - 可选显示 A* 搜索点集，来自 `result.astarResult.pointPath`。
 - 可选显示平滑控制点，来自 `result.optimizeResult.controlPointPath`。
 - 路径体素 overlay 使用最终路径对应的体素状态，按 free / clearance / occupied 分色显示。
@@ -134,9 +133,9 @@ Workbench 显示逻辑：
 ## 当前关键约束
 
 - A* 负责离散拓扑可达性。
-- shortcut 负责生成默认平滑控制路径。
-- key-turn path 只在默认控制路径平滑失败时作为受限 fallback。
-- raw A* 路径只作为最后的保守 Chaikin fallback，不作为 Catmull-Rom 控制路径。
+- `path2` 是未平滑输出路径，也是平滑失败后的最终兜底输出。
+- `path3` 是开启平滑后优先尝试的主控制路径。
+- `path1` 只在 `path3` 和 `path2` 平滑都失败后作为最后的平滑尝试来源。
 - 平滑负责改善曲线形态，但不能穿过有交体素或禁行区域。
 - 真实起点/终点优先用于最终几何显示和端点切向约束。
 - Workbench 显示使用实际通过校验的 smoothed 路径，不再重新从 control path 生成另一条显示曲线。
