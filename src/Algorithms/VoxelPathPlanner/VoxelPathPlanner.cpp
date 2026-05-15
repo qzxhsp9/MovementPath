@@ -1348,8 +1348,7 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                         options.displayPathSamplesPerSegment;
                     optOptions.curveSampleSpacing =
                         options.smoothPathSampleSpacing;
-                    optOptions.maxCurveDeviation =
-                        options.smoothPathMaxDeviation;
+                    optOptions.maxCurveDeviation = 0.0;
                     optOptions.smoothingSignificantTurnWeight =
                         options.smoothingSignificantTurnWeight;
                     optOptions.smoothingTotalTurnWeight =
@@ -1426,6 +1425,28 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                         options.smoothOptimizedPath;
                     profile.smoothingSucceeded =
                         optResult.smoothingSucceeded;
+                    profile.pathOutputStage =
+                        optResult.pathOutputStage;
+                    profile.smoothingMethod =
+                        optResult.smoothingMethod;
+                    profile.smoothingCandidateCount =
+                        optResult.smoothingCandidateCount;
+                    profile.smoothingAcceptedCandidateCount =
+                        optResult.smoothingAcceptedCandidateCount;
+                    profile.catmullRomAccepted =
+                        optResult.catmullRomAccepted;
+                    profile.catmullRomRejectReason =
+                        optResult.catmullRomRejectReason;
+                    profile.smoothingAcceptedLength =
+                        optResult.smoothingAcceptedLength;
+                    profile.smoothingAcceptedTotalTurn =
+                        optResult.smoothingAcceptedTotalTurn;
+                    profile.smoothingAcceptedMaxTurn =
+                        optResult.smoothingAcceptedMaxTurn;
+                    profile.smoothingStartDirectionAlignment =
+                        optResult.smoothingStartDirectionAlignment;
+                    profile.smoothingGoalDirectionAlignment =
+                        optResult.smoothingGoalDirectionAlignment;
                     const std::vector<Vec>& displaySource =
                         optResult.displayPointPath.empty() ?
                             optResult.pointPath :
@@ -1779,7 +1800,7 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
     optOptions.displayCurveSamplesPerSegment =
         options.displayPathSamplesPerSegment;
     optOptions.curveSampleSpacing = options.smoothPathSampleSpacing;
-    optOptions.maxCurveDeviation = options.smoothPathMaxDeviation;
+    optOptions.maxCurveDeviation = 0.0;
     optOptions.smoothingSignificantTurnWeight =
         options.smoothingSignificantTurnWeight;
     optOptions.smoothingTotalTurnWeight =
@@ -1817,6 +1838,21 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
     profile.smoothingLineCheckCount = optResult.smoothingLineCheckCount;
     profile.smoothingRequested = options.smoothOptimizedPath;
     profile.smoothingSucceeded = optResult.smoothingSucceeded;
+    profile.pathOutputStage = optResult.pathOutputStage;
+    profile.smoothingMethod = optResult.smoothingMethod;
+    profile.smoothingCandidateCount = optResult.smoothingCandidateCount;
+    profile.smoothingAcceptedCandidateCount =
+        optResult.smoothingAcceptedCandidateCount;
+    profile.catmullRomAccepted = optResult.catmullRomAccepted;
+    profile.catmullRomRejectReason = optResult.catmullRomRejectReason;
+    profile.smoothingAcceptedLength = optResult.smoothingAcceptedLength;
+    profile.smoothingAcceptedTotalTurn =
+        optResult.smoothingAcceptedTotalTurn;
+    profile.smoothingAcceptedMaxTurn = optResult.smoothingAcceptedMaxTurn;
+    profile.smoothingStartDirectionAlignment =
+        optResult.smoothingStartDirectionAlignment;
+    profile.smoothingGoalDirectionAlignment =
+        optResult.smoothingGoalDirectionAlignment;
     const std::vector<Vec>& displaySource =
         optResult.displayPointPath.empty() ?
             optResult.pointPath :

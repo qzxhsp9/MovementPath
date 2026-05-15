@@ -5,6 +5,7 @@
 
 #include <vector>
 #include <functional>
+#include <string>
 
 // ============================================================
 // 路径优化配置
@@ -44,8 +45,9 @@ struct VoxelPathOptimizeOptions
     // Target spacing for generated/densified curve samples. 0 uses a
     // voxel-size-derived default.
     double curveSampleSpacing = 0.0;
-    // Maximum distance a smoothed sample may move away from the control
-    // polyline. 0 disables this guard.
+    // Deprecated: smoothing no longer rejects candidates by deviation from
+    // the control polyline. Collision/restricted-voxel checks are the safety
+    // constraints.
     double maxCurveDeviation = 0.0;
     // Valid smoothing candidates are ranked by length plus these weighted
     // shape terms. Higher turn weights prefer straighter, smoother curves;
@@ -57,6 +59,7 @@ struct VoxelPathOptimizeOptions
     bool useEndpointDirections = false;
     Vec startDirection;
     Vec goalDirection;
+    double minEndpointDirectionAlignment = 0.95;
     bool useRealEndpointsForSmoothing = false;
     Vec realStartPoint;
     Vec realGoalPoint;
@@ -87,6 +90,17 @@ struct VoxelPathOptimizeResult
     int lineCheckCount = 0;
     int smoothingLineCheckCount = 0;
     bool smoothingSucceeded = false;
+    std::string pathOutputStage = "None";
+    std::string smoothingMethod = "None";
+    int smoothingCandidateCount = 0;
+    int smoothingAcceptedCandidateCount = 0;
+    bool catmullRomAccepted = false;
+    std::string catmullRomRejectReason;
+    double smoothingAcceptedLength = 0.0;
+    double smoothingAcceptedTotalTurn = 0.0;
+    double smoothingAcceptedMaxTurn = 0.0;
+    double smoothingStartDirectionAlignment = 0.0;
+    double smoothingGoalDirectionAlignment = 0.0;
 };
 
 // ============================================================

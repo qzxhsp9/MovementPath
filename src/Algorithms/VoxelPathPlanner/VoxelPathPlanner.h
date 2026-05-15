@@ -81,6 +81,17 @@ struct VoxelPlanningProfile
     int smoothingLineCheckCount = 0;
     bool smoothingRequested = false;
     bool smoothingSucceeded = false;
+    std::string pathOutputStage;
+    std::string smoothingMethod;
+    int smoothingCandidateCount = 0;
+    int smoothingAcceptedCandidateCount = 0;
+    bool catmullRomAccepted = false;
+    std::string catmullRomRejectReason;
+    double smoothingAcceptedLength = 0.0;
+    double smoothingAcceptedTotalTurn = 0.0;
+    double smoothingAcceptedMaxTurn = 0.0;
+    double smoothingStartDirectionAlignment = 0.0;
+    double smoothingGoalDirectionAlignment = 0.0;
 
     double totalCost = 0.0;
 
@@ -213,8 +224,8 @@ struct VoxelPathPlannerOptions
     int smoothPathSamplesPerSegment = 8;
     int displayPathSamplesPerSegment = 48;
     double smoothPathSampleSpacing = 0.0;
-    // Maximum allowed distance from a smoothed sample to its control polyline.
-    // 0 disables the deviation limit.
+    // Deprecated: retained for compatibility, but smoothing no longer uses
+    // control-polyline deviation as an acceptance constraint.
     double smoothPathMaxDeviation = 0.0;
     // Weights used to rank valid smoothing candidates. Length is always part
     // of the score; these terms bias the result toward fewer turns, lower

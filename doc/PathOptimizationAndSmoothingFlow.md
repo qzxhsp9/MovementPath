@@ -73,7 +73,7 @@ A* 搜索使用的是吸附到可通行体素附近的端点。最终显示和�
 当前曲线生成方式：
 
 - 优先使用 centripetal Catmull-Rom 生成采样点。
-- 也会尝试不同强度的 Chaikin 平滑作为备选。
+- Catmull-Rom 不可接受时，使用 OCCT B-Spline 插值作为备选。
 - Catmull-Rom 是插值曲线，会经过 control path 中的点，因此 control path 点数和位置会明显影响曲线形态。
 
 平滑结果必须通过 `ValidateSmoothedPath`：
@@ -81,7 +81,8 @@ A* 搜索使用的是吸附到可通行体素附近的端点。最终显示和�
 - 每个采样点不能位于禁行半空间。
 - 除端点豁免半径内的点外，采样点不能位于有交体素。
 - 相邻采样点之间的线段也要做分段采样碰撞检查。
-- 如果配置了 `maxCurveDeviation`，采样点不能过度偏离原 control polyline。
+- 若启用端点方向，平滑候选的起点切向和终点切向必须满足最小对齐度；不满足时直接拒绝该候选。
+- 不再使用 `maxCurveDeviation` 拒绝平滑候选；平滑候选是否可接受只由禁行区域和有交体素校验决定。
 
 ## 平滑内部选择
 
@@ -92,10 +93,10 @@ A* 搜索使用的是吸附到可通行体素附近的端点。最终显示和�
 | 指标 | 目的 |
 |---|---|
 | Catmull-Rom | 生成经过控制点的主平滑曲线 |
-| Chaikin | 在 Catmull-Rom 校验失败或转角较差时作为备选 |
+| OCCT B-Spline | 仅在 Catmull-Rom 未通过禁行/有交体素/端点方向校验时作为备选 |
 | 最大方向变化 | 在有效候选中优先选择局部急弯更小的结果 |
 
-所有候选仍必须通过 `ValidateSmoothedPath`。当前外层 control path 选择按固定顺序执行，不使用多候选综合评分来决定最终路径。
+所有候选仍必须通过 `ValidateSmoothedPath`。Catmull-Rom 通过校验时优先使用；只有 Catmull-Rom 不可接受时，才尝试 OCCT B-Spline 插值候选。
 
 ## 代码职责
 
@@ -104,10 +105,10 @@ A* 搜索使用的是吸附到可通行体素附近的端点。最终显示和�
 | 函数 | 职责 |
 |---|---|
 | `BuildSmoothingControlPath` | 将 `path2/path3` 的体素中心路径转换为平滑控制路径，并按需拼入真实起点/终点。 |
-| `SmoothPointPath` | 对候选路径尝试 Catmull-Rom 与 Chaikin 候选，并返回通过校验的最佳采样路径。 |
+| `SmoothPointPath` | 对候选路径尝试 Catmull-Rom 与 OCCT B-Spline 插值候选，并返回通过校验的采样路径。 |
 | `TryBuildSmoothedCandidate` | 只构造并校验一个平滑候选，不写入 `VoxelPathOptimizeResult`。 |
 | `AcceptSmoothedCandidate` | 在候选成功后统一写入 `voxelPath`、`pointPath`、`displayPointPath`、`controlPointPath` 和 `smoothingSucceeded`。 |
-| `ValidateSmoothedPath` | 对平滑采样点和采样段做禁行区域、有交体素、最大偏离检查。 |
+| `ValidateSmoothedPath` | 对平滑采样点和采样段做禁行区域、有交体素检查。 |
 
 `displayPointPath` 始终来自实际通过校验的 smoothed path。界面显示不会再根据 control path 重新生成另一条曲线。
 

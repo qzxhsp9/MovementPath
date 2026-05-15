@@ -606,6 +606,208 @@ bool TestSmoothingDoesNotUseDenseAStarPathAsControlPath()
         !result.controlPointPath.empty() &&
             result.controlPointPath.size() < path.size(),
         "smoothing control path should not keep every raw A* point");
+    ok &= Expect(
+        result.pathOutputStage == "Path3 smoothed" ||
+            result.pathOutputStage == "Path2 smoothed" ||
+            result.pathOutputStage == "Path1 smoothed",
+        "smoothed optimization should report which path source was smoothed");
+    ok &= Expect(
+        !result.smoothingMethod.empty() &&
+            result.smoothingMethod != "None",
+        "smoothed optimization should report which smoothing method was accepted");
+    ok &= Expect(
+        result.smoothingCandidateCount >=
+            result.smoothingAcceptedCandidateCount,
+        "smoothing diagnostics should count attempted and accepted candidates");
+
+    return ok;
+}
+
+bool TestOptimizeWithoutSmoothingReturnsCollinearReducedPath()
+{
+    VoxelSpace space(Vec(0.0, 0.0, 0.0), 1.0);
+    space.SetSearchBounds(VoxelBounds{
+        VoxelIndex(0, 0, 0),
+        VoxelIndex(2, 2, 0)
+    });
+
+    for (int x = 0; x <= 2; ++x)
+    {
+        for (int y = 0; y <= 2; ++y)
+        {
+            space.SetCellState(VoxelIndex(x, y, 0), VoxelState::Free);
+        }
+    }
+
+    const std::vector<VoxelIndex> path1{
+        VoxelIndex(0, 0, 0),
+        VoxelIndex(1, 0, 0),
+        VoxelIndex(2, 0, 0),
+        VoxelIndex(2, 1, 0),
+        VoxelIndex(2, 2, 0)
+    };
+
+    const std::vector<VoxelIndex> expectedPath2{
+        VoxelIndex(0, 0, 0),
+        VoxelIndex(2, 0, 0),
+        VoxelIndex(2, 2, 0)
+    };
+
+    VoxelPathOptimizeOptions options;
+    options.searchMode = VoxelAStarSearchMode::FreeSpace;
+    options.removeCollinear = true;
+    options.enableLineOfSightShortcut = true;
+    options.enableCurveSmoothing = false;
+
+    const VoxelPathOptimizeResult result =
+        VoxelPathOptimizer::Optimize(space, path1, options);
+
+    bool ok = true;
+    ok &= Expect(
+        result.voxelPath == expectedPath2,
+        "non-smoothed optimization should output path2, not line-of-sight path3");
+    ok &= Expect(
+        result.lineCheckCount == 0,
+        "line-of-sight shortcut should not run when Smooth Path is disabled");
+    ok &= Expect(
+        !result.smoothingSucceeded,
+        "smoothing should be false when Smooth Path is disabled");
+    ok &= Expect(
+        result.pathOutputStage == "Path2",
+        "non-smoothed optimization should report Path2 as the output stage");
+
+    return ok;
+}
+
+bool TestSmoothingReportsPath2WhenShortcutDoesNotChangePath()
+{
+    VoxelSpace space(Vec(0.0, 0.0, 0.0), 1.0);
+    space.SetSearchBounds(VoxelBounds{
+        VoxelIndex(0, 0, 0),
+        VoxelIndex(2, 0, 0)
+    });
+
+    for (int x = 0; x <= 2; ++x)
+    {
+        space.SetCellState(VoxelIndex(x, 0, 0), VoxelState::Free);
+    }
+
+    const std::vector<VoxelIndex> path1{
+        VoxelIndex(0, 0, 0),
+        VoxelIndex(1, 0, 0),
+        VoxelIndex(2, 0, 0)
+    };
+
+    VoxelPathOptimizeOptions options;
+    options.searchMode = VoxelAStarSearchMode::FreeSpace;
+    options.removeCollinear = true;
+    options.enableLineOfSightShortcut = true;
+    options.enableCurveSmoothing = true;
+    options.curveSamplesPerSegment = 4;
+    options.useRealEndpointsForSmoothing = true;
+    options.realStartPoint = Vec(0.5, 0.5, 0.5);
+    options.realGoalPoint = Vec(2.5, 0.5, 0.5);
+    options.endpointCollisionExemptRadius = 1.0;
+
+    const VoxelPathOptimizeResult result =
+        VoxelPathOptimizer::Optimize(space, path1, options);
+
+    bool ok = true;
+    ok &= Expect(
+        result.smoothingSucceeded,
+        "straight path smoothing should succeed");
+    ok &= Expect(
+        result.pathOutputStage == "Path2 smoothed",
+        "smoothing should report Path2 when line-of-sight shortcut does not change path2");
+
+    return ok;
+}
+
+bool TestSmoothingIgnoresMaxCurveDeviationAndPrefersCatmullRom()
+{
+    VoxelSpace space(Vec(0.0, 0.0, 0.0), 1.0);
+    space.SetSearchBounds(VoxelBounds{
+        VoxelIndex(0, 0, 0),
+        VoxelIndex(4, 4, 0)
+    });
+
+    for (int x = 0; x <= 4; ++x)
+    {
+        for (int y = 0; y <= 4; ++y)
+        {
+            space.SetCellState(VoxelIndex(x, y, 0), VoxelState::Free);
+        }
+    }
+
+    const std::vector<VoxelIndex> path{
+        VoxelIndex(0, 0, 0),
+        VoxelIndex(1, 0, 0),
+        VoxelIndex(2, 1, 0),
+        VoxelIndex(3, 3, 0),
+        VoxelIndex(4, 4, 0)
+    };
+
+    VoxelPathOptimizeOptions options;
+    options.searchMode = VoxelAStarSearchMode::FreeSpace;
+    options.removeCollinear = false;
+    options.enableLineOfSightShortcut = false;
+    options.enableCurveSmoothing = true;
+    options.curveSamplesPerSegment = 8;
+    options.maxCurveDeviation = 1.0e-9;
+    options.useRealEndpointsForSmoothing = true;
+    options.realStartPoint = Vec(0.5, 0.5, 0.5);
+    options.realGoalPoint = Vec(4.5, 4.5, 0.5);
+    options.endpointCollisionExemptRadius = 1.0;
+
+    const VoxelPathOptimizeResult result =
+        VoxelPathOptimizer::Optimize(space, path, options);
+
+    bool ok = true;
+    ok &= Expect(
+        result.smoothingSucceeded,
+        "smoothing should succeed without maxCurveDeviation limiting the curve");
+    ok &= Expect(
+        result.smoothingMethod == "CatmullRom",
+        "Catmull-Rom should be preferred when it passes walkability checks");
+    ok &= Expect(
+        result.catmullRomAccepted,
+        "Catmull-Rom should be reported as accepted");
+
+    return ok;
+}
+
+bool TestSmoothingRejectsEndpointDirectionMismatch()
+{
+    VoxelSpace space(Vec(0.0, 0.0, 0.0), 1.0);
+    space.SetSearchBounds(VoxelBounds{
+        VoxelIndex(0, 0, 0),
+        VoxelIndex(1, 0, 0)
+    });
+    space.SetCellState(VoxelIndex(0, 0, 0), VoxelState::Free);
+    space.SetCellState(VoxelIndex(1, 0, 0), VoxelState::Free);
+
+    VoxelPathOptimizeOptions options;
+    options.searchMode = VoxelAStarSearchMode::FreeSpace;
+    options.useEndpointDirections = true;
+    options.startDirection = Vec(0.0, 1.0, 0.0);
+    options.goalDirection = Vec(1.0, 0.0, 0.0);
+    options.minEndpointDirectionAlignment = 0.95;
+
+    int lineCheckCount = 0;
+    const std::vector<Vec> smoothed =
+        VoxelPathOptimizer::SmoothPointPath(
+            space,
+            {
+                Vec(0.5, 0.5, 0.5),
+                Vec(1.5, 0.5, 0.5)
+            },
+            options,
+            lineCheckCount);
+
+    bool ok = true;
+    ok &= Expect(
+        smoothed.empty(),
+        "two-point smoothing should reject endpoint direction mismatch");
 
     return ok;
 }
@@ -631,6 +833,10 @@ int main()
     ok &= TestSmoothingAllowsOccupiedRealEndpoints();
     ok &= TestSmoothingEndpointGuideIgnoresOffsetSearchEndpoint();
     ok &= TestSmoothingDoesNotUseDenseAStarPathAsControlPath();
+    ok &= TestOptimizeWithoutSmoothingReturnsCollinearReducedPath();
+    ok &= TestSmoothingReportsPath2WhenShortcutDoesNotChangePath();
+    ok &= TestSmoothingIgnoresMaxCurveDeviationAndPrefersCatmullRom();
+    ok &= TestSmoothingRejectsEndpointDirectionMismatch();
 
     return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }

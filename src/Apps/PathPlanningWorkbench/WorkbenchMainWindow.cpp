@@ -1494,11 +1494,42 @@ void WorkbenchMainWindow::OnPathComputationFinished()
         .arg(result.profile.finalStartDirectionAlignment, 0, 'f', 3)
         .arg(result.profile.finalGoalDirectionAlignment, 0, 'f', 3));
 
+    QString pathOutputStage =
+        QString::fromStdString(result.profile.pathOutputStage);
+    if (pathOutputStage.endsWith(" smoothed"))
+    {
+        pathOutputStage.chop(QString(" smoothed").size());
+        pathOutputStage += " 已平滑";
+    }
+    else if (result.profile.smoothingRequested &&
+        !result.profile.smoothingSucceeded &&
+        pathOutputStage == "Path2")
+    {
+        pathOutputStage = "Path2，平滑失败后回退";
+    }
+
+    AppendLog(QString("Path smoothing output: %1, requested=%2, succeeded=%3, points=%4.")
+        .arg(pathOutputStage.isEmpty() ? "None" : pathOutputStage)
+        .arg(result.profile.smoothingRequested ? "true" : "false")
+        .arg(result.profile.smoothingSucceeded ? "true" : "false")
+        .arg(result.profile.smoothedPathPointCount));
     if (result.profile.smoothingRequested)
     {
-        AppendLog(QString("Smoothing: %1, points=%2.")
-            .arg(result.profile.smoothingSucceeded ? "true" : "false")
-            .arg(result.profile.smoothedPathPointCount));
+        AppendLog(QString("Smoothing detail: method=%1, candidates=%2, accepted=%3, CatmullRom=%4%5, length=%6, totalTurn=%7, maxTurn=%8, startAlign=%9, goalAlign=%10.")
+            .arg(QString::fromStdString(result.profile.smoothingMethod))
+            .arg(result.profile.smoothingCandidateCount)
+            .arg(result.profile.smoothingAcceptedCandidateCount)
+            .arg(result.profile.catmullRomAccepted ? "accepted" : "rejected")
+            .arg(result.profile.catmullRomRejectReason.empty() ?
+                "" :
+                QString(", reason=%1").arg(
+                    QString::fromStdString(
+                        result.profile.catmullRomRejectReason)))
+            .arg(result.profile.smoothingAcceptedLength, 0, 'f', 3)
+            .arg(result.profile.smoothingAcceptedTotalTurn, 0, 'f', 3)
+            .arg(result.profile.smoothingAcceptedMaxTurn, 0, 'f', 3)
+            .arg(result.profile.smoothingStartDirectionAlignment, 0, 'f', 3)
+            .arg(result.profile.smoothingGoalDirectionAlignment, 0, 'f', 3));
     }
 
     if (!result.success)
@@ -1880,13 +1911,7 @@ VoxelPathPlannerOptions WorkbenchMainWindow::MakeVoxelOptions(
             m_pathTuningSettings.smoothPathSampleSpacingMin,
             m_voxelSizeSpin->value() *
                 m_pathTuningSettings.smoothPathSampleSpacingVoxelMultiplier);
-    options.smoothPathMaxDeviation =
-        std::max(
-            m_voxelSizeSpin->value() *
-                m_pathTuningSettings.smoothPathMaxDeviationVoxelMultiplier,
-            m_clearanceSpin->value() *
-                m_pathTuningSettings
-                    .smoothPathMaxDeviationClearanceMultiplier);
+    options.smoothPathMaxDeviation = 0.0;
     options.smoothingSignificantTurnWeight =
         m_pathTuningSettings.smoothingSignificantTurnWeight;
     options.smoothingTotalTurnWeight =
