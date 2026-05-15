@@ -16,6 +16,7 @@
 
 class QCheckBox;
 class QComboBox;
+class QDialog;
 class QDoubleSpinBox;
 class QLabel;
 class QPushButton;
@@ -93,6 +94,8 @@ private:
     void StopPathComputation();
     void OpenVtkExportSettings();
     void OpenPathTuningSettings();
+    void OpenPathDataDialog();
+    void UpdatePathDataDialog();
     void OnPathComputationFinished();
     void SetPlanningUiBusy(bool busy);
     void UpdateEndpointOverlay();
@@ -141,6 +144,7 @@ protected:
     OcctViewWidget* m_view = nullptr;
     QPlainTextEdit* m_log = nullptr;
     QPushButton* m_computeButton = nullptr;
+    QPushButton* m_pathDataButton = nullptr;
     QPushButton* m_stopButton = nullptr;
     QLabel* m_modelLabel = nullptr;
     QComboBox* m_displayModeCombo = nullptr;
@@ -192,6 +196,9 @@ protected:
     QElapsedTimer m_planTimer;
     VtkExportSettings m_vtkExportSettings;
     PathTuningSettings m_pathTuningSettings;
+    QDialog* m_pathDataDialog = nullptr;
+    QPlainTextEdit* m_pathDataText = nullptr;
+    QString m_latestPathDataText;
     double m_runningVoxelSize = 1.0;
     double m_runningClearance = 0.0;
     PlannerMethod m_runningPlannerMethod = PlannerMethod::VoxelFullBounds;

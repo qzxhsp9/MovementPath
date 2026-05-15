@@ -9,7 +9,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iomanip>
 #include <limits>
+#include <sstream>
 
 namespace
 {
@@ -47,6 +49,14 @@ Vec FromGpPoint(const gp_Pnt& point)
 gp_Vec ToGpVec(const Vec& direction)
 {
     return gp_Vec(direction.x, direction.y, direction.z);
+}
+
+std::string FormatVec(const Vec& point)
+{
+    std::ostringstream stream;
+    stream << std::fixed << std::setprecision(6)
+        << "(" << point.x << ", " << point.y << ", " << point.z << ")";
+    return stream.str();
 }
 
 double DirectionAlignment(
@@ -696,18 +706,27 @@ std::vector<Vec> BuildCatmullRomSamples(
     return sampled;
 }
 
-std::vector<Vec> BuildOcctBSplineSamples(
+struct BSplineSampleResult
+{
+    std::vector<Vec> samples;
+    std::string dataText;
+};
+
+BSplineSampleResult BuildOcctBSplineSamples(
     const std::vector<Vec>& controlPath,
     const VoxelPathOptimizeOptions& options)
 {
+    BSplineSampleResult result;
     if (controlPath.size() < 2)
     {
-        return std::vector<Vec>();
+        return result;
     }
 
     if (controlPath.size() == 2)
     {
-        return controlPath;
+        result.samples = controlPath;
+        result.dataText = "OCCT B-Spline skipped: two control points.\n";
+        return result;
     }
 
     try
@@ -752,13 +771,39 @@ std::vector<Vec> BuildOcctBSplineSamples(
         interpolate.Perform();
         if (!interpolate.IsDone())
         {
-            return std::vector<Vec>();
+            result.dataText = "OCCT B-Spline interpolation failed.\n";
+            return result;
         }
 
         Handle(Geom_BSplineCurve) curve = interpolate.Curve();
         if (curve.IsNull())
         {
-            return std::vector<Vec>();
+            result.dataText = "OCCT B-Spline interpolation returned null curve.\n";
+            return result;
+        }
+
+        std::ostringstream data;
+        data << "OCCT B-Spline interpolation\n";
+        data << "degree: " << curve->Degree() << "\n";
+        data << "periodic: " << (curve->IsPeriodic() ? "true" : "false")
+            << "\n";
+        data << "rational: " << (curve->IsRational() ? "true" : "false")
+            << "\n";
+        data << "poles: " << curve->NbPoles() << "\n";
+        for (Standard_Integer i = 1; i <= curve->NbPoles(); ++i)
+        {
+            const gp_Pnt pole = curve->Pole(i);
+            data << "  pole[" << i << "] = "
+                << FormatVec(FromGpPoint(pole))
+                << ", weight=" << std::fixed << std::setprecision(6)
+                << curve->Weight(i) << "\n";
+        }
+        data << "knots: " << curve->NbKnots() << "\n";
+        for (Standard_Integer i = 1; i <= curve->NbKnots(); ++i)
+        {
+            data << "  knot[" << i << "] = "
+                << std::fixed << std::setprecision(9) << curve->Knot(i)
+                << ", multiplicity=" << curve->Multiplicity(i) << "\n";
         }
 
         std::size_t segmentSamples = 0;
@@ -775,24 +820,26 @@ std::vector<Vec> BuildOcctBSplineSamples(
 
         const double first = curve->FirstParameter();
         const double last = curve->LastParameter();
-        std::vector<Vec> sampled;
-        sampled.reserve(sampleCount + 1);
+        result.samples.reserve(sampleCount + 1);
         for (std::size_t i = 0; i <= sampleCount; ++i)
         {
             const double t =
                 static_cast<double>(i) / static_cast<double>(sampleCount);
             gp_Pnt point;
             curve->D0(first * (1.0 - t) + last * t, point);
-            sampled.push_back(FromGpPoint(point));
+            result.samples.push_back(FromGpPoint(point));
         }
 
-        sampled.front() = controlPath.front();
-        sampled.back() = controlPath.back();
-        return sampled;
+        result.samples.front() = controlPath.front();
+        result.samples.back() = controlPath.back();
+        data << "samples: " << result.samples.size() << "\n";
+        result.dataText = data.str();
+        return result;
     }
     catch (const Standard_Failure&)
     {
-        return std::vector<Vec>();
+        result.dataText = "OCCT B-Spline interpolation threw Standard_Failure.\n";
+        return result;
     }
 }
 
@@ -1103,12 +1150,14 @@ struct SmoothPointPathResult
     double acceptedMaxTurn = 0.0;
     double startDirectionAlignment = 0.0;
     double goalDirectionAlignment = 0.0;
+    std::string candidateDataText;
 };
 
 struct SmoothCandidate
 {
     std::string method;
     std::vector<Vec> path;
+    std::string dataText;
 };
 
 void FillAcceptedSmoothingDiagnostics(
@@ -1178,14 +1227,34 @@ SmoothPointPathResult SmoothPointPathDetailed(
     }
 
     std::vector<SmoothCandidate> candidates;
+    std::ostringstream catmullRomData;
+    catmullRomData << "Catmull-Rom\n";
+    catmullRomData << "parameterization: centripetal\n";
+    catmullRomData << "control points: " << controlPath.size() << "\n";
+    for (std::size_t i = 0; i < controlPath.size(); ++i)
+    {
+        catmullRomData << "  p[" << i << "] = "
+            << FormatVec(controlPath[i]) << "\n";
+    }
+    if (options.useEndpointDirections)
+    {
+        catmullRomData << "startDirection = "
+            << FormatVec(options.startDirection) << "\n";
+        catmullRomData << "goalDirection = "
+            << FormatVec(options.goalDirection) << "\n";
+    }
     candidates.push_back(SmoothCandidate{
         "CatmullRom",
-        BuildCatmullRomSamples(controlPath, options)
+        BuildCatmullRomSamples(controlPath, options),
+        catmullRomData.str()
     });
 
+    const BSplineSampleResult bspline =
+        BuildOcctBSplineSamples(controlPath, options);
     candidates.push_back(SmoothCandidate{
         "OCCT-BSpline",
-        BuildOcctBSplineSamples(controlPath, options)
+        bspline.samples,
+        bspline.dataText
     });
 
     std::vector<Vec> best;
@@ -1219,6 +1288,7 @@ SmoothPointPathResult SmoothPointPathDetailed(
             result.catmullRomAccepted = true;
             result.path = candidate.path;
             result.method = candidate.method;
+            result.candidateDataText = candidate.dataText;
             FillAcceptedSmoothingDiagnostics(
                 result,
                 options,
@@ -1235,6 +1305,7 @@ SmoothPointPathResult SmoothPointPathDetailed(
             bestScore = score;
             bestLineCheckCount = candidateLineCheckCount;
             bestMethod = candidate.method;
+            result.candidateDataText = candidate.dataText;
         }
     }
 
@@ -1281,6 +1352,7 @@ struct SmoothingAttemptResult
     std::vector<VoxelIndex> voxelPath;
     std::vector<Vec> controlPointPath;
     std::vector<Vec> smoothedPath;
+    std::string candidateDataText;
     std::string smoothingMethod = "None";
     int smoothingCandidateCount = 0;
     int smoothingAcceptedCandidateCount = 0;
@@ -1329,6 +1401,7 @@ SmoothingAttemptResult TryBuildSmoothedCandidate(
         smoothResult.startDirectionAlignment;
     attempt.smoothingGoalDirectionAlignment =
         smoothResult.goalDirectionAlignment;
+    attempt.candidateDataText = smoothResult.candidateDataText;
 
     attempt.succeeded = !attempt.smoothedPath.empty();
     return attempt;
@@ -1381,6 +1454,49 @@ void AcceptSmoothedCandidate(
         attempt.smoothingStartDirectionAlignment;
     result.smoothingGoalDirectionAlignment =
         attempt.smoothingGoalDirectionAlignment;
+
+    std::ostringstream data;
+    data << "Path output stage: " << result.pathOutputStage << "\n";
+    data << "Smoothing method: " << result.smoothingMethod << "\n";
+    data << "Candidate count: " << result.smoothingCandidateCount << "\n";
+    data << "Accepted candidates: "
+        << result.smoothingAcceptedCandidateCount << "\n";
+    data << "CatmullRom accepted: "
+        << (result.catmullRomAccepted ? "true" : "false") << "\n";
+    if (!result.catmullRomRejectReason.empty())
+    {
+        data << "CatmullRom reject reason: "
+            << result.catmullRomRejectReason << "\n";
+    }
+    data << std::fixed << std::setprecision(6);
+    data << "Accepted length: " << result.smoothingAcceptedLength << "\n";
+    data << "Accepted totalTurn: "
+        << result.smoothingAcceptedTotalTurn << "\n";
+    data << "Accepted maxTurn: "
+        << result.smoothingAcceptedMaxTurn << "\n";
+    data << "Start alignment: "
+        << result.smoothingStartDirectionAlignment << "\n";
+    data << "Goal alignment: "
+        << result.smoothingGoalDirectionAlignment << "\n\n";
+
+    if (attempt.sourceName == "Path1")
+    {
+        data << "Path1 polyline/control points\n";
+        for (std::size_t i = 0; i < attempt.controlPointPath.size(); ++i)
+        {
+            data << "  point[" << i << "] = "
+                << FormatVec(attempt.controlPointPath[i]) << "\n";
+        }
+        data << "\n";
+    }
+
+    if (!attempt.candidateDataText.empty())
+    {
+        data << attempt.candidateDataText;
+    }
+
+    data << "\nDisplayed samples: " << result.displayPointPath.size() << "\n";
+    result.pathDataText = data.str();
 }
 
 std::vector<VoxelIndex> BuildLineOfSightShortcutPath(
@@ -1837,6 +1953,18 @@ VoxelPathOptimizeResult VoxelPathOptimizer::Optimize(
     result.outputCount = result.voxelPath.size();
     result.smoothedPointCount = result.pointPath.size();
     result.pathOutputStage = "Path2";
+    {
+        std::ostringstream data;
+        data << "Path output stage: Path2\n";
+        data << "Smooth path: disabled or no accepted smoothing candidate\n";
+        data << "Path2 polyline points\n";
+        for (std::size_t i = 0; i < result.pointPath.size(); ++i)
+        {
+            data << "  point[" << i << "] = "
+                << FormatVec(result.pointPath[i]) << "\n";
+        }
+        result.pathDataText = data.str();
+    }
 
     if (!options.enableCurveSmoothing)
     {

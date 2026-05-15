@@ -1447,6 +1447,7 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
                         optResult.smoothingStartDirectionAlignment;
                     profile.smoothingGoalDirectionAlignment =
                         optResult.smoothingGoalDirectionAlignment;
+                    profile.pathDataText = optResult.pathDataText;
                     const std::vector<Vec>& displaySource =
                         optResult.displayPointPath.empty() ?
                             optResult.pointPath :
@@ -1853,6 +1854,7 @@ VoxelPathPlannerResult VoxelPathPlanner::Plan(
         optResult.smoothingStartDirectionAlignment;
     profile.smoothingGoalDirectionAlignment =
         optResult.smoothingGoalDirectionAlignment;
+    profile.pathDataText = optResult.pathDataText;
     const std::vector<Vec>& displaySource =
         optResult.displayPointPath.empty() ?
             optResult.pointPath :

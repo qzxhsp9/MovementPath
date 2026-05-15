@@ -101,6 +101,7 @@ struct VoxelPathOptimizeResult
     double smoothingAcceptedMaxTurn = 0.0;
     double smoothingStartDirectionAlignment = 0.0;
     double smoothingGoalDirectionAlignment = 0.0;
+    std::string pathDataText;
 };
 
 // ============================================================

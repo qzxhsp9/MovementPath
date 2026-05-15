@@ -307,6 +307,7 @@ void WorkbenchMainWindow::BuildUi()
     QPushButton* applyDiscretizationButton =
         new QPushButton("Apply Discretization");
     m_computeButton = new QPushButton("Compute Path");
+    m_pathDataButton = new QPushButton("Path Data");
     m_stopButton = new QPushButton("Stop Computation");
     QToolButton* vtkExportSettingsButton = new QToolButton();
     vtkExportSettingsButton->setIcon(style()->standardIcon(QStyle::SP_FileDialogDetailedView));
@@ -447,6 +448,7 @@ void WorkbenchMainWindow::BuildUi()
     QHBoxLayout* computeLayout = new QHBoxLayout(computeRow);
     computeLayout->setContentsMargins(0, 0, 0, 0);
     computeLayout->addWidget(m_computeButton);
+    computeLayout->addWidget(m_pathDataButton);
     computeLayout->addWidget(m_stopButton);
     plannerLayout->addRow("Method", m_plannerCombo);
     plannerLayout->addRow("Search", m_searchModeCombo);
@@ -478,6 +480,9 @@ void WorkbenchMainWindow::BuildUi()
     });
     connect(m_computeButton, &QPushButton::clicked, this, [this]() {
         ComputePath();
+    });
+    connect(m_pathDataButton, &QPushButton::clicked, this, [this]() {
+        OpenPathDataDialog();
     });
     connect(m_stopButton, &QPushButton::clicked, this, [this]() {
         StopPathComputation();
@@ -769,6 +774,56 @@ void WorkbenchMainWindow::RefreshRestrictedRegionList()
             RemoveRestrictedRegion(i);
         });
     }
+}
+
+void WorkbenchMainWindow::OpenPathDataDialog()
+{
+    if (m_pathDataDialog == nullptr)
+    {
+        m_pathDataDialog = new QDialog(this);
+        m_pathDataDialog->setWindowTitle("Path Data");
+        m_pathDataDialog->setModal(false);
+        m_pathDataDialog->resize(720, 640);
+
+        QVBoxLayout* layout = new QVBoxLayout(m_pathDataDialog);
+        m_pathDataText = new QPlainTextEdit(m_pathDataDialog);
+        m_pathDataText->setReadOnly(true);
+        m_pathDataText->setLineWrapMode(QPlainTextEdit::NoWrap);
+        layout->addWidget(m_pathDataText);
+
+        QDialogButtonBox* buttons =
+            new QDialogButtonBox(QDialogButtonBox::Close, m_pathDataDialog);
+        layout->addWidget(buttons);
+        connect(buttons, &QDialogButtonBox::rejected,
+            m_pathDataDialog, &QDialog::hide);
+        connect(m_pathDataDialog, &QDialog::finished, this, [this]() {
+            if (m_pathDataDialog != nullptr)
+            {
+                m_pathDataDialog->hide();
+            }
+        });
+    }
+
+    UpdatePathDataDialog();
+    m_pathDataDialog->show();
+    m_pathDataDialog->raise();
+    m_pathDataDialog->activateWindow();
+}
+
+void WorkbenchMainWindow::UpdatePathDataDialog()
+{
+    if (m_pathDataText == nullptr)
+    {
+        return;
+    }
+
+    if (m_latestPathDataText.isEmpty())
+    {
+        m_pathDataText->setPlainText("No path data available.");
+        return;
+    }
+
+    m_pathDataText->setPlainText(m_latestPathDataText);
 }
 
 void WorkbenchMainWindow::ImportModel()
@@ -1430,6 +1485,9 @@ void WorkbenchMainWindow::OnPathComputationFinished()
     m_cancelRequested.reset();
 
     const VoxelPathPlannerResult result = m_planWatcher->result();
+    m_latestPathDataText =
+        QString::fromStdString(result.profile.pathDataText);
+    UpdatePathDataDialog();
     const double wallMs =
         m_planTimer.isValid() ? static_cast<double>(m_planTimer.elapsed()) : 0.0;
     AppendLog("Path computation finished.");
