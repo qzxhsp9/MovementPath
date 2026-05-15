@@ -39,6 +39,10 @@ namespace
 constexpr const char* kSettingsOrganization = "MovementPath";
 constexpr const char* kSettingsApplication = "PathPlanningWorkbench";
 constexpr const char* kLastModelDirectoryKey = "import/lastModelDirectory";
+constexpr const char* kPathComputationStartLogSeparator =
+    "---------------- 路径计算开始 ----------------";
+constexpr const char* kPathComputationEndLogSeparator =
+    "---------------- 路径计算结束 ----------------";
 
 QDoubleSpinBox* MakeCoordinateSpin(double value = 0.0)
 {
@@ -968,6 +972,7 @@ void WorkbenchMainWindow::ComputePath()
         return;
     }
 
+    AppendLog(kPathComputationStartLogSeparator);
     m_view->ClearOverlays();
     UpdateEndpointOverlay();
 
@@ -1013,6 +1018,7 @@ void WorkbenchMainWindow::ComputePath()
     if (method == PlannerMethod::GeometryQuery)
     {
         AppendLog("Geometry-query planner is not connected to OCCT import yet.");
+        AppendLog(kPathComputationEndLogSeparator);
         return;
     }
 
@@ -1020,6 +1026,7 @@ void WorkbenchMainWindow::ComputePath()
     scenario.name = "workbench";
     if (!EnsurePlannerTriangleCache())
     {
+        AppendLog(kPathComputationEndLogSeparator);
         return;
     }
     scenario.triangles = m_cachedPlannerTriangles;
@@ -1435,6 +1442,7 @@ void WorkbenchMainWindow::OnPathComputationFinished()
             AppendLog(QString("Time: wall=%1.")
                 .arg(FormatDuration(wallMs)));
         }
+        AppendLog(kPathComputationEndLogSeparator);
         return;
     }
 
@@ -1486,16 +1494,10 @@ void WorkbenchMainWindow::OnPathComputationFinished()
         .arg(result.profile.finalStartDirectionAlignment, 0, 'f', 3)
         .arg(result.profile.finalGoalDirectionAlignment, 0, 'f', 3));
 
-    if (result.profile.smoothingRequested &&
-        result.profile.optimizedPathCount > 2 &&
-        !result.profile.smoothingSucceeded)
-    {
-        AppendLog("Smoothing: rejected by voxel constraints.");
-    }
-    else if (result.profile.smoothingRequested)
+    if (result.profile.smoothingRequested)
     {
         AppendLog(QString("Smoothing: %1, points=%2.")
-            .arg(result.profile.smoothingSucceeded ? "accepted" : "not applied")
+            .arg(result.profile.smoothingSucceeded ? "true" : "false")
             .arg(result.profile.smoothedPathPointCount));
     }
 
@@ -1561,6 +1563,7 @@ void WorkbenchMainWindow::OnPathComputationFinished()
 
     if (!result.success)
     {
+        AppendLog(kPathComputationEndLogSeparator);
         return;
     }
 
@@ -1603,6 +1606,7 @@ void WorkbenchMainWindow::OnPathComputationFinished()
             m_runningVoxelSize,
             Quantity_Color(0.95, 0.15, 0.05, Quantity_TOC_RGB));
     }
+    AppendLog(kPathComputationEndLogSeparator);
 }
 
 void WorkbenchMainWindow::SetPlanningUiBusy(bool busy)

@@ -558,6 +558,57 @@ bool TestSmoothingEndpointGuideIgnoresOffsetSearchEndpoint()
 
     return ok;
 }
+
+bool TestSmoothingDoesNotUseDenseAStarPathAsControlPath()
+{
+    VoxelSpace space(Vec(0.0, 0.0, 0.0), 1.0);
+    space.SetSearchBounds(VoxelBounds{
+        VoxelIndex(0, 0, 0),
+        VoxelIndex(4, 4, 0)
+    });
+
+    std::vector<VoxelIndex> path{
+        VoxelIndex(0, 0, 0),
+        VoxelIndex(1, 0, 0),
+        VoxelIndex(2, 0, 0),
+        VoxelIndex(3, 0, 0),
+        VoxelIndex(3, 1, 0),
+        VoxelIndex(3, 2, 0),
+        VoxelIndex(3, 3, 0)
+    };
+
+    for (const VoxelIndex& index : path)
+    {
+        space.SetCellState(index, VoxelState::Free);
+    }
+
+    VoxelPathOptimizeOptions options;
+    options.searchMode = VoxelAStarSearchMode::FreeSpace;
+    options.enableCurveSmoothing = true;
+    options.curveSamplesPerSegment = 4;
+    options.displayCurveSamplesPerSegment = 4;
+    options.useEndpointDirections = true;
+    options.startDirection = Vec(1.0, 0.0, 0.0);
+    options.goalDirection = Vec(0.0, 1.0, 0.0);
+    options.useRealEndpointsForSmoothing = true;
+    options.realStartPoint = Vec(0.5, 0.5, 0.5);
+    options.realGoalPoint = Vec(3.5, 3.5, 0.5);
+    options.endpointCollisionExemptRadius = 1.0;
+
+    const VoxelPathOptimizeResult result =
+        VoxelPathOptimizer::Optimize(space, path, options);
+
+    bool ok = true;
+    ok &= Expect(
+        result.smoothingSucceeded,
+        "smoothing should succeed without using the dense raw A* path");
+    ok &= Expect(
+        !result.controlPointPath.empty() &&
+            result.controlPointPath.size() < path.size(),
+        "smoothing control path should not keep every raw A* point");
+
+    return ok;
+}
 }
 
 int main()
@@ -579,6 +630,7 @@ int main()
     ok &= TestClearanceBandIgnoresSecondClearanceFilter();
     ok &= TestSmoothingAllowsOccupiedRealEndpoints();
     ok &= TestSmoothingEndpointGuideIgnoresOffsetSearchEndpoint();
+    ok &= TestSmoothingDoesNotUseDenseAStarPathAsControlPath();
 
     return ok ? EXIT_SUCCESS : EXIT_FAILURE;
 }

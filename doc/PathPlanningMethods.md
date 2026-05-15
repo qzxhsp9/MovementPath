@@ -36,3 +36,7 @@ logs, and benchmark output.
 | Endpoint snapping debugging | Show key, occupied, and clearance voxels. |
 | Paths too close to obstacles | Inspect occupied/clearance voxels and reduce voxel size if needed. |
 | Smoother display path | Enable `Smooth path` and check whether smoothing was accepted or rejected in logs. |
+
+## Related Documents
+
+- [路径优化与平滑流程](PathOptimizationAndSmoothingFlow.md): current post-A* optimization, smoothing, and Workbench display flow.
